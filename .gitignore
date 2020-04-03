@@ -1,0 +1,10 @@
+/target
+
+.DS_Store
+
+# Thumbnails
+._*
+
+# Emacs
+\#*\#
+.\#*

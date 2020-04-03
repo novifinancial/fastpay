@@ -1,0 +1,11 @@
+[workspace]
+members = [
+        "rust/fastpay_core",
+        "rust/fastpay",
+]
+
+[profile.release]
+debug = true
+
+[profile.bench]
+debug = true
