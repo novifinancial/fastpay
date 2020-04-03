@@ -12,7 +12,6 @@ use std::convert::TryInto;
 #[path = "unit_tests/authority_tests.rs"]
 mod authority_tests;
 
-// -- BEGIN FILE authority_state --
 #[derive(Eq, PartialEq, Debug)]
 pub struct AccountOffchainState {
     /// Balance of the FastPay account.
@@ -45,9 +44,7 @@ pub struct AuthorityState {
     /// The number of shards. 1 if single shard.
     pub number_of_shards: u32,
 }
-// -- END FILE --
 
-// -- BEGIN FILE authority --
 /// Interface provided by each (shard of an) authority.
 /// All commands return either the current account info or an error.
 /// Repeating commands produces no changes and returns no error.
@@ -83,10 +80,8 @@ pub trait Authority {
         certificate: CertifiedTransferOrder,
     ) -> Result<(), FastPayError>;
 }
-// -- END FILE --
 
 impl Authority for AuthorityState {
-    // -- BEGIN FILE authority_transfer_impl --
     /// Initiate a new transfer.
     fn handle_transfer_order(
         &mut self,
@@ -137,9 +132,7 @@ impl Authority for AuthorityState {
             }
         }
     }
-    // -- END FILE --
 
-    // -- BEGIN FILE authority_confirmation_impl --
     /// Confirm a transfer.
     fn handle_confirmation_order(
         &mut self,
@@ -211,9 +204,7 @@ impl Authority for AuthorityState {
         });
         Ok((info, cross_shard))
     }
-    // -- END FILE --
 
-    // -- BEGIN FILE authority_cross_shard_impl --
     // NOTE: Need to rely on deliver-once semantics from comms channel
     fn handle_cross_shard_recipient_commit(
         &mut self,
@@ -240,9 +231,7 @@ impl Authority for AuthorityState {
         recipient_account.received_log.push(certificate);
         Ok(())
     }
-    // -- END FILE --
 
-    // -- BEGIN FILE authority_synchronization_impl --
     /// Finalize a transfer from Libra.
     fn handle_libra_synchronization_order(
         &mut self,
@@ -271,7 +260,6 @@ impl Authority for AuthorityState {
         self.last_transaction_index = last_transaction_index;
         Ok(recipient_account.make_account_info(recipient))
     }
-    // -- END FILE --
 
     fn handle_account_info_request(
         &self,

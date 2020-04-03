@@ -10,8 +10,6 @@ use std::collections::BTreeMap;
 #[path = "unit_tests/fastpay_smart_contract_tests.rs"]
 mod fastpay_smart_contract_tests;
 
-// -- BEGIN FILE fastpay_smart_contract_state --
-
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 pub struct AccountOnchainState {
     /// Prevent spending actions from this account to Libra to be redeemed more than once.
@@ -33,9 +31,7 @@ pub struct FastPaySmartContractState {
     /// Transactions included in the blockchain.
     pub blockchain: Vec<FundingTransaction>,
 }
-// -- END FILE --
 
-// -- BEGIN FILE fastpay_smart_contract --
 pub trait FastPaySmartContract {
     /// Initiate a transfer from Libra to FastPay.
     fn handle_funding_transaction(
@@ -49,10 +45,8 @@ pub trait FastPaySmartContract {
         transaction: RedeemTransaction,
     ) -> Result<(), failure::Error>;
 }
-// -- END FILE --
 
 impl FastPaySmartContract for FastPaySmartContractState {
-    // -- BEGIN FILE fastpay_smart_contract_impl --
     /// Initiate a transfer to FastPay.
     fn handle_funding_transaction(
         &mut self,
@@ -97,7 +91,6 @@ impl FastPaySmartContract for FastPaySmartContractState {
 
         Ok(())
     }
-    // -- END FILE --
 }
 
 impl AccountOnchainState {

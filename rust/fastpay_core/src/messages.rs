@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-// -- BEGIN FILE funding --
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct FundingTransaction {
     pub recipient: FastPayAddress,
@@ -29,9 +28,7 @@ pub struct LibraSynchronizationOrder {
     pub amount: Amount,
     pub transaction_index: VersionNumber,
 }
-// -- END FILE --
 
-// -- BEGIN FILE transfer_order --
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize)]
 pub enum Address {
     Libra(LibraAddress),
@@ -52,9 +49,7 @@ pub struct TransferOrder {
     pub transfer: Transfer,
     pub signature: Signature,
 }
-// -- END FILE --
 
-// -- BEGIN FILE transfer_messages --
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct SignedTransferOrder {
     pub value: TransferOrder,
@@ -94,7 +89,6 @@ pub struct AccountInfoResponse {
     pub requested_certificate: Option<CertifiedTransferOrder>,
     pub requested_received_transfers: Vec<CertifiedTransferOrder>,
 }
-// -- END FILE --
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct CrossShardUpdate {

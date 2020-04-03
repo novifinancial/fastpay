@@ -16,7 +16,6 @@ use std::convert::TryFrom;
 #[path = "unit_tests/client_tests.rs"]
 mod client_tests;
 
-// -- BEGIN FILE authority_client --
 pub type AsyncResult<'a, T, E> = future::BoxFuture<'a, Result<T, E>>;
 
 pub trait AuthorityClient {
@@ -38,9 +37,7 @@ pub trait AuthorityClient {
         request: AccountInfoRequest,
     ) -> AsyncResult<AccountInfoResponse, FastPayError>;
 }
-// -- END FILE --
 
-// -- BEGIN FILE client_state --
 pub struct ClientState<AuthorityClient> {
     /// Our FastPay address.
     address: FastPayAddress,
@@ -67,9 +64,7 @@ pub struct ClientState<AuthorityClient> {
     /// or received certificates).
     balance: Balance,
 }
-// -- END FILE --
 
-// -- BEGIN FILE client --
 // Operations are considered successful when they successfully reach a quorum of authorities.
 pub trait Client {
     /// Send money to a FastPay account.
@@ -109,7 +104,6 @@ pub trait Client {
     /// locally processed by `receive_from_fastpay`.
     fn get_spendable_amount(&mut self) -> AsyncResult<Amount, failure::Error>;
 }
-// -- END FILE --
 
 impl<A> ClientState<A> {
     pub fn new(
@@ -495,7 +489,6 @@ where
         Ok(sent_certificates)
     }
 
-    // -- BEGIN FILE client_impl --
     /// Send money to a FastPay or Libra recipient.
     async fn transfer(
         &mut self,
@@ -600,8 +593,6 @@ where
         }
         Ok(self.sent_certificates.last().unwrap().clone())
     }
-
-    // -- END FILE --
 }
 
 impl<A> Client for ClientState<A>
