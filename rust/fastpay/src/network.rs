@@ -301,7 +301,7 @@ impl Client {
 }
 
 impl AuthorityClient for Client {
-    /// Initiate a new transfer to a FastPay or Libra account.
+    /// Initiate a new transfer to a FastPay or Primary account.
     fn handle_transfer_order(
         &mut self,
         order: TransferOrder,
@@ -313,7 +313,7 @@ impl AuthorityClient for Client {
         })
     }
 
-    /// Confirm a transfer to a FastPay or Libra account.
+    /// Confirm a transfer to a FastPay or Primary account.
     fn handle_confirmation_order(
         &mut self,
         order: ConfirmationOrder,

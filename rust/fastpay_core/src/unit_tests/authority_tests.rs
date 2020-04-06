@@ -357,14 +357,14 @@ fn test_handle_confirmation_order_ok() {
 }
 
 #[test]
-fn test_handle_libra_synchronization_order_update() {
+fn test_handle_primary_synchronization_order_update() {
     let mut state = init_state();
     let mut updated_transaction_index = state.last_transaction_index;
     let address = dbg_addr(1);
-    let order = init_libra_synchronization_order(address);
+    let order = init_primary_synchronization_order(address);
 
     assert!(state
-        .handle_libra_synchronization_order(order.clone())
+        .handle_primary_synchronization_order(order.clone())
         .is_ok());
     updated_transaction_index = updated_transaction_index.increment().unwrap();
     assert_eq!(state.last_transaction_index, updated_transaction_index);
@@ -374,19 +374,19 @@ fn test_handle_libra_synchronization_order_update() {
 }
 
 #[test]
-fn test_handle_libra_synchronization_order_double_spend() {
+fn test_handle_primary_synchronization_order_double_spend() {
     let mut state = init_state();
     let mut updated_transaction_index = state.last_transaction_index;
     let address = dbg_addr(1);
-    let order = init_libra_synchronization_order(address);
+    let order = init_primary_synchronization_order(address);
 
     assert!(state
-        .handle_libra_synchronization_order(order.clone())
+        .handle_primary_synchronization_order(order.clone())
         .is_ok());
     updated_transaction_index = updated_transaction_index.increment().unwrap();
     // Replays are ignored.
     assert!(state
-        .handle_libra_synchronization_order(order.clone())
+        .handle_primary_synchronization_order(order.clone())
         .is_ok());
     assert_eq!(state.last_transaction_index, updated_transaction_index);
     let account = state.accounts.get(&address).unwrap();
@@ -505,10 +505,10 @@ fn init_certified_transfer_order(
 }
 
 #[cfg(test)]
-fn init_libra_synchronization_order(recipient: FastPayAddress) -> LibraSynchronizationOrder {
+fn init_primary_synchronization_order(recipient: FastPayAddress) -> PrimarySynchronizationOrder {
     let mut transaction_index = VersionNumber::new();
     transaction_index = transaction_index.increment().unwrap();
-    LibraSynchronizationOrder {
+    PrimarySynchronizationOrder {
         recipient: recipient,
         amount: Amount::from(5),
         transaction_index: transaction_index,

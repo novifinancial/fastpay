@@ -18,12 +18,12 @@ use std::hash::{Hash, Hasher};
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct FundingTransaction {
     pub recipient: FastPayAddress,
-    pub libra_coins: Amount,
-    // TODO: Authenticated by Libra sender.
+    pub primary_coins: Amount,
+    // TODO: Authenticated by Primary sender.
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct LibraSynchronizationOrder {
+pub struct PrimarySynchronizationOrder {
     pub recipient: FastPayAddress,
     pub amount: Amount,
     pub transaction_index: VersionNumber,
@@ -31,7 +31,7 @@ pub struct LibraSynchronizationOrder {
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize)]
 pub enum Address {
-    Libra(LibraAddress),
+    Primary(PrimaryAddress),
     FastPay(FastPayAddress),
 }
 
@@ -171,7 +171,7 @@ impl Digestible for Transfer {
 
         h.input(&self.sender.0);
         match self.recipient {
-            Address::Libra(addr) => {
+            Address::Primary(addr) => {
                 h.input([0x03]);
                 h.input(&addr.0);
             }

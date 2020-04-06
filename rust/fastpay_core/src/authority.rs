@@ -22,8 +22,8 @@ pub struct AccountOffchainState {
     pub pending_confirmation: Option<SignedTransferOrder>,
     /// All confirmed certificates for this sender.
     pub confirmed_log: Vec<CertifiedTransferOrder>,
-    /// All executed Libra synchronization orders for this recipient.
-    pub synchronization_log: Vec<LibraSynchronizationOrder>,
+    /// All executed Primary synchronization orders for this recipient.
+    pub synchronization_log: Vec<PrimarySynchronizationOrder>,
     /// All confirmed certificates as a receiver.
     pub received_log: Vec<CertifiedTransferOrder>,
 }
@@ -49,22 +49,22 @@ pub struct AuthorityState {
 /// All commands return either the current account info or an error.
 /// Repeating commands produces no changes and returns no error.
 pub trait Authority {
-    /// Initiate a new transfer to a FastPay or Libra account.
+    /// Initiate a new transfer to a FastPay or Primary account.
     fn handle_transfer_order(
         &mut self,
         order: TransferOrder,
     ) -> Result<AccountInfoResponse, FastPayError>;
 
-    /// Confirm a transfer to a FastPay or Libra account.
+    /// Confirm a transfer to a FastPay or Primary account.
     fn handle_confirmation_order(
         &mut self,
         order: ConfirmationOrder,
     ) -> Result<(AccountInfoResponse, Option<CrossShardUpdate>), FastPayError>;
 
-    /// Force synchronization to finalize transfers from Libra to FastPay.
-    fn handle_libra_synchronization_order(
+    /// Force synchronization to finalize transfers from Primary to FastPay.
+    fn handle_primary_synchronization_order(
         &mut self,
-        order: LibraSynchronizationOrder,
+        order: PrimarySynchronizationOrder,
     ) -> Result<AccountInfoResponse, FastPayError>;
 
     /// Handle information requests for this account.
@@ -178,8 +178,8 @@ impl Authority for AuthorityState {
         // Update FastPay recipient state locally or issue a cross-shard update (Must never fail!)
         let recipient = match transfer.recipient {
             Address::FastPay(recipient) => recipient,
-            Address::Libra(_) => {
-                // Nothing else to do for Libra recipients.
+            Address::Primary(_) => {
+                // Nothing else to do for Primary recipients.
                 return Ok((info, None));
             }
         };
@@ -215,7 +215,7 @@ impl Authority for AuthorityState {
 
         let recipient = match transfer.recipient {
             Address::FastPay(recipient) => recipient,
-            Address::Libra(_) => {
+            Address::Primary(_) => {
                 fp_bail!(FastPayError::InvalidCrossShardUpdate);
             }
         };
@@ -232,10 +232,10 @@ impl Authority for AuthorityState {
         Ok(())
     }
 
-    /// Finalize a transfer from Libra.
-    fn handle_libra_synchronization_order(
+    /// Finalize a transfer from Primary.
+    fn handle_primary_synchronization_order(
         &mut self,
-        order: LibraSynchronizationOrder,
+        order: PrimarySynchronizationOrder,
     ) -> Result<AccountInfoResponse, FastPayError> {
         // Update recipient state; note that the blockchain client is trusted.
         let recipient = order.recipient;

@@ -8,7 +8,7 @@ use super::*;
 fn test_handle_funding_transaction_zero_amount() {
     let (mut contract_state, _name, _secret) = init_contract();
     let mut funding_transaction = init_funding_transaction();
-    funding_transaction.libra_coins = Amount::zero();
+    funding_transaction.primary_coins = Amount::zero();
 
     assert!(contract_state
         .handle_funding_transaction(funding_transaction)
@@ -29,7 +29,7 @@ fn test_handle_funding_transaction_ok() {
         .is_ok());
     assert_eq!(
         contract_state.total_balance,
-        funding_transaction.libra_coins
+        funding_transaction.primary_coins
     );
     let mut updated_last_transaction_index = VersionNumber::new();
     updated_last_transaction_index = updated_last_transaction_index.increment().unwrap();
@@ -149,7 +149,7 @@ fn init_contract() -> (FastPaySmartContractState, AuthorityName, SecretKey) {
 fn init_funding_transaction() -> FundingTransaction {
     FundingTransaction {
         recipient: dbg_addr(1),
-        libra_coins: Amount::from(5),
+        primary_coins: Amount::from(5),
     }
 }
 
@@ -160,14 +160,14 @@ fn init_redeem_transaction(
     secret: SecretKey,
 ) -> RedeemTransaction {
     let (sender_address, sender_key) = get_key_pair();
-    let libra_transfer = Transfer {
+    let primary_transfer = Transfer {
         sender: sender_address,
-        recipient: Address::Libra(dbg_addr(2)),
+        recipient: Address::Primary(dbg_addr(2)),
         amount: Amount::from(3),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(libra_transfer, &sender_key);
+    let order = TransferOrder::new(primary_transfer, &sender_key);
     let vote = SignedTransferOrder::new(order.clone(), name, &secret);
     let mut builder = SignatureAggregator::try_new(order, &committee).unwrap();
     let certificate = builder

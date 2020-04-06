@@ -12,7 +12,7 @@ mod fastpay_smart_contract_tests;
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 pub struct AccountOnchainState {
-    /// Prevent spending actions from this account to Libra to be redeemed more than once.
+    /// Prevent spending actions from this account to Primary to be redeemed more than once.
     /// It is the responsability of the owner of the account to redeem the previous action
     /// before initiating a new one. Otherwise, money can be lost.
     last_redeemed: Option<SequenceNumber>,
@@ -24,7 +24,7 @@ pub struct FastPaySmartContractState {
     committee: Committee,
     /// Onchain states of FastPay smart contract.
     pub accounts: BTreeMap<FastPayAddress, AccountOnchainState>,
-    /// Libra coins in the smart contract.
+    /// Primary coins in the smart contract.
     total_balance: Amount,
     /// The latest transaction index included in the blockchain.
     pub last_transaction_index: VersionNumber,
@@ -33,13 +33,13 @@ pub struct FastPaySmartContractState {
 }
 
 pub trait FastPaySmartContract {
-    /// Initiate a transfer from Libra to FastPay.
+    /// Initiate a transfer from Primary to FastPay.
     fn handle_funding_transaction(
         &mut self,
         transaction: FundingTransaction,
     ) -> Result<(), failure::Error>;
 
-    /// Finalize a transfer from FastPay to Libra.
+    /// Finalize a transfer from FastPay to Primary.
     fn handle_redeem_transaction(
         &mut self,
         transaction: RedeemTransaction,
@@ -52,8 +52,8 @@ impl FastPaySmartContract for FastPaySmartContractState {
         &mut self,
         transaction: FundingTransaction,
     ) -> Result<(), failure::Error> {
-        // TODO: Authentication by Libra sender
-        let amount = transaction.libra_coins;
+        // TODO: Authentication by Primary sender
+        let amount = transaction.primary_coins;
         ensure!(
             amount > Amount::zero(),
             "Transfers must have positive amount",
@@ -83,11 +83,11 @@ impl FastPaySmartContract for FastPaySmartContractState {
             .or_insert(AccountOnchainState::new());
         ensure!(
             account.last_redeemed < Some(transfer.sequence_number),
-            "Transfer certificates to Libra must have increasing sequence numbers.",
+            "Transfer certificates to Primary must have increasing sequence numbers.",
         );
         account.last_redeemed = Some(transfer.sequence_number);
         self.total_balance = self.total_balance.sub(transfer.amount)?;
-        // Transfer Libra coins to order.recipient
+        // Transfer Primary coins to order.recipient
 
         Ok(())
     }

@@ -40,7 +40,7 @@ pub struct SecretKey(pub [u8; dalek::KEYPAIR_LENGTH]);
 #[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct EdPublicKeyBytes(pub [u8; dalek::PUBLIC_KEY_LENGTH]);
 
-pub type LibraAddress = EdPublicKeyBytes;
+pub type PrimaryAddress = EdPublicKeyBytes;
 pub type FastPayAddress = EdPublicKeyBytes;
 pub type AuthorityName = EdPublicKeyBytes;
 

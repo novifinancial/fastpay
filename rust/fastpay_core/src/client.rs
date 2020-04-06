@@ -19,13 +19,13 @@ mod client_tests;
 pub type AsyncResult<'a, T, E> = future::BoxFuture<'a, Result<T, E>>;
 
 pub trait AuthorityClient {
-    /// Initiate a new transfer to a FastPay or Libra account.
+    /// Initiate a new transfer to a FastPay or Primary account.
     fn handle_transfer_order(
         &mut self,
         order: TransferOrder,
     ) -> AsyncResult<AccountInfoResponse, FastPayError>;
 
-    /// Confirm a transfer to a FastPay or Libra account.
+    /// Confirm a transfer to a FastPay or Primary account.
     fn handle_confirmation_order(
         &mut self,
         order: ConfirmationOrder,
@@ -75,11 +75,11 @@ pub trait Client {
         user_data: UserData,
     ) -> AsyncResult<CertifiedTransferOrder, failure::Error>;
 
-    /// Send money to a Libra account.
-    fn transfer_to_libra(
+    /// Send money to a Primary account.
+    fn transfer_to_primary(
         &mut self,
         amount: Amount,
-        recipient: LibraAddress,
+        recipient: PrimaryAddress,
         user_data: UserData,
     ) -> AsyncResult<CertifiedTransferOrder, failure::Error>;
 
@@ -489,7 +489,7 @@ where
         Ok(sent_certificates)
     }
 
-    /// Send money to a FastPay or Libra recipient.
+    /// Send money to a FastPay or Primary recipient.
     async fn transfer(
         &mut self,
         amount: Amount,
@@ -608,13 +608,13 @@ where
         Box::pin(self.transfer(amount, Address::FastPay(recipient), user_data))
     }
 
-    fn transfer_to_libra(
+    fn transfer_to_primary(
         &mut self,
         amount: Amount,
-        recipient: LibraAddress,
+        recipient: PrimaryAddress,
         user_data: UserData,
     ) -> AsyncResult<CertifiedTransferOrder, failure::Error> {
-        Box::pin(self.transfer(amount, Address::Libra(recipient), user_data))
+        Box::pin(self.transfer(amount, Address::Primary(recipient), user_data))
     }
 
     fn get_spendable_amount(&mut self) -> AsyncResult<Amount, failure::Error> {

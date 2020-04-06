@@ -57,7 +57,7 @@ fn test_order() {
 
     let transfer = Transfer {
         sender: sender_name,
-        recipient: Address::Libra(dbg_addr(0x20)),
+        recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
@@ -98,7 +98,7 @@ fn test_vote() {
     let (sender_name, sender_key) = get_key_pair();
     let transfer = Transfer {
         sender: sender_name,
-        recipient: Address::Libra(dbg_addr(0x20)),
+        recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
@@ -123,7 +123,7 @@ fn test_cert() {
     let (sender_name, sender_key) = get_key_pair();
     let transfer = Transfer {
         sender: sender_name,
-        recipient: Address::Libra(dbg_addr(0x20)),
+        recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
@@ -156,7 +156,7 @@ fn test_info_response() {
     let (sender_name, sender_key) = get_key_pair();
     let transfer = Transfer {
         sender: sender_name,
-        recipient: Address::Libra(dbg_addr(0x20)),
+        recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
@@ -228,7 +228,7 @@ fn test_time_order() {
     let (sender_name, sender_key) = get_key_pair();
     let transfer = Transfer {
         sender: sender_name,
-        recipient: Address::Libra(dbg_addr(0x20)),
+        recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
@@ -261,7 +261,7 @@ fn test_time_vote() {
     let (sender_name, sender_key) = get_key_pair();
     let transfer = Transfer {
         sender: sender_name,
-        recipient: Address::Libra(dbg_addr(0x20)),
+        recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
@@ -298,7 +298,7 @@ fn test_time_cert() {
     let (sender_name, sender_key) = get_key_pair();
     let transfer = Transfer {
         sender: sender_name,
-        recipient: Address::Libra(dbg_addr(0)),
+        recipient: Address::Primary(dbg_addr(0)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
