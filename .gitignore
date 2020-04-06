@@ -8,3 +8,6 @@
 # Emacs
 \#*\#
 .\#*
+
+# Python
+.pyc
