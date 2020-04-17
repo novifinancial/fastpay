@@ -143,12 +143,11 @@ impl MessageHandler for RunningServerState {
                 Err(_) => Err(FastPayError::InvalidDecoding),
                 Ok(result) => {
                     match result {
-                        SerializedMessage::Order(message) => {
-                            match self.server.state.handle_transfer_order(message) {
-                                Ok(info) => Ok(Some(serialize_info_response(&info))),
-                                Err(error) => Err(error),
-                            }
-                        }
+                        SerializedMessage::Order(message) => self
+                            .server
+                            .state
+                            .handle_transfer_order(message)
+                            .map(|info| Some(serialize_info_response(&info))),
                         SerializedMessage::Cert(message) => {
                             let confirmation_order = ConfirmationOrder {
                                 transfer_certificate: message.clone(),
@@ -179,12 +178,11 @@ impl MessageHandler for RunningServerState {
                                 Err(error) => Err(error),
                             }
                         }
-                        SerializedMessage::InfoReq(message) => {
-                            match self.server.state.handle_account_info_request(message) {
-                                Ok(info) => Ok(Some(serialize_info_response(&info))),
-                                Err(error) => Err(error),
-                            }
-                        }
+                        SerializedMessage::InfoReq(message) => self
+                            .server
+                            .state
+                            .handle_account_info_request(message)
+                            .map(|info| Some(serialize_info_response(&info))),
                         SerializedMessage::CrossShard(message) => {
                             match self
                                 .server
