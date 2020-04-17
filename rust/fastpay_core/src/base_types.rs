@@ -45,7 +45,7 @@ pub type FastPayAddress = EdPublicKeyBytes;
 pub type AuthorityName = EdPublicKeyBytes;
 
 pub fn get_key_pair() -> (FastPayAddress, SecretKey) {
-    let mut csprng = OsRng::new().unwrap();
+    let mut csprng = OsRng;
     let keypair = dalek::Keypair::generate(&mut csprng);
     (
         EdPublicKeyBytes(keypair.public.to_bytes()),
