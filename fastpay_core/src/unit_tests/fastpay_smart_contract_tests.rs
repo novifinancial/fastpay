@@ -58,11 +58,7 @@ fn test_handle_redeem_transaction_ok() {
     assert!(contract_state
         .handle_redeem_transaction(redeem_transaction.clone())
         .is_ok());
-    let sender = redeem_transaction
-        .transfer_certificate
-        .value
-        .transfer
-        .sender;
+    let sender = redeem_transaction.transfer_certificate.value.sender;
     let amount = redeem_transaction
         .transfer_certificate
         .value
@@ -161,13 +157,12 @@ fn init_redeem_transaction(
 ) -> RedeemTransaction {
     let (sender_address, sender_key) = get_key_pair();
     let primary_transfer = Transfer {
-        sender: sender_address,
         recipient: Address::Primary(dbg_addr(2)),
         amount: Amount::from(3),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(primary_transfer, &sender_key);
+    let order = TransferOrder::new(sender_address, primary_transfer, &sender_key);
     let vote = SignedTransferOrder::new(order.clone(), name, &secret);
     let mut builder = SignatureAggregator::try_new(order, &committee).unwrap();
     let certificate = builder

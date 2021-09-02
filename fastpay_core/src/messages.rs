@@ -35,7 +35,6 @@ pub enum Address {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Transfer {
-    pub sender: FastPayAddress,
     pub recipient: Address,
     pub amount: Amount,
     pub sequence_number: SequenceNumber,
@@ -45,6 +44,7 @@ pub struct Transfer {
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct TransferOrder {
     pub transfer: Transfer,
+    pub sender: FastPayAddress,
     pub signature: Signature,
 }
 
@@ -141,23 +141,24 @@ impl PartialEq for CertifiedTransferOrder {
     }
 }
 
-impl Transfer {
+impl TransferOrder {
     pub fn key(&self) -> (FastPayAddress, SequenceNumber) {
-        (self.sender, self.sequence_number)
+        (self.sender, self.transfer.sequence_number)
     }
 }
 
 impl TransferOrder {
-    pub fn new(transfer: Transfer, secret: &KeyPair) -> Self {
+    pub fn new(sender: FastPayAddress, transfer: Transfer, secret: &KeyPair) -> Self {
         let signature = Signature::new(&transfer, secret);
         Self {
             transfer,
+            sender,
             signature,
         }
     }
 
     pub fn check_signature(&self) -> Result<(), FastPayError> {
-        self.signature.check(&self.transfer, self.transfer.sender)
+        self.signature.check(&self.transfer, self.sender)
     }
 }
 
@@ -240,11 +241,6 @@ impl<'a> SignatureAggregator<'a> {
 }
 
 impl CertifiedTransferOrder {
-    pub fn key(&self) -> (FastPayAddress, SequenceNumber) {
-        let transfer = &self.value.transfer;
-        transfer.key()
-    }
-
     /// Verify the certificate.
     pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
         // Check the quorum.
@@ -267,7 +263,7 @@ impl CertifiedTransferOrder {
             FastPayError::CertificateRequiresQuorum
         );
         // All what is left is checking signatures!
-        let inner_sig = (self.value.transfer.sender, self.value.signature);
+        let inner_sig = (self.value.sender, self.value.signature);
         Signature::verify_batch(
             &self.value.transfer,
             std::iter::once(&inner_sig).chain(&self.signatures),

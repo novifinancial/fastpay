@@ -156,7 +156,7 @@ impl AccountsConfig {
             if let Some(config) = self.accounts.get_mut(recipient) {
                 if let Err(position) = config
                     .received_certificates
-                    .binary_search_by_key(&certificate.key(), CertifiedTransferOrder::key)
+                    .binary_search_by_key(&certificate.value.key(), |order| order.value.key())
                 {
                     config.balance = config.balance.try_add(transfer.amount.into()).unwrap();
                     config.received_certificates.insert(position, certificate)

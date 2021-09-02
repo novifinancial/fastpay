@@ -16,14 +16,13 @@ fn test_signed_values() {
     let committee = Committee::new(authorities);
 
     let transfer = Transfer {
-        sender: a1,
         recipient: Address::FastPay(a2),
         amount: Amount::from(1),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(transfer.clone(), &sec1);
-    let bad_order = TransferOrder::new(transfer, &sec2);
+    let order = TransferOrder::new(a1, transfer.clone(), &sec1);
+    let bad_order = TransferOrder::new(a1, transfer, &sec2);
 
     let v = SignedTransferOrder::new(order.clone(), a1, &sec1);
     assert!(v.check(&committee).is_ok());
@@ -50,14 +49,13 @@ fn test_certificates() {
     let committee = Committee::new(authorities);
 
     let transfer = Transfer {
-        sender: a1,
         recipient: Address::FastPay(a2),
         amount: Amount::from(1),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(transfer.clone(), &sec1);
-    let bad_order = TransferOrder::new(transfer, &sec2);
+    let order = TransferOrder::new(a1, transfer.clone(), &sec1);
+    let bad_order = TransferOrder::new(a1, transfer, &sec2);
 
     let v1 = SignedTransferOrder::new(order.clone(), a1, &sec1);
     let v2 = SignedTransferOrder::new(order.clone(), a2, &sec2);

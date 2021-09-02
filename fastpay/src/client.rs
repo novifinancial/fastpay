@@ -99,7 +99,6 @@ fn make_benchmark_transfer_orders(
     let mut next_recipient = get_key_pair().0;
     for account in accounts_config.accounts_mut() {
         let transfer = Transfer {
-            sender: account.address,
             recipient: Address::FastPay(next_recipient),
             amount: Amount::from(1),
             sequence_number: account.next_sequence_number,
@@ -107,14 +106,14 @@ fn make_benchmark_transfer_orders(
         };
         debug!("Preparing transfer order: {:?}", transfer);
         account.next_sequence_number = account.next_sequence_number.increment().unwrap();
-        next_recipient = account.address;
-        let order = TransferOrder::new(transfer.clone(), &account.key);
+        let order = TransferOrder::new(account.address, transfer.clone(), &account.key);
         orders.push(order.clone());
         let serialized_order = serialize_transfer_order(&order);
         serialized_orders.push((account.address, serialized_order.into()));
         if serialized_orders.len() >= max_orders {
             break;
         }
+        next_recipient = account.address;
     }
     (orders, serialized_orders)
 }
@@ -149,7 +148,7 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
             certificate.signatures.push((*pubx, sig));
         }
         let serialized_certificate = serialize_cert(&certificate);
-        serialized_certificates.push((order.transfer.sender, serialized_certificate.into()));
+        serialized_certificates.push((order.sender, serialized_certificate.into()));
     }
     serialized_certificates
 }
@@ -165,7 +164,7 @@ fn make_benchmark_certificates_from_votes(
     let mut done_senders = HashSet::new();
     for vote in votes {
         // We aggregate votes indexed by sender.
-        let address = vote.value.transfer.sender;
+        let address = vote.value.sender;
         if done_senders.contains(&address) {
             continue;
         }

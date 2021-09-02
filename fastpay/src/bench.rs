@@ -145,14 +145,12 @@ impl ClientServerBenchmark {
         let mut next_recipient = get_key_pair().0;
         for (pubx, secx) in account_keys.iter() {
             let transfer = Transfer {
-                sender: *pubx,
                 recipient: Address::FastPay(next_recipient),
                 amount: Amount::from(50),
                 sequence_number: SequenceNumber::from(0),
                 user_data: UserData::default(),
             };
-            next_recipient = *pubx;
-            let order = TransferOrder::new(transfer.clone(), secx);
+            let order = TransferOrder::new(*pubx, transfer.clone(), secx);
             let shard = AuthorityState::get_shard(self.num_shards, pubx);
 
             // Serialize order
@@ -175,6 +173,8 @@ impl ClientServerBenchmark {
 
             orders.push((shard, bufx2.into()));
             orders.push((shard, bufx.into()));
+
+            next_recipient = *pubx;
         }
 
         (states, orders)
