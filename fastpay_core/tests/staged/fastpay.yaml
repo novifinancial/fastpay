@@ -167,8 +167,6 @@ SignedTransferOrder:
         TYPENAME: Signature
 Transfer:
   STRUCT:
-    - sender:
-        TYPENAME: PublicKeyBytes
     - recipient:
         TYPENAME: Address
     - amount:
@@ -181,6 +179,8 @@ TransferOrder:
   STRUCT:
     - transfer:
         TYPENAME: Transfer
+    - sender:
+        TYPENAME: PublicKeyBytes
     - signature:
         TYPENAME: Signature
 UserData:

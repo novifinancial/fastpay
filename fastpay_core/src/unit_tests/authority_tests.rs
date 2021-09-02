@@ -33,7 +33,7 @@ fn test_handle_transfer_order_zero_amount() {
     // test transfer non-positive amount
     let mut zero_amount_transfer = transfer_order.transfer;
     zero_amount_transfer.amount = Amount::zero();
-    let zero_amount_transfer_order = TransferOrder::new(zero_amount_transfer, &sender_key);
+    let zero_amount_transfer_order = TransferOrder::new(sender, zero_amount_transfer, &sender_key);
     assert!(authority_state
         .handle_transfer_order(zero_amount_transfer_order)
         .is_err());
@@ -53,9 +53,8 @@ fn test_handle_transfer_order_unknown_sender() {
     let transfer_order = init_transfer_order(sender, &sender_key, recipient, Amount::from(5));
     let (unknown_address, unknown_key) = get_key_pair();
 
-    let mut unknown_sender_transfer = transfer_order.transfer;
-    unknown_sender_transfer.sender = unknown_address;
-    let unknown_sender_transfer_order = TransferOrder::new(unknown_sender_transfer, &unknown_key);
+    let unknown_sender_transfer_order =
+        TransferOrder::new(unknown_address, transfer_order.transfer, &unknown_key);
     assert!(authority_state
         .handle_transfer_order(unknown_sender_transfer_order)
         .is_err());
@@ -473,13 +472,12 @@ fn init_transfer_order(
     amount: Amount,
 ) -> TransferOrder {
     let transfer = Transfer {
-        sender,
         recipient,
         amount,
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    TransferOrder::new(transfer, secret)
+    TransferOrder::new(sender, transfer, secret)
 }
 
 #[cfg(test)]

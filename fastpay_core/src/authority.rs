@@ -12,7 +12,7 @@ mod authority_tests;
 pub struct AccountOffchainState {
     /// Balance of the FastPay account.
     pub balance: Balance,
-    /// Sequence number tracking spending actions.
+    /// Sequence number tracking orders.
     pub next_sequence_number: SequenceNumber,
     /// Whether we have signed a transfer for this sequence number already.
     pub pending_confirmation: Option<SignedTransferOrder>,
@@ -84,13 +84,10 @@ impl Authority for AuthorityState {
         order: TransferOrder,
     ) -> Result<AccountInfoResponse, FastPayError> {
         // Check the sender's signature and retrieve the transfer data.
-        fp_ensure!(
-            self.in_shard(&order.transfer.sender),
-            FastPayError::WrongShard
-        );
+        fp_ensure!(self.in_shard(&order.sender), FastPayError::WrongShard);
         order.check_signature()?;
         let transfer = &order.transfer;
-        let sender = transfer.sender;
+        let sender = order.sender;
         fp_ensure!(
             transfer.sequence_number <= SequenceNumber::max(),
             FastPayError::InvalidSequenceNumber
@@ -137,16 +134,17 @@ impl Authority for AuthorityState {
         let certificate = confirmation_order.transfer_certificate;
         // Check the certificate and retrieve the transfer data.
         fp_ensure!(
-            self.in_shard(&certificate.value.transfer.sender),
+            self.in_shard(&certificate.value.sender),
             FastPayError::WrongShard
         );
         certificate.check(&self.committee)?;
+        let sender = certificate.value.sender;
         let transfer = certificate.value.transfer.clone();
 
         // First we copy all relevant data from sender.
         let mut sender_account = self
             .accounts
-            .entry(transfer.sender)
+            .entry(sender)
             .or_insert_with(AccountOffchainState::new);
         let mut sender_sequence_number = sender_account.next_sequence_number;
         let mut sender_balance = sender_account.balance;
@@ -159,7 +157,7 @@ impl Authority for AuthorityState {
         }
         if sender_sequence_number > transfer.sequence_number {
             // Transfer was already confirmed.
-            return Ok((sender_account.make_account_info(transfer.sender), None));
+            return Ok((sender_account.make_account_info(sender), None));
         }
         sender_balance = sender_balance.try_sub(transfer.amount.into())?;
         sender_sequence_number = sender_sequence_number.increment()?;
@@ -169,7 +167,7 @@ impl Authority for AuthorityState {
         sender_account.next_sequence_number = sender_sequence_number;
         sender_account.pending_confirmation = None;
         sender_account.confirmed_log.push(certificate.clone());
-        let info = sender_account.make_account_info(transfer.sender);
+        let info = sender_account.make_account_info(sender);
 
         // Update FastPay recipient state locally or issue a cross-shard update (Must never fail!)
         let recipient = match transfer.recipient {

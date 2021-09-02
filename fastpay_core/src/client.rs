@@ -125,7 +125,7 @@ impl<A> ClientState<A> {
             sent_certificates,
             received_certificates: received_certificates
                 .into_iter()
-                .map(|cert| (cert.key(), cert))
+                .map(|cert| (cert.value.key(), cert))
                 .collect(),
             balance,
         }
@@ -201,9 +201,9 @@ where
                 }) = &result
                 {
                     if certificate.check(&self.committee).is_ok() {
-                        let transfer = &certificate.value.transfer;
-                        if transfer.sender == self.sender
-                            && transfer.sequence_number == sequence_number
+                        let order = &certificate.value;
+                        if order.sender == self.sender
+                            && order.transfer.sequence_number == sequence_number
                         {
                             return Ok(certificate.clone());
                         }
@@ -367,7 +367,7 @@ where
         let (task, mut handle) = Downloader::start(
             requester,
             known_certificates.into_iter().filter_map(|cert| {
-                if cert.value.transfer.sender == sender {
+                if cert.value.sender == sender {
                     Some((cert.value.transfer.sequence_number, Ok(cert)))
                 } else {
                     None
@@ -502,13 +502,12 @@ where
             safe_amount
         );
         let transfer = Transfer {
-            sender: self.address,
             recipient,
             amount,
             sequence_number: self.next_sequence_number,
             user_data,
         };
-        let order = TransferOrder::new(transfer, &self.secret);
+        let order = TransferOrder::new(self.address, transfer, &self.secret);
         let certificate = self
             .execute_transfer(order, /* with_confirmation */ true)
             .await?;
@@ -640,13 +639,14 @@ where
     ) -> AsyncResult<(), failure::Error> {
         Box::pin(async move {
             certificate.check(&self.committee)?;
+            let sender = certificate.value.sender;
             let transfer = &certificate.value.transfer;
             ensure!(
                 transfer.recipient == Address::FastPay(self.address),
                 "Transfer should be received by us."
             );
             self.communicate_transfers(
-                transfer.sender,
+                sender,
                 vec![certificate.clone()],
                 CommunicateAction::SynchronizeNextSequenceNumber(
                     certificate.value.transfer.sequence_number.increment()?,
@@ -654,11 +654,9 @@ where
             )
             .await?;
             // Everything worked: update the local balance.
-            let transfer = &certificate.value.transfer;
-            if let btree_map::Entry::Vacant(entry) =
-                self.received_certificates.entry(transfer.key())
-            {
-                self.balance = self.balance.try_add(transfer.amount.into())?;
+            let order = &certificate.value;
+            if let btree_map::Entry::Vacant(entry) = self.received_certificates.entry(order.key()) {
+                self.balance = self.balance.try_add(order.transfer.amount.into())?;
                 entry.insert(certificate);
             }
             Ok(())
@@ -673,13 +671,12 @@ where
     ) -> AsyncResult<CertifiedTransferOrder, failure::Error> {
         Box::pin(async move {
             let transfer = Transfer {
-                sender: self.address,
                 recipient: Address::FastPay(recipient),
                 amount,
                 sequence_number: self.next_sequence_number,
                 user_data,
             };
-            let order = TransferOrder::new(transfer, &self.secret);
+            let order = TransferOrder::new(self.address, transfer, &self.secret);
             let new_certificate = self
                 .execute_transfer(order, /* with_confirmation */ false)
                 .await?;

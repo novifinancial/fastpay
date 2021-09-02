@@ -78,7 +78,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
         );
         let account = self
             .accounts
-            .entry(transfer.sender)
+            .entry(order.sender)
             .or_insert_with(AccountOnchainState::new);
         ensure!(
             account.last_redeemed < Some(transfer.sequence_number),
