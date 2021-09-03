@@ -33,18 +33,19 @@ fn make_shard_server(
 
     let mut state = AuthorityState::new_shard(
         committee,
-        server_config.authority.address,
+        server_config.authority.name,
         server_config.key.copy(),
         shard,
         num_shards,
     );
 
     // Load initial states
-    for (address, balance) in &initial_accounts_config.accounts {
-        if AuthorityState::get_shard(num_shards, address) != shard {
+    for (id, owner, balance) in &initial_accounts_config.accounts {
+        if AuthorityState::get_shard(num_shards, id) != shard {
             continue;
         }
         let client = AccountOffchainState {
+            owner: *owner,
             balance: *balance,
             next_sequence_number: SequenceNumber::from(0),
             pending_confirmation: None,
@@ -52,7 +53,7 @@ fn make_shard_server(
             synchronization_log: Vec::new(),
             received_log: Vec::new(),
         };
-        state.accounts.insert(*address, client);
+        state.accounts.insert(id.clone(), client);
     }
 
     network::Server::new(
@@ -221,10 +222,10 @@ fn main() {
             port,
             shards,
         } => {
-            let (address, key) = get_key_pair();
+            let (name, key) = get_key_pair();
             let authority = AuthorityConfig {
                 network_protocol: protocol,
-                address,
+                name,
                 host,
                 base_port: port,
                 num_shards: shards,

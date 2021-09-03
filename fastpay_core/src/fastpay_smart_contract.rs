@@ -22,7 +22,7 @@ pub struct FastPaySmartContractState {
     /// Committee of this FastPay instance.
     committee: Committee,
     /// Onchain states of FastPay smart contract.
-    pub accounts: BTreeMap<FastPayAddress, AccountOnchainState>,
+    pub accounts: BTreeMap<AccountId, AccountOnchainState>,
     /// Primary coins in the smart contract.
     total_balance: Amount,
     /// The latest transaction index included in the blockchain.
@@ -78,7 +78,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
         );
         let account = self
             .accounts
-            .entry(order.sender)
+            .entry(order.transfer.account_id.clone())
             .or_insert_with(AccountOnchainState::new);
         ensure!(
             account.last_redeemed < Some(transfer.sequence_number),

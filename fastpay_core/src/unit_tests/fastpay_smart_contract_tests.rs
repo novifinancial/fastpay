@@ -58,13 +58,17 @@ fn test_handle_redeem_transaction_ok() {
     assert!(contract_state
         .handle_redeem_transaction(redeem_transaction.clone())
         .is_ok());
-    let sender = redeem_transaction.transfer_certificate.value.sender;
+    let account_id = redeem_transaction
+        .transfer_certificate
+        .value
+        .transfer
+        .account_id;
     let amount = redeem_transaction
         .transfer_certificate
         .value
         .transfer
         .amount;
-    let account = contract_state.accounts.get(&sender).unwrap();
+    let account = contract_state.accounts.get(&account_id).unwrap();
     let sequence_number = redeem_transaction
         .transfer_certificate
         .value
@@ -128,23 +132,20 @@ fn test_handle_redeem_transaction_double_spend() {
 // helpers
 #[cfg(test)]
 fn init_contract() -> (FastPaySmartContractState, AuthorityName, KeyPair) {
-    let (authority_address, authority_key) = get_key_pair();
+    let (authority_name, authority_key) = get_key_pair();
     let mut authorities = BTreeMap::new();
-    authorities.insert(
-        /* address */ authority_address,
-        /* voting right */ 1,
-    );
+    authorities.insert(/* name */ authority_name, /* voting right */ 1);
     let committee = Committee::new(authorities);
     (
         FastPaySmartContractState::new(committee),
-        authority_address,
+        authority_name,
         authority_key,
     )
 }
 
 fn init_funding_transaction() -> FundingTransaction {
     FundingTransaction {
-        recipient: dbg_addr(1),
+        recipient: dbg_account(1),
         primary_coins: Amount::from(5),
     }
 }
@@ -155,14 +156,15 @@ fn init_redeem_transaction(
     name: AuthorityName,
     secret: KeyPair,
 ) -> RedeemTransaction {
-    let (sender_address, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
     let primary_transfer = Transfer {
+        account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(2)),
         amount: Amount::from(3),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(sender_address, primary_transfer, &sender_key);
+    let order = TransferOrder::new(primary_transfer, &sender_key);
     let vote = SignedTransferOrder::new(order.clone(), name, &secret);
     let mut builder = SignatureAggregator::try_new(order, &committee).unwrap();
     let certificate = builder

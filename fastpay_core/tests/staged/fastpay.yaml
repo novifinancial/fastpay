@@ -1,8 +1,12 @@
 ---
+AccountId:
+  NEWTYPESTRUCT:
+    SEQ:
+      TYPENAME: SequenceNumber
 AccountInfoRequest:
   STRUCT:
-    - sender:
-        TYPENAME: PublicKeyBytes
+    - account_id:
+        TYPENAME: AccountId
     - request_sequence_number:
         OPTION:
           TYPENAME: SequenceNumber
@@ -10,8 +14,8 @@ AccountInfoRequest:
         OPTION: U64
 AccountInfoResponse:
   STRUCT:
-    - sender:
-        TYPENAME: PublicKeyBytes
+    - account_id:
+        TYPENAME: AccountId
     - balance:
         TYPENAME: Balance
     - next_sequence_number:
@@ -34,7 +38,7 @@ Address:
     1:
       FastPay:
         NEWTYPE:
-          TYPENAME: PublicKeyBytes
+          TYPENAME: AccountId
 Amount:
   NEWTYPESTRUCT: U64
 Balance:
@@ -51,67 +55,75 @@ CertifiedTransferOrder:
 FastPayError:
   ENUM:
     0:
+      InvalidOwner: UNIT
+    1:
       InvalidSignature:
         STRUCT:
           - error: STR
-    1:
-      UnknownSigner: UNIT
     2:
-      CertificateRequiresQuorum: UNIT
+      UnknownSigner: UNIT
     3:
-      IncorrectTransferAmount: UNIT
+      CertificateRequiresQuorum: UNIT
     4:
-      UnexpectedSequenceNumber: UNIT
+      IncorrectTransferAmount: UNIT
     5:
+      UnexpectedSequenceNumber: UNIT
+    6:
       InsufficientFunding:
         STRUCT:
           - current_balance:
               TYPENAME: Balance
-    6:
+    7:
       PreviousTransferMustBeConfirmedFirst:
         STRUCT:
           - pending_confirmation:
               TYPENAME: TransferOrder
-    7:
-      ErrorWhileProcessingTransferOrder: UNIT
     8:
-      ErrorWhileRequestingCertificate: UNIT
+      ErrorWhileProcessingTransferOrder: UNIT
     9:
-      MissingEalierConfirmations:
+      ErrorWhileRequestingCertificate: UNIT
+    10:
+      MissingEarlierConfirmations:
         STRUCT:
           - current_sequence_number:
               TYPENAME: SequenceNumber
-    10:
-      UnexpectedTransactionIndex: UNIT
     11:
-      CertificateNotfound: UNIT
+      UnexpectedTransactionIndex: UNIT
     12:
-      UnknownSenderAccount: UNIT
+      CertificateNotfound: UNIT
     13:
-      CertificateAuthorityReuse: UNIT
+      UnknownSenderAccount:
+        NEWTYPE:
+          TYPENAME: AccountId
     14:
-      InvalidSequenceNumber: UNIT
+      UnknownRecipientAccount:
+        NEWTYPE:
+          TYPENAME: AccountId
     15:
-      SequenceOverflow: UNIT
+      CertificateAuthorityReuse: UNIT
     16:
-      SequenceUnderflow: UNIT
+      InvalidSequenceNumber: UNIT
     17:
-      AmountOverflow: UNIT
+      SequenceOverflow: UNIT
     18:
-      AmountUnderflow: UNIT
+      SequenceUnderflow: UNIT
     19:
-      BalanceOverflow: UNIT
+      AmountOverflow: UNIT
     20:
-      BalanceUnderflow: UNIT
+      AmountUnderflow: UNIT
     21:
-      WrongShard: UNIT
+      BalanceOverflow: UNIT
     22:
-      InvalidCrossShardUpdate: UNIT
+      BalanceUnderflow: UNIT
     23:
-      InvalidDecoding: UNIT
+      WrongShard: UNIT
     24:
-      UnexpectedMessage: UNIT
+      InvalidCrossShardUpdate: UNIT
     25:
+      InvalidDecoding: UNIT
+    26:
+      UnexpectedMessage: UNIT
+    27:
       ClientIoError:
         STRUCT:
           - error: STR
@@ -167,6 +179,8 @@ SignedTransferOrder:
         TYPENAME: Signature
 Transfer:
   STRUCT:
+    - account_id:
+        TYPENAME: AccountId
     - recipient:
         TYPENAME: Address
     - amount:
@@ -179,7 +193,7 @@ TransferOrder:
   STRUCT:
     - transfer:
         TYPENAME: Transfer
-    - sender:
+    - owner:
         TYPENAME: PublicKeyBytes
     - signature:
         TYPENAME: Signature
