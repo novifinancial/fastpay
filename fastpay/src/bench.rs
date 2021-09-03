@@ -121,13 +121,18 @@ impl ClientServerBenchmark {
             states.push(state);
         }
 
-        // Seed user accounts.
-        let mut account_keys = Vec::new();
-        for _ in 0..self.num_accounts {
-            let keypair = get_key_pair();
-            let i = AuthorityState::get_shard(self.num_shards, &keypair.0) as usize;
-            assert!(states[i].in_shard(&keypair.0));
+        // Seed user accounts and make one transaction per account (transfer order + confirmation).
+        info!("Preparing transactions.");
+        let mut orders: Vec<(u32, Bytes)> = Vec::new();
+        let mut next_recipient = AccountId(vec![((self.num_accounts - 1) as u64).into()]);
+        for i in 0..self.num_accounts {
+            // Create user account.
+            let id = AccountId(vec![(i as u64).into()]);
+            let (owner, keypair) = get_key_pair();
+            let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
+            assert!(states[shard].in_shard(&id));
             let client = AccountOffchainState {
+                owner,
                 balance: Balance::from(Amount::from(100)),
                 next_sequence_number: SequenceNumber::from(0),
                 pending_confirmation: None,
@@ -135,23 +140,17 @@ impl ClientServerBenchmark {
                 synchronization_log: Vec::new(),
                 received_log: Vec::new(),
             };
-            states[i].accounts.insert(keypair.0, client);
-            account_keys.push(keypair);
-        }
+            states[shard].accounts.insert(id.clone(), client);
 
-        info!("Preparing transactions.");
-        // Make one transaction per account (transfer order + confirmation).
-        let mut orders: Vec<(u32, Bytes)> = Vec::new();
-        let mut next_recipient = get_key_pair().0;
-        for (pubx, secx) in account_keys.iter() {
             let transfer = Transfer {
+                account_id: id.clone(),
                 recipient: Address::FastPay(next_recipient),
                 amount: Amount::from(50),
                 sequence_number: SequenceNumber::from(0),
                 user_data: UserData::default(),
             };
-            let order = TransferOrder::new(*pubx, transfer.clone(), secx);
-            let shard = AuthorityState::get_shard(self.num_shards, pubx);
+            let order = TransferOrder::new(transfer.clone(), &keypair);
+            let shard = AuthorityState::get_shard(self.num_shards, &id);
 
             // Serialize order
             let bufx = serialize_transfer_order(&order);
@@ -174,7 +173,7 @@ impl ClientServerBenchmark {
             orders.push((shard, bufx2.into()));
             orders.push((shard, bufx.into()));
 
-            next_recipient = *pubx;
+            next_recipient = id;
         }
 
         (states, orders)

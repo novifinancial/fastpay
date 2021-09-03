@@ -22,12 +22,12 @@ fn test_error() {
 #[test]
 fn test_info_request() {
     let req1 = AccountInfoRequest {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         request_sequence_number: None,
         request_received_transfers_excluding_first_nth: None,
     };
     let req2 = AccountInfoRequest {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         request_sequence_number: Some(SequenceNumber::from(129)),
         request_received_transfers_excluding_first_nth: None,
     };
@@ -54,15 +54,16 @@ fn test_info_request() {
 
 #[test]
 fn test_order() {
-    let (sender_name, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
 
     let transfer = Transfer {
-        recipient: Address::Primary(dbg_addr(0x20)),
+        account_id: dbg_account(1),
+        recipient: Address::FastPay(dbg_account(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let transfer_order = TransferOrder::new(sender_name, transfer, &sender_key);
+    let transfer_order = TransferOrder::new(transfer, &sender_key);
 
     let buf = serialize_transfer_order(&transfer_order);
     let result = deserialize_message(buf.as_slice());
@@ -73,14 +74,15 @@ fn test_order() {
         panic!()
     }
 
-    let (sender_name, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
     let transfer2 = Transfer {
-        recipient: Address::FastPay(dbg_addr(0x20)),
+        account_id: dbg_account(1),
+        recipient: Address::FastPay(dbg_account(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let transfer_order2 = TransferOrder::new(sender_name, transfer2, &sender_key);
+    let transfer_order2 = TransferOrder::new(transfer2, &sender_key);
 
     let buf = serialize_transfer_order(&transfer_order2);
     let result = deserialize_message(buf.as_slice());
@@ -94,14 +96,15 @@ fn test_order() {
 
 #[test]
 fn test_vote() {
-    let (sender_name, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
     let transfer = Transfer {
+        account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(sender_name, transfer, &sender_key);
+    let order = TransferOrder::new(transfer, &sender_key);
 
     let (authority_name, authority_key) = get_key_pair();
     let vote = SignedTransferOrder::new(order, authority_name, &authority_key);
@@ -118,14 +121,15 @@ fn test_vote() {
 
 #[test]
 fn test_cert() {
-    let (sender_name, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
     let transfer = Transfer {
+        account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(sender_name, transfer, &sender_key);
+    let order = TransferOrder::new(transfer, &sender_key);
     let mut cert = CertifiedTransferOrder {
         value: order,
         signatures: Vec::new(),
@@ -150,14 +154,15 @@ fn test_cert() {
 
 #[test]
 fn test_info_response() {
-    let (sender_name, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
     let transfer = Transfer {
+        account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(sender_name, transfer, &sender_key);
+    let order = TransferOrder::new(transfer, &sender_key);
 
     let (auth_name, auth_key) = get_key_pair();
     let vote = SignedTransferOrder::new(order.clone(), auth_name, &auth_key);
@@ -175,7 +180,7 @@ fn test_info_response() {
     }
 
     let resp1 = AccountInfoResponse {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: None,
@@ -183,7 +188,7 @@ fn test_info_response() {
         requested_received_transfers: Vec::new(),
     };
     let resp2 = AccountInfoResponse {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: Some(vote.clone()),
@@ -191,7 +196,7 @@ fn test_info_response() {
         requested_received_transfers: Vec::new(),
     };
     let resp3 = AccountInfoResponse {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: None,
@@ -199,7 +204,7 @@ fn test_info_response() {
         requested_received_transfers: Vec::new(),
     };
     let resp4 = AccountInfoResponse {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: Some(vote),
@@ -221,8 +226,9 @@ fn test_info_response() {
 
 #[test]
 fn test_time_order() {
-    let (sender_name, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
     let transfer = Transfer {
+        account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
@@ -232,7 +238,7 @@ fn test_time_order() {
     let mut buf = Vec::new();
     let now = Instant::now();
     for _ in 0..100 {
-        let transfer_order = TransferOrder::new(sender_name, transfer.clone(), &sender_key);
+        let transfer_order = TransferOrder::new(transfer.clone(), &sender_key);
         serialize_transfer_order_into(&mut buf, &transfer_order).unwrap();
     }
     println!("Write Order: {} microsec", now.elapsed().as_micros() / 100);
@@ -253,14 +259,15 @@ fn test_time_order() {
 
 #[test]
 fn test_time_vote() {
-    let (sender_name, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
     let transfer = Transfer {
+        account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(sender_name, transfer, &sender_key);
+    let order = TransferOrder::new(transfer, &sender_key);
 
     let (authority_name, authority_key) = get_key_pair();
 
@@ -291,14 +298,15 @@ fn test_time_vote() {
 #[test]
 fn test_time_cert() {
     let count = 100;
-    let (sender_name, sender_key) = get_key_pair();
+    let (_, sender_key) = get_key_pair();
     let transfer = Transfer {
+        account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0)),
         amount: Amount::from(5),
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(sender_name, transfer, &sender_key);
+    let order = TransferOrder::new(transfer, &sender_key);
     let mut cert = CertifiedTransferOrder {
         value: order,
         signatures: Vec::new(),

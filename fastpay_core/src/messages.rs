@@ -15,26 +15,27 @@ use std::{
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct FundingTransaction {
-    pub recipient: FastPayAddress,
+    pub recipient: AccountId,
     pub primary_coins: Amount,
     // TODO: Authenticated by Primary sender.
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct PrimarySynchronizationOrder {
-    pub recipient: FastPayAddress,
+    pub recipient: AccountId,
     pub amount: Amount,
     pub transaction_index: VersionNumber,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Address {
     Primary(PrimaryAddress),
-    FastPay(FastPayAddress),
+    FastPay(AccountId),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Transfer {
+    pub account_id: AccountId,
     pub recipient: Address,
     pub amount: Amount,
     pub sequence_number: SequenceNumber,
@@ -44,7 +45,7 @@ pub struct Transfer {
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct TransferOrder {
     pub transfer: Transfer,
-    pub sender: FastPayAddress,
+    pub owner: AccountOwner,
     pub signature: Signature,
 }
 
@@ -73,14 +74,14 @@ pub struct ConfirmationOrder {
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct AccountInfoRequest {
-    pub sender: FastPayAddress,
+    pub account_id: AccountId,
     pub request_sequence_number: Option<SequenceNumber>,
     pub request_received_transfers_excluding_first_nth: Option<usize>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct AccountInfoResponse {
-    pub sender: FastPayAddress,
+    pub account_id: AccountId,
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
     pub pending_confirmation: Option<SignedTransferOrder>,
@@ -142,23 +143,26 @@ impl PartialEq for CertifiedTransferOrder {
 }
 
 impl TransferOrder {
-    pub fn key(&self) -> (FastPayAddress, SequenceNumber) {
-        (self.sender, self.transfer.sequence_number)
+    pub fn key(&self) -> (AccountId, SequenceNumber) {
+        (
+            self.transfer.account_id.clone(),
+            self.transfer.sequence_number,
+        )
     }
 }
 
 impl TransferOrder {
-    pub fn new(sender: FastPayAddress, transfer: Transfer, secret: &KeyPair) -> Self {
+    pub fn new(transfer: Transfer, secret: &KeyPair) -> Self {
         let signature = Signature::new(&transfer, secret);
         Self {
             transfer,
-            sender,
+            owner: secret.public(),
             signature,
         }
     }
 
     pub fn check_signature(&self) -> Result<(), FastPayError> {
-        self.signature.check(&self.transfer, self.sender)
+        self.signature.check(&self.transfer, self.owner)
     }
 }
 
@@ -263,7 +267,7 @@ impl CertifiedTransferOrder {
             FastPayError::CertificateRequiresQuorum
         );
         // All what is left is checking signatures!
-        let inner_sig = (self.value.sender, self.value.signature);
+        let inner_sig = (self.value.owner, self.value.signature);
         Signature::verify_batch(
             &self.value.transfer,
             std::iter::once(&inner_sig).chain(&self.signatures),

@@ -39,45 +39,61 @@ pub struct KeyPair(dalek::Keypair);
 #[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct PublicKeyBytes(pub [u8; dalek::PUBLIC_KEY_LENGTH]);
 
-pub type PrimaryAddress = PublicKeyBytes;
-pub type FastPayAddress = PublicKeyBytes;
-pub type AuthorityName = PublicKeyBytes;
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Clone, Hash, Serialize, Deserialize)]
+pub struct AccountId(pub Vec<SequenceNumber>); // TODO: abstract APIs
 
-pub fn get_key_pair() -> (FastPayAddress, KeyPair) {
+pub type PrimaryAddress = PublicKeyBytes;
+pub type AuthorityName = PublicKeyBytes;
+pub type AccountOwner = PublicKeyBytes;
+
+pub fn get_key_pair() -> (PublicKeyBytes, KeyPair) {
     let mut csprng = OsRng;
     let keypair = dalek::Keypair::generate(&mut csprng);
     (PublicKeyBytes(keypair.public.to_bytes()), KeyPair(keypair))
 }
 
-pub fn address_as_base64<S>(key: &PublicKeyBytes, serializer: S) -> Result<S::Ok, S::Error>
+pub fn pubkey_as_base64<S>(key: &PublicKeyBytes, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::ser::Serializer,
 {
-    serializer.serialize_str(&encode_address(key))
+    serializer.serialize_str(&encode_pubkey(key))
 }
 
-pub fn address_from_base64<'de, D>(deserializer: D) -> Result<PublicKeyBytes, D::Error>
+pub fn pubkey_from_base64<'de, D>(deserializer: D) -> Result<PublicKeyBytes, D::Error>
 where
     D: serde::de::Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    let value = decode_address(&s).map_err(|err| serde::de::Error::custom(err.to_string()))?;
+    let value = decode_pubkey(&s).map_err(|err| serde::de::Error::custom(err.to_string()))?;
     Ok(value)
 }
 
-pub fn encode_address(key: &PublicKeyBytes) -> String {
+pub fn encode_pubkey(key: &PublicKeyBytes) -> String {
     base64::encode(&key.0[..])
 }
 
-pub fn decode_address(s: &str) -> Result<PublicKeyBytes, failure::Error> {
+pub fn decode_pubkey(s: &str) -> Result<PublicKeyBytes, failure::Error> {
     let value = base64::decode(s)?;
-    let mut address = [0u8; dalek::PUBLIC_KEY_LENGTH];
-    address.copy_from_slice(&value[..dalek::PUBLIC_KEY_LENGTH]);
-    Ok(PublicKeyBytes(address))
+    let mut pubkey = [0u8; dalek::PUBLIC_KEY_LENGTH];
+    pubkey.copy_from_slice(&value[..dalek::PUBLIC_KEY_LENGTH]);
+    Ok(PublicKeyBytes(pubkey))
+}
+
+pub fn encode_id(id: &AccountId) -> String {
+    serde_json::to_string(&id.0).unwrap()
+}
+
+pub fn decode_id(s: &str) -> Result<AccountId, failure::Error> {
+    Ok(AccountId(serde_json::from_str(s)?))
 }
 
 #[cfg(test)]
-pub fn dbg_addr(name: u8) -> FastPayAddress {
+pub fn dbg_account(name: u8) -> AccountId {
+    AccountId(vec![SequenceNumber(name.into())])
+}
+
+#[cfg(test)]
+pub fn dbg_addr(name: u8) -> PublicKeyBytes {
     let addr = [name; dalek::PUBLIC_KEY_LENGTH];
     PublicKeyBytes(addr)
 }
@@ -86,6 +102,10 @@ pub fn dbg_addr(name: u8) -> FastPayAddress {
 pub struct Signature(dalek::Signature);
 
 impl KeyPair {
+    pub fn public(&self) -> PublicKeyBytes {
+        PublicKeyBytes(self.0.public.to_bytes())
+    }
+
     /// Avoid implementing `clone` on secret keys to prevent mistakes.
     pub fn copy(&self) -> KeyPair {
         KeyPair(dalek::Keypair {
@@ -308,7 +328,7 @@ impl Signature {
     fn check_internal<T>(
         &self,
         value: &T,
-        author: FastPayAddress,
+        author: PublicKeyBytes,
     ) -> Result<(), dalek::SignatureError>
     where
         T: Signable<Vec<u8>>,
@@ -319,7 +339,7 @@ impl Signature {
         public_key.verify(&message, &self.0)
     }
 
-    pub fn check<T>(&self, value: &T, author: FastPayAddress) -> Result<(), FastPayError>
+    pub fn check<T>(&self, value: &T, author: PublicKeyBytes) -> Result<(), FastPayError>
     where
         T: Signable<Vec<u8>>,
     {
@@ -332,7 +352,7 @@ impl Signature {
     fn verify_batch_internal<'a, T, I>(value: &'a T, votes: I) -> Result<(), dalek::SignatureError>
     where
         T: Signable<Vec<u8>>,
-        I: IntoIterator<Item = &'a (FastPayAddress, Signature)>,
+        I: IntoIterator<Item = &'a (PublicKeyBytes, Signature)>,
     {
         let mut msg = Vec::new();
         value.write(&mut msg);
@@ -350,7 +370,7 @@ impl Signature {
     pub fn verify_batch<'a, T, I>(value: &'a T, votes: I) -> Result<(), FastPayError>
     where
         T: Signable<Vec<u8>>,
-        I: IntoIterator<Item = &'a (FastPayAddress, Signature)>,
+        I: IntoIterator<Item = &'a (PublicKeyBytes, Signature)>,
     {
         Signature::verify_batch_internal(value, votes).map_err(|error| {
             FastPayError::InvalidSignature {
