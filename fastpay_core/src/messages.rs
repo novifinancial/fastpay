@@ -168,11 +168,11 @@ impl TransferOrder {
 
 impl SignedTransferOrder {
     /// Use signing key to create a signed object.
-    pub fn new(value: TransferOrder, authority: AuthorityName, secret: &KeyPair) -> Self {
-        let signature = Signature::new(&value.transfer, secret);
+    pub fn new(value: TransferOrder, key_pair: &KeyPair) -> Self {
+        let signature = Signature::new(&value.transfer, key_pair);
         Self {
             value,
-            authority,
+            authority: key_pair.public(),
             signature,
         }
     }

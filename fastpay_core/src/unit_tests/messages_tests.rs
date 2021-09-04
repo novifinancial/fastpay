@@ -7,12 +7,14 @@ use std::collections::BTreeMap;
 #[test]
 fn test_signed_values() {
     let mut authorities = BTreeMap::new();
-    let (name1, sec1) = get_key_pair();
-    let (name2, sec2) = get_key_pair();
-    let (name3, sec3) = get_key_pair();
+    let key1 = get_key_pair();
+    let key2 = get_key_pair();
+    let key3 = get_key_pair();
+    let name1 = key1.public();
+    let name2 = key2.public();
 
-    authorities.insert(/* name */ name1, /* voting right */ 1);
-    authorities.insert(/* name */ name2, /* voting right */ 0);
+    authorities.insert(name1, /* voting right */ 1);
+    authorities.insert(name2, /* voting right */ 0);
     let committee = Committee::new(authorities);
 
     let transfer = Transfer {
@@ -22,32 +24,34 @@ fn test_signed_values() {
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(transfer.clone(), &sec1);
-    let mut bad_order = TransferOrder::new(transfer, &sec2);
+    let order = TransferOrder::new(transfer.clone(), &key1);
+    let mut bad_order = TransferOrder::new(transfer, &key2);
     bad_order.owner = name1;
 
-    let v = SignedTransferOrder::new(order.clone(), name1, &sec1);
+    let v = SignedTransferOrder::new(order.clone(), &key1);
     assert!(v.check(&committee).is_ok());
 
-    let v = SignedTransferOrder::new(order.clone(), name2, &sec2);
+    let v = SignedTransferOrder::new(order.clone(), &key2);
     assert!(v.check(&committee).is_err());
 
-    let v = SignedTransferOrder::new(order, name3, &sec3);
+    let v = SignedTransferOrder::new(order, &key3);
     assert!(v.check(&committee).is_err());
 
-    let v = SignedTransferOrder::new(bad_order, name1, &sec1);
+    let v = SignedTransferOrder::new(bad_order, &key1);
     assert!(v.check(&committee).is_err());
 }
 
 #[test]
 fn test_certificates() {
-    let (name1, sec1) = get_key_pair();
-    let (name2, sec2) = get_key_pair();
-    let (name3, sec3) = get_key_pair();
+    let key1 = get_key_pair();
+    let key2 = get_key_pair();
+    let key3 = get_key_pair();
+    let name1 = key1.public();
+    let name2 = key2.public();
 
     let mut authorities = BTreeMap::new();
-    authorities.insert(/* name */ name1, /* voting right */ 1);
-    authorities.insert(/* name */ name2, /* voting right */ 1);
+    authorities.insert(name1, /* voting right */ 1);
+    authorities.insert(name2, /* voting right */ 1);
     let committee = Committee::new(authorities);
 
     let transfer = Transfer {
@@ -57,13 +61,13 @@ fn test_certificates() {
         sequence_number: SequenceNumber::new(),
         user_data: UserData::default(),
     };
-    let order = TransferOrder::new(transfer.clone(), &sec1);
-    let mut bad_order = TransferOrder::new(transfer, &sec2);
+    let order = TransferOrder::new(transfer.clone(), &key1);
+    let mut bad_order = TransferOrder::new(transfer, &key2);
     bad_order.owner = name1;
 
-    let v1 = SignedTransferOrder::new(order.clone(), name1, &sec1);
-    let v2 = SignedTransferOrder::new(order.clone(), name2, &sec2);
-    let v3 = SignedTransferOrder::new(order.clone(), name3, &sec3);
+    let v1 = SignedTransferOrder::new(order.clone(), &key1);
+    let v2 = SignedTransferOrder::new(order.clone(), &key2);
+    let v3 = SignedTransferOrder::new(order.clone(), &key3);
 
     let mut builder = SignatureAggregator::try_new(order.clone(), &committee).unwrap();
     assert!(builder

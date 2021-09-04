@@ -31,13 +31,8 @@ fn make_shard_server(
     let committee = Committee::new(committee_config.voting_rights());
     let num_shards = server_config.authority.num_shards;
 
-    let mut state = AuthorityState::new_shard(
-        committee,
-        server_config.authority.name,
-        server_config.key.copy(),
-        shard,
-        num_shards,
-    );
+    let mut state =
+        AuthorityState::new_shard(committee, server_config.key.copy(), shard, num_shards);
 
     // Load initial states
     for (id, owner, balance) in &initial_accounts_config.accounts {
@@ -222,7 +217,8 @@ fn main() {
             port,
             shards,
         } => {
-            let (name, key) = get_key_pair();
+            let key = get_key_pair();
+            let name = key.public();
             let authority = AuthorityConfig {
                 network_protocol: protocol,
                 name,

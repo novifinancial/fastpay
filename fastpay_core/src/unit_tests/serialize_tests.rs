@@ -54,7 +54,7 @@ fn test_info_request() {
 
 #[test]
 fn test_order() {
-    let (_, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
 
     let transfer = Transfer {
         account_id: dbg_account(1),
@@ -74,7 +74,7 @@ fn test_order() {
         panic!()
     }
 
-    let (_, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer2 = Transfer {
         account_id: dbg_account(1),
         recipient: Address::FastPay(dbg_account(0x20)),
@@ -96,7 +96,7 @@ fn test_order() {
 
 #[test]
 fn test_vote() {
-    let (_, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
@@ -106,8 +106,8 @@ fn test_vote() {
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
-    let (authority_name, authority_key) = get_key_pair();
-    let vote = SignedTransferOrder::new(order, authority_name, &authority_key);
+    let key = get_key_pair();
+    let vote = SignedTransferOrder::new(order, &key);
 
     let buf = serialize_vote(&vote);
     let result = deserialize_message(buf.as_slice());
@@ -121,7 +121,7 @@ fn test_vote() {
 
 #[test]
 fn test_cert() {
-    let (_, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
@@ -136,10 +136,10 @@ fn test_cert() {
     };
 
     for _ in 0..3 {
-        let (authority_name, authority_key) = get_key_pair();
-        let sig = Signature::new(&cert.value.transfer, &authority_key);
+        let key = get_key_pair();
+        let sig = Signature::new(&cert.value.transfer, &key);
 
-        cert.signatures.push((authority_name, sig));
+        cert.signatures.push((key.public(), sig));
     }
 
     let buf = serialize_cert(&cert);
@@ -154,7 +154,7 @@ fn test_cert() {
 
 #[test]
 fn test_info_response() {
-    let (_, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
@@ -164,8 +164,8 @@ fn test_info_response() {
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
-    let (auth_name, auth_key) = get_key_pair();
-    let vote = SignedTransferOrder::new(order.clone(), auth_name, &auth_key);
+    let auth_key = get_key_pair();
+    let vote = SignedTransferOrder::new(order.clone(), &auth_key);
 
     let mut cert = CertifiedTransferOrder {
         value: order,
@@ -173,10 +173,10 @@ fn test_info_response() {
     };
 
     for _ in 0..3 {
-        let (authority_name, authority_key) = get_key_pair();
-        let sig = Signature::new(&cert.value.transfer, &authority_key);
+        let key = get_key_pair();
+        let sig = Signature::new(&cert.value.transfer, &key);
 
-        cert.signatures.push((authority_name, sig));
+        cert.signatures.push((key.public(), sig));
     }
 
     let resp1 = AccountInfoResponse {
@@ -226,7 +226,7 @@ fn test_info_response() {
 
 #[test]
 fn test_time_order() {
-    let (_, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
@@ -259,7 +259,7 @@ fn test_time_order() {
 
 #[test]
 fn test_time_vote() {
-    let (_, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0x20)),
@@ -269,12 +269,12 @@ fn test_time_vote() {
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
-    let (authority_name, authority_key) = get_key_pair();
+    let key = get_key_pair();
 
     let mut buf = Vec::new();
     let now = Instant::now();
     for _ in 0..100 {
-        let vote = SignedTransferOrder::new(order.clone(), authority_name, &authority_key);
+        let vote = SignedTransferOrder::new(order.clone(), &key);
         serialize_vote_into(&mut buf, &vote).unwrap();
     }
     println!("Write Vote: {} microsec", now.elapsed().as_micros() / 100);
@@ -298,7 +298,7 @@ fn test_time_vote() {
 #[test]
 fn test_time_cert() {
     let count = 100;
-    let (_, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
         recipient: Address::Primary(dbg_addr(0)),
@@ -313,9 +313,9 @@ fn test_time_cert() {
     };
 
     for _ in 0..7 {
-        let (authority_name, authority_key) = get_key_pair();
-        let sig = Signature::new(&cert.value.transfer, &authority_key);
-        cert.signatures.push((authority_name, sig));
+        let key = get_key_pair();
+        let sig = Signature::new(&cert.value.transfer, &key);
+        cert.signatures.push((key.public(), sig));
     }
 
     let mut buf = Vec::new();

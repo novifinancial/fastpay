@@ -17,14 +17,16 @@ impl BcsSignable for Bar {}
 
 #[test]
 fn test_signatures() {
-    let (addr1, sec1) = get_key_pair();
-    let (addr2, _sec2) = get_key_pair();
+    let key1 = get_key_pair();
+    let addr1 = key1.public();
+    let key2 = get_key_pair();
+    let addr2 = key2.public();
 
     let foo = Foo("hello".into());
     let foox = Foo("hellox".into());
     let bar = Bar("hello".into());
 
-    let s = Signature::new(&foo, &sec1);
+    let s = Signature::new(&foo, &key1);
     assert!(s.check(&foo, addr1).is_ok());
     assert!(s.check(&foo, addr2).is_err());
     assert!(s.check(&foox, addr1).is_err());
