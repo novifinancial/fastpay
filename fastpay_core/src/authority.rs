@@ -98,10 +98,6 @@ impl Authority for AuthorityState {
             transfer.sequence_number <= SequenceNumber::max(),
             FastPayError::InvalidSequenceNumber
         );
-        fp_ensure!(
-            transfer.amount > Amount::zero(),
-            FastPayError::IncorrectTransferAmount
-        );
         match self.accounts.get_mut(&account_id) {
             None => fp_bail!(FastPayError::UnknownSenderAccount(account_id)),
             Some(account) => {
@@ -120,12 +116,20 @@ impl Authority for AuthorityState {
                     account.next_sequence_number == transfer.sequence_number,
                     FastPayError::UnexpectedSequenceNumber
                 );
-                fp_ensure!(
-                    account.balance >= transfer.amount.into(),
-                    FastPayError::InsufficientFunding {
-                        current_balance: account.balance
+                match &transfer.operation {
+                    Operation::Payment { amount, .. } => {
+                        fp_ensure!(
+                            *amount > Amount::zero(),
+                            FastPayError::IncorrectTransferAmount
+                        );
+                        fp_ensure!(
+                            account.balance >= (*amount).into(),
+                            FastPayError::InsufficientFunding {
+                                current_balance: account.balance
+                            }
+                        );
                     }
-                );
+                }
                 let signed_order = SignedTransferOrder::new(order, &self.key_pair);
                 account.pending_confirmation = Some(signed_order);
                 Ok(account.make_account_info(account_id))
@@ -167,7 +171,11 @@ impl Authority for AuthorityState {
             // Transfer was already confirmed.
             return Ok((sender_account.make_account_info(sender), None));
         }
-        sender_balance = sender_balance.try_sub(transfer.amount.into())?;
+        match &transfer.operation {
+            Operation::Payment { amount, .. } => {
+                sender_balance = sender_balance.try_sub((*amount).into())?;
+            }
+        }
         sender_sequence_number = sender_sequence_number.increment()?;
 
         // Commit sender state back to the database (Must never fail!)
@@ -177,34 +185,42 @@ impl Authority for AuthorityState {
         sender_account.confirmed_log.push(certificate.clone());
         let info = sender_account.make_account_info(sender);
 
-        // Update FastPay recipient state locally or issue a cross-shard update (Must never fail!)
-        let recipient = match transfer.recipient {
-            Address::FastPay(recipient) => recipient,
-            Address::Primary(_) => {
+        // Execute FastPay operation locally or issue a cross-shard update (Must never fail!)
+        match &transfer.operation {
+            Operation::Payment {
+                recipient: Address::Primary(_),
+                ..
+            } => {
                 // Nothing else to do for Primary recipients.
-                return Ok((info, None));
+                Ok((info, None))
             }
-        };
-        // If the recipient is in the same shard, read and update the account.
-        if self.in_shard(&recipient) {
-            let recipient_account = self
-                .accounts
-                .get_mut(&recipient)
-                .ok_or(FastPayError::UnknownRecipientAccount(recipient))?;
-            recipient_account.balance = recipient_account
-                .balance
-                .try_add(transfer.amount.into())
-                .unwrap_or_else(|_| Balance::max());
-            recipient_account.received_log.push(certificate);
-            // Done updating recipient.
-            return Ok((info, None));
+            Operation::Payment {
+                recipient: Address::FastPay(recipient),
+                amount,
+                ..
+            } => {
+                // If the recipient is in the same shard, read and update the account.
+                if self.in_shard(recipient) {
+                    let recipient_account = self
+                        .accounts
+                        .get_mut(recipient)
+                        .ok_or_else(|| FastPayError::UnknownRecipientAccount(recipient.clone()))?;
+                    recipient_account.balance = recipient_account
+                        .balance
+                        .try_add((*amount).into())
+                        .unwrap_or_else(|_| Balance::max());
+                    recipient_account.received_log.push(certificate);
+                    // Done updating recipient.
+                    return Ok((info, None));
+                }
+                // Otherwise, we need to send a cross-shard update.
+                let cross_shard = Some(CrossShardUpdate {
+                    shard_id: self.which_shard(recipient),
+                    transfer_certificate: certificate,
+                });
+                Ok((info, cross_shard))
+            }
         }
-        // Otherwise, we need to send a cross-shard update.
-        let cross_shard = Some(CrossShardUpdate {
-            shard_id: self.which_shard(&recipient),
-            transfer_certificate: certificate,
-        });
-        Ok((info, cross_shard))
     }
 
     // NOTE: Need to rely on deliver-once semantics from comms channel
@@ -214,24 +230,31 @@ impl Authority for AuthorityState {
     ) -> Result<(), FastPayError> {
         // TODO: check certificate again?
         let transfer = &certificate.value.transfer;
-
-        let recipient = match &transfer.recipient {
-            Address::FastPay(recipient) => recipient,
-            Address::Primary(_) => {
+        match &transfer.operation {
+            Operation::Payment {
+                recipient: Address::Primary(_),
+                ..
+            } => {
                 fp_bail!(FastPayError::InvalidCrossShardUpdate);
             }
-        };
-        fp_ensure!(self.in_shard(recipient), FastPayError::WrongShard);
-        let recipient_account = self
-            .accounts
-            .get_mut(recipient)
-            .ok_or_else(|| FastPayError::UnknownRecipientAccount(recipient.clone()))?;
-        recipient_account.balance = recipient_account
-            .balance
-            .try_add(transfer.amount.into())
-            .unwrap_or_else(|_| Balance::max());
-        recipient_account.received_log.push(certificate);
-        Ok(())
+            Operation::Payment {
+                recipient: Address::FastPay(recipient),
+                amount,
+                ..
+            } => {
+                fp_ensure!(self.in_shard(recipient), FastPayError::WrongShard);
+                let recipient_account = self
+                    .accounts
+                    .get_mut(recipient)
+                    .ok_or_else(|| FastPayError::UnknownRecipientAccount(recipient.clone()))?;
+                recipient_account.balance = recipient_account
+                    .balance
+                    .try_add((*amount).into())
+                    .unwrap_or_else(|_| Balance::max());
+                recipient_account.received_log.push(certificate);
+                Ok(())
+            }
+        }
     }
 
     /// Finalize a transfer from Primary.

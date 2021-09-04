@@ -61,12 +61,14 @@ fn test_handle_redeem_transaction_ok() {
         .transfer_certificate
         .value
         .transfer
-        .account_id;
+        .account_id
+        .clone();
     let amount = redeem_transaction
         .transfer_certificate
         .value
         .transfer
-        .amount;
+        .amount()
+        .unwrap();
     let account = contract_state.accounts.get(&account_id).unwrap();
     let sequence_number = redeem_transaction
         .transfer_certificate
@@ -89,15 +91,17 @@ fn test_handle_redeem_transaction_negative_balance() {
         .is_ok());
     let old_balance = contract_state.total_balance;
 
-    redeem_transaction
+    *redeem_transaction
         .transfer_certificate
         .value
         .transfer
-        .amount = redeem_transaction
+        .amount_mut()
+        .unwrap() = redeem_transaction
         .transfer_certificate
         .value
         .transfer
-        .amount
+        .amount_mut()
+        .unwrap()
         .try_add(too_much_money)
         .unwrap();
     assert!(contract_state
@@ -149,10 +153,12 @@ fn init_redeem_transaction(committee: Committee, secret: KeyPair) -> RedeemTrans
     let sender_key = get_key_pair();
     let primary_transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::Primary(dbg_addr(2)),
-        amount: Amount::from(3),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(2)),
+            amount: Amount::from(3),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(primary_transfer, &sender_key);
     let vote = SignedTransferOrder::new(order.clone(), &secret);
