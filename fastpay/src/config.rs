@@ -18,10 +18,6 @@ use std::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthorityConfig {
     pub network_protocol: NetworkProtocol,
-    #[serde(
-        serialize_with = "pubkey_as_base64",
-        deserialize_with = "pubkey_from_base64"
-    )]
     pub name: AuthorityName,
     pub host: String,
     pub base_port: u32,
@@ -93,7 +89,7 @@ impl CommitteeConfig {
 #[derive(Serialize, Deserialize)]
 pub struct UserAccount {
     pub account_id: AccountId,
-    pub key: KeyPair,
+    pub key_pair: KeyPair,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
     pub sent_certificates: Vec<CertifiedTransferOrder>,
@@ -102,10 +98,10 @@ pub struct UserAccount {
 
 impl UserAccount {
     pub fn new(account_id: AccountId, balance: Balance) -> Self {
-        let key = get_key_pair();
+        let key_pair = get_key_pair();
         Self {
             account_id,
-            key,
+            key_pair,
             next_sequence_number: SequenceNumber::new(),
             balance,
             sent_certificates: Vec::new(),
@@ -144,7 +140,6 @@ impl AccountsConfig {
             .accounts
             .get_mut(state.account_id())
             .expect("Updated account should already exist");
-        // account.key = state.secret().copy(); // TODO: support key rotations
         account.next_sequence_number = state.next_sequence_number();
         account.balance = state.balance();
         account.sent_certificates = state.sent_certificates().clone();
@@ -208,8 +203,8 @@ impl InitialStateConfig {
             if elements.len() != 3 {
                 failure::bail!("expecting three columns separated with ':'")
             }
-            let id = decode_id(elements[0])?;
-            let pubkey = decode_pubkey(elements[1])?;
+            let id = elements[0].parse()?;
+            let pubkey = elements[1].parse()?;
             let balance = elements[2].parse()?;
             accounts.push((id, pubkey, balance));
         }
@@ -220,13 +215,7 @@ impl InitialStateConfig {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         for (id, pubkey, balance) in &self.accounts {
-            writeln!(
-                writer,
-                "{}:{}:{}",
-                encode_id(id),
-                encode_pubkey(pubkey),
-                balance
-            )?;
+            writeln!(writer, "{}:{}:{}", id, pubkey, balance)?;
         }
         Ok(())
     }

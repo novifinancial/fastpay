@@ -78,7 +78,7 @@ fn make_client_state(
         make_authority_clients(committee_config, buffer_size, send_timeout, recv_timeout);
     ClientState::new(
         account_id,
-        account.key.copy(),
+        account.key_pair.copy(),
         committee,
         authority_clients,
         account.next_sequence_number,
@@ -106,7 +106,7 @@ fn make_benchmark_transfer_orders(
         };
         debug!("Preparing transfer order: {:?}", transfer);
         account.next_sequence_number = account.next_sequence_number.increment().unwrap();
-        let order = TransferOrder::new(transfer.clone(), &account.key);
+        let order = TransferOrder::new(transfer.clone(), &account.key_pair);
         orders.push(order.clone());
         let serialized_order = serialize_transfer_order(&order);
         serialized_orders.push((account.account_id.clone(), serialized_order.into()));
@@ -171,8 +171,7 @@ fn make_benchmark_certificates_from_votes(
         }
         debug!(
             "Processing vote on {:?}'s transfer by {:?}",
-            account_id,
-            encode_pubkey(&vote.authority),
+            account_id, vote.authority,
         );
         let value = vote.value;
         let aggregator = aggregators
@@ -312,12 +311,12 @@ enum ClientCommands {
     #[structopt(name = "transfer")]
     Transfer {
         /// Sending account id (must be one of our accounts)
-        #[structopt(long)]
-        from: String,
+        #[structopt(long = "from")]
+        sender: AccountId,
 
         /// Recipient account id
-        #[structopt(long)]
-        to: String,
+        #[structopt(long = "to")]
+        recipient: AccountId,
 
         /// Amount to transfer
         amount: u64,
@@ -327,7 +326,7 @@ enum ClientCommands {
     #[structopt(name = "query_balance")]
     QueryBalance {
         /// Account id
-        account_id: String,
+        account_id: AccountId,
     },
 
     /// Send one transfer per account in bulk mode
@@ -374,9 +373,11 @@ fn main() {
         CommitteeConfig::read(committee_config_path).expect("Unable to read committee config file");
 
     match options.cmd {
-        ClientCommands::Transfer { from, to, amount } => {
-            let sender = decode_id(&from).expect("Failed to decode sender's account id");
-            let recipient = decode_id(&to).expect("Failed to decode recipient's account id");
+        ClientCommands::Transfer {
+            sender,
+            recipient,
+            amount,
+        } => {
             let amount = Amount::from(amount);
 
             let mut rt = Runtime::new().unwrap();
@@ -421,14 +422,12 @@ fn main() {
         }
 
         ClientCommands::QueryBalance { account_id } => {
-            let user_id = decode_id(&account_id).expect("Failed to decode account id");
-
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
                 let mut client_state = make_client_state(
                     &accounts_config,
                     &committee_config,
-                    user_id,
+                    account_id,
                     buffer_size,
                     send_timeout,
                     recv_timeout,
@@ -535,8 +534,8 @@ fn main() {
                 );
                 println!(
                     "{}:{}:{}",
-                    encode_id(&account.account_id),
-                    encode_pubkey(&account.key.public()),
+                    account.account_id,
+                    account.key_pair.public(),
                     initial_funding,
                 );
                 accounts_config.insert(account);
