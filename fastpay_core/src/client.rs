@@ -504,10 +504,12 @@ where
         );
         let transfer = Transfer {
             account_id: self.account_id.clone(),
-            recipient,
-            amount,
+            operation: Operation::Payment {
+                recipient,
+                amount,
+                user_data,
+            },
             sequence_number: self.next_sequence_number,
-            user_data,
         };
         let order = TransferOrder::new(transfer, &self.key_pair);
         let certificate = self
@@ -526,7 +528,11 @@ where
         let mut new_balance = self.balance;
         let mut new_next_sequence_number = self.next_sequence_number;
         for new_cert in &sent_certificates {
-            new_balance = new_balance.try_sub(new_cert.value.transfer.amount.into())?;
+            match &new_cert.value.transfer.operation {
+                Operation::Payment { amount, .. } => {
+                    new_balance = new_balance.try_sub((*amount).into())?;
+                }
+            }
             if new_cert.value.transfer.sequence_number >= new_next_sequence_number {
                 new_next_sequence_number = new_cert
                     .value
@@ -537,7 +543,11 @@ where
             }
         }
         for old_cert in &self.sent_certificates {
-            new_balance = new_balance.try_add(old_cert.value.transfer.amount.into())?;
+            match &old_cert.value.transfer.operation {
+                Operation::Payment { amount, .. } => {
+                    new_balance = new_balance.try_add((*amount).into())?;
+                }
+            }
         }
         // Atomic update
         self.sent_certificates = sent_certificates;
@@ -643,10 +653,14 @@ where
             certificate.check(&self.committee)?;
             let transfer = &certificate.value.transfer;
             let account_id = &certificate.value.transfer.account_id;
-            ensure!(
-                transfer.recipient == Address::FastPay(self.account_id.clone()), // TODO: avoid copy
-                "Transfer should be received by us."
-            );
+            match &transfer.operation {
+                Operation::Payment { recipient, .. } => {
+                    ensure!(
+                        recipient == &Address::FastPay(self.account_id.clone()), // TODO: avoid copy
+                        "Transfer should be received by us."
+                    );
+                }
+            }
             self.communicate_transfers(
                 account_id.clone(),
                 vec![certificate.clone()],
@@ -658,7 +672,11 @@ where
             // Everything worked: update the local balance.
             let order = &certificate.value;
             if let btree_map::Entry::Vacant(entry) = self.received_certificates.entry(order.key()) {
-                self.balance = self.balance.try_add(order.transfer.amount.into())?;
+                match &transfer.operation {
+                    Operation::Payment { amount, .. } => {
+                        self.balance = self.balance.try_add((*amount).into())?;
+                    }
+                }
                 entry.insert(certificate);
             }
             Ok(())
@@ -674,10 +692,12 @@ where
         Box::pin(async move {
             let transfer = Transfer {
                 account_id: self.account_id.clone(),
-                recipient: Address::FastPay(recipient),
-                amount,
+                operation: Operation::Payment {
+                    recipient: Address::FastPay(recipient),
+                    amount,
+                    user_data,
+                },
                 sequence_number: self.next_sequence_number,
-                user_data,
             };
             let order = TransferOrder::new(transfer, &self.key_pair);
             let new_certificate = self

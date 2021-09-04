@@ -127,6 +127,17 @@ FastPayError:
       ClientIoError:
         STRUCT:
           - error: STR
+Operation:
+  ENUM:
+    0:
+      Payment:
+        STRUCT:
+          - recipient:
+              TYPENAME: Address
+          - amount:
+              TYPENAME: Amount
+          - user_data:
+              TYPENAME: UserData
 PublicKeyBytes:
   NEWTYPESTRUCT:
     TUPLEARRAY:
@@ -181,14 +192,10 @@ Transfer:
   STRUCT:
     - account_id:
         TYPENAME: AccountId
-    - recipient:
-        TYPENAME: Address
-    - amount:
-        TYPENAME: Amount
+    - operation:
+        TYPENAME: Operation
     - sequence_number:
         TYPENAME: SequenceNumber
-    - user_data:
-        TYPENAME: UserData
 TransferOrder:
   STRUCT:
     - transfer:

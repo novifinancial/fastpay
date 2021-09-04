@@ -36,13 +36,9 @@ fn test_handle_transfer_order_zero_amount() {
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let transfer_order =
-        init_transfer_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
-
     // test transfer non-positive amount
-    let mut zero_amount_transfer = transfer_order.transfer;
-    zero_amount_transfer.amount = Amount::zero();
-    let zero_amount_transfer_order = TransferOrder::new(zero_amount_transfer, &sender_key_pair);
+    let zero_amount_transfer_order =
+        init_transfer_order(dbg_account(1), &sender_key_pair, recipient, Amount::zero());
     assert!(state
         .handle_transfer_order(zero_amount_transfer_order)
         .is_err());
@@ -345,7 +341,14 @@ fn test_handle_confirmation_order_ok() {
     next_sequence_number = next_sequence_number.increment().unwrap();
     let mut remaining_balance = old_account.balance;
     remaining_balance = remaining_balance
-        .try_sub(certified_transfer_order.value.transfer.amount.into())
+        .try_sub(
+            certified_transfer_order
+                .value
+                .transfer
+                .amount()
+                .unwrap()
+                .into(),
+        )
         .unwrap();
 
     let (info, _) = state
@@ -363,7 +366,12 @@ fn test_handle_confirmation_order_ok() {
     let recipient_account = state.accounts.get(&dbg_account(2)).unwrap();
     assert_eq!(
         recipient_account.balance,
-        certified_transfer_order.value.transfer.amount.into()
+        certified_transfer_order
+            .value
+            .transfer
+            .amount()
+            .unwrap()
+            .into()
     );
 
     let info_request = AccountInfoRequest {
@@ -377,7 +385,8 @@ fn test_handle_confirmation_order_ok() {
         response.requested_received_transfers[0]
             .value
             .transfer
-            .amount,
+            .amount()
+            .unwrap(),
         Amount::from(5)
     );
 }
@@ -501,10 +510,12 @@ fn init_transfer_order(
 ) -> TransferOrder {
     let transfer = Transfer {
         account_id,
-        recipient,
-        amount,
+        operation: Operation::Payment {
+            recipient,
+            amount,
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     TransferOrder::new(transfer, secret)
 }

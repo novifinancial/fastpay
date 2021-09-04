@@ -99,10 +99,12 @@ fn make_benchmark_transfer_orders(
     for account in accounts_config.accounts_mut() {
         let transfer = Transfer {
             account_id: account.account_id.clone(),
-            recipient: Address::FastPay(next_recipient),
-            amount: Amount::from(1),
+            operation: Operation::Payment {
+                recipient: Address::FastPay(next_recipient),
+                amount: Amount::from(1),
+                user_data: UserData::default(),
+            },
             sequence_number: account.next_sequence_number,
-            user_data: UserData::default(),
         };
         debug!("Preparing transfer order: {:?}", transfer);
         account.next_sequence_number = account.next_sequence_number.increment().unwrap();

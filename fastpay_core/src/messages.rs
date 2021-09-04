@@ -34,12 +34,19 @@ pub enum Address {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub enum Operation {
+    Payment {
+        recipient: Address,
+        amount: Amount,
+        user_data: UserData,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Transfer {
     pub account_id: AccountId,
-    pub recipient: Address,
-    pub amount: Amount,
+    pub operation: Operation,
     pub sequence_number: SequenceNumber,
-    pub user_data: UserData,
 }
 
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
@@ -148,6 +155,23 @@ impl TransferOrder {
             self.transfer.account_id.clone(),
             self.transfer.sequence_number,
         )
+    }
+}
+
+/// Non-testing code should make the pattern matching explicit so that
+/// we kwow where to add protocols in the future.
+#[cfg(test)]
+impl Transfer {
+    pub(crate) fn amount(&self) -> Option<Amount> {
+        match &self.operation {
+            Operation::Payment { amount, .. } => Some(*amount),
+        }
+    }
+
+    pub(crate) fn amount_mut(&mut self) -> Option<&mut Amount> {
+        match &mut self.operation {
+            Operation::Payment { amount, .. } => Some(amount),
+        }
     }
 }
 

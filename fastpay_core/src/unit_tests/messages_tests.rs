@@ -19,10 +19,12 @@ fn test_signed_values() {
 
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::FastPay(dbg_account(2)),
-        amount: Amount::from(1),
+        operation: Operation::Payment {
+            recipient: Address::FastPay(dbg_account(2)),
+            amount: Amount::from(1),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer.clone(), &key1);
     let mut bad_order = TransferOrder::new(transfer, &key2);
@@ -56,10 +58,12 @@ fn test_certificates() {
 
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::FastPay(dbg_account(1)),
-        amount: Amount::from(1),
+        operation: Operation::Payment {
+            recipient: Address::FastPay(dbg_account(1)),
+            amount: Amount::from(1),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer.clone(), &key1);
     let mut bad_order = TransferOrder::new(transfer, &key2);

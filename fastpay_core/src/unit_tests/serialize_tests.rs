@@ -58,10 +58,12 @@ fn test_order() {
 
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::FastPay(dbg_account(0x20)),
-        amount: Amount::from(5),
+        operation: Operation::Payment {
+            recipient: Address::FastPay(dbg_account(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let transfer_order = TransferOrder::new(transfer, &sender_key);
 
@@ -77,10 +79,12 @@ fn test_order() {
     let sender_key = get_key_pair();
     let transfer2 = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::FastPay(dbg_account(0x20)),
-        amount: Amount::from(5),
+        operation: Operation::Payment {
+            recipient: Address::FastPay(dbg_account(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let transfer_order2 = TransferOrder::new(transfer2, &sender_key);
 
@@ -99,10 +103,12 @@ fn test_vote() {
     let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
@@ -124,10 +130,12 @@ fn test_cert() {
     let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
     let mut cert = CertifiedTransferOrder {
@@ -157,10 +165,12 @@ fn test_info_response() {
     let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
@@ -229,10 +239,12 @@ fn test_time_order() {
     let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
 
     let mut buf = Vec::new();
@@ -262,10 +274,12 @@ fn test_time_vote() {
     let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
@@ -301,10 +315,12 @@ fn test_time_cert() {
     let sender_key = get_key_pair();
     let transfer = Transfer {
         account_id: dbg_account(1),
-        recipient: Address::Primary(dbg_addr(0)),
-        amount: Amount::from(5),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
     let mut cert = CertifiedTransferOrder {

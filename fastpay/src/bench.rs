@@ -144,10 +144,12 @@ impl ClientServerBenchmark {
 
             let transfer = Transfer {
                 account_id: id.clone(),
-                recipient: Address::FastPay(next_recipient),
-                amount: Amount::from(50),
+                operation: Operation::Payment {
+                    recipient: Address::FastPay(next_recipient),
+                    amount: Amount::from(50),
+                    user_data: UserData::default(),
+                },
                 sequence_number: SequenceNumber::from(0),
-                user_data: UserData::default(),
             };
             let order = TransferOrder::new(transfer.clone(), &key_pair);
             let shard = AuthorityState::get_shard(self.num_shards, &id);
