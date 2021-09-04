@@ -46,10 +46,10 @@ pub type PrimaryAddress = PublicKeyBytes;
 pub type AuthorityName = PublicKeyBytes;
 pub type AccountOwner = PublicKeyBytes;
 
-pub fn get_key_pair() -> (PublicKeyBytes, KeyPair) {
+pub fn get_key_pair() -> KeyPair {
     let mut csprng = OsRng;
     let keypair = dalek::Keypair::generate(&mut csprng);
-    (PublicKeyBytes(keypair.public.to_bytes()), KeyPair(keypair))
+    KeyPair(keypair)
 }
 
 pub fn pubkey_as_base64<S>(key: &PublicKeyBytes, serializer: S) -> Result<S::Ok, S::Error>

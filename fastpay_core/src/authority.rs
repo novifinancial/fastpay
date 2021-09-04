@@ -32,8 +32,8 @@ pub struct AuthorityState {
     pub name: AuthorityName,
     /// Committee of this FastPay instance.
     pub committee: Committee,
-    /// The signature key of the authority.
-    pub secret: KeyPair,
+    /// The signature key pair of the authority.
+    pub key_pair: KeyPair,
     /// Offchain states of FastPay accounts.
     pub accounts: BTreeMap<AccountId, AccountOffchainState>,
     /// The latest transaction index of the blockchain that the authority has seen.
@@ -126,7 +126,7 @@ impl Authority for AuthorityState {
                         current_balance: account.balance
                     }
                 );
-                let signed_order = SignedTransferOrder::new(order, self.name, &self.secret);
+                let signed_order = SignedTransferOrder::new(order, &self.key_pair);
                 account.pending_confirmation = Some(signed_order);
                 Ok(account.make_account_info(account_id))
             }
@@ -327,11 +327,11 @@ impl AccountOffchainState {
 }
 
 impl AuthorityState {
-    pub fn new(committee: Committee, name: AuthorityName, secret: KeyPair) -> Self {
+    pub fn new(committee: Committee, name: AuthorityName, key_pair: KeyPair) -> Self {
         AuthorityState {
             committee,
             name,
-            secret,
+            key_pair,
             accounts: BTreeMap::new(),
             last_transaction_index: VersionNumber::new(),
             shard_id: 0,
@@ -341,15 +341,14 @@ impl AuthorityState {
 
     pub fn new_shard(
         committee: Committee,
-        name: AuthorityName,
-        secret: KeyPair,
+        key_pair: KeyPair,
         shard_id: u32,
         number_of_shards: u32,
     ) -> Self {
         AuthorityState {
             committee,
-            name,
-            secret,
+            name: key_pair.public(),
+            key_pair,
             accounts: BTreeMap::new(),
             last_transaction_index: VersionNumber::new(),
             shard_id,

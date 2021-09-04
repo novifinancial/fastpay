@@ -40,7 +40,7 @@ pub struct ClientState<AuthorityClient> {
     /// Our offchain account id.
     account_id: AccountId,
     /// Our signature key.
-    secret: KeyPair,
+    key_pair: KeyPair,
     /// Our FastPay committee.
     committee: Committee,
     /// How to talk to this committee.
@@ -107,7 +107,7 @@ impl<A> ClientState<A> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         account_id: AccountId,
-        secret: KeyPair,
+        key_pair: KeyPair,
         committee: Committee,
         authority_clients: HashMap<AuthorityName, A>,
         next_sequence_number: SequenceNumber,
@@ -117,7 +117,7 @@ impl<A> ClientState<A> {
     ) -> Self {
         Self {
             account_id,
-            secret,
+            key_pair,
             committee,
             authority_clients,
             next_sequence_number,
@@ -509,7 +509,7 @@ where
             sequence_number: self.next_sequence_number,
             user_data,
         };
-        let order = TransferOrder::new(transfer, &self.secret);
+        let order = TransferOrder::new(transfer, &self.key_pair);
         let certificate = self
             .execute_transfer(order, /* with_confirmation */ true)
             .await?;
@@ -679,7 +679,7 @@ where
                 sequence_number: self.next_sequence_number,
                 user_data,
             };
-            let order = TransferOrder::new(transfer, &self.secret);
+            let order = TransferOrder::new(transfer, &self.key_pair);
             let new_certificate = self
                 .execute_transfer(order, /* with_confirmation */ false)
                 .await?;

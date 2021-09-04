@@ -63,14 +63,15 @@ fn init_local_authorities(
     let mut voting_rights = BTreeMap::new();
     for _ in 0..count {
         let key_pair = get_key_pair();
-        voting_rights.insert(key_pair.0, 1);
+        voting_rights.insert(key_pair.public(), 1);
         key_pairs.push(key_pair);
     }
     let committee = Committee::new(voting_rights);
 
     let mut clients = HashMap::new();
-    for (name, secret) in key_pairs {
-        let state = AuthorityState::new(committee.clone(), name, secret);
+    for key_pair in key_pairs {
+        let name = key_pair.public();
+        let state = AuthorityState::new(committee.clone(), name, key_pair);
         clients.insert(name, LocalAuthorityClient::new(state));
     }
     (clients, committee)
@@ -84,7 +85,7 @@ fn init_local_authorities_bad_1(
     let mut voting_rights = BTreeMap::new();
     for i in 0..count {
         let key_pair = get_key_pair();
-        voting_rights.insert(key_pair.0, 1);
+        voting_rights.insert(key_pair.public(), 1);
         if i + 1 < (count + 2) / 3 {
             // init 1 authority with a bad keypair
             key_pairs.push(get_key_pair());
@@ -95,8 +96,9 @@ fn init_local_authorities_bad_1(
     let committee = Committee::new(voting_rights);
 
     let mut clients = HashMap::new();
-    for (name, secret) in key_pairs {
-        let state = AuthorityState::new(committee.clone(), name, secret);
+    for key_pair in key_pairs {
+        let name = key_pair.public();
+        let state = AuthorityState::new(committee.clone(), name, key_pair);
         clients.insert(name, LocalAuthorityClient::new(state));
     }
     (clients, committee)
@@ -108,10 +110,10 @@ fn make_client(
     authority_clients: HashMap<AuthorityName, LocalAuthorityClient>,
     committee: Committee,
 ) -> ClientState<LocalAuthorityClient> {
-    let (_, secret) = get_key_pair();
+    let key_pair = get_key_pair();
     ClientState::new(
         account_id,
-        secret,
+        key_pair,
         committee,
         authority_clients,
         SequenceNumber::new(),
@@ -149,14 +151,14 @@ fn init_local_client_state(balances: Vec<i128>) -> ClientState<LocalAuthorityCli
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.secret.public(),
+        client1.key_pair.public(),
         balances,
     );
     let client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.secret.public(),
+        client2.key_pair.public(),
         zeroes,
     );
     client1
@@ -172,14 +174,14 @@ fn init_local_client_state_with_bad_authority(
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.secret.public(),
+        client1.key_pair.public(),
         balances,
     );
     let client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.secret.public(),
+        client2.key_pair.public(),
         zeroes,
     );
     client1
@@ -276,13 +278,13 @@ fn test_bidirectional_transfer() {
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.secret.public(),
+        client1.key_pair.public(),
         vec![2, 3, 4, 4],
     );
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.secret.public(),
+        client2.key_pair.public(),
         vec![0; 4],
     );
     // Update client1's local balance accordingly.
@@ -364,13 +366,13 @@ fn test_receiving_unconfirmed_transfer() {
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.secret.public(),
+        client1.key_pair.public(),
         vec![2, 3, 4, 4],
     );
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.secret.public(),
+        client2.key_pair.public(),
         vec![0; 4],
     );
 
@@ -413,19 +415,19 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
     fund_account(
         &mut authority_clients,
         client0.account_id.clone(),
-        client0.secret.public(),
+        client0.key_pair.public(),
         vec![2, 3, 4, 4],
     );
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.secret.public(),
+        client1.key_pair.public(),
         vec![0; 4],
     );
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.secret.public(),
+        client2.key_pair.public(),
         vec![0; 4],
     );
 

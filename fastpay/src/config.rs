@@ -102,7 +102,7 @@ pub struct UserAccount {
 
 impl UserAccount {
     pub fn new(account_id: AccountId, balance: Balance) -> Self {
-        let (_, key) = get_key_pair();
+        let key = get_key_pair();
         Self {
             account_id,
             key,

@@ -103,18 +103,17 @@ impl ClientServerBenchmark {
             keys.push(get_key_pair());
         }
         let committee = Committee {
-            voting_rights: keys.iter().map(|(k, _)| (*k, 1)).collect(),
+            voting_rights: keys.iter().map(|k| (k.public(), 1)).collect(),
             total_votes: self.committee_size,
         };
 
         // Pick an authority and create one state per shard.
-        let (public_auth0, secret_auth0) = keys.pop().unwrap();
+        let key_pair_auth = keys.pop().unwrap();
         let mut states = Vec::new();
         for i in 0..self.num_shards {
             let state = AuthorityState::new_shard(
                 committee.clone(),
-                public_auth0,
-                secret_auth0.copy(),
+                key_pair_auth.copy(),
                 i as u32,
                 self.num_shards,
             );
@@ -128,7 +127,8 @@ impl ClientServerBenchmark {
         for i in 0..self.num_accounts {
             // Create user account.
             let id = AccountId(vec![(i as u64).into()]);
-            let (owner, keypair) = get_key_pair();
+            let key_pair = get_key_pair();
+            let owner = key_pair.public();
             let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
             assert!(states[shard].in_shard(&id));
             let client = AccountOffchainState {
@@ -149,7 +149,7 @@ impl ClientServerBenchmark {
                 sequence_number: SequenceNumber::from(0),
                 user_data: UserData::default(),
             };
-            let order = TransferOrder::new(transfer.clone(), &keypair);
+            let order = TransferOrder::new(transfer.clone(), &key_pair);
             let shard = AuthorityState::get_shard(self.num_shards, &id);
 
             // Serialize order
@@ -162,9 +162,9 @@ impl ClientServerBenchmark {
                 signatures: Vec::new(),
             };
             for i in 0..committee.quorum_threshold() {
-                let (pubx, secx) = keys.get(i).unwrap();
-                let sig = Signature::new(&certificate.value.transfer, secx);
-                certificate.signatures.push((*pubx, sig));
+                let key = keys.get(i).unwrap();
+                let sig = Signature::new(&certificate.value.transfer, key);
+                certificate.signatures.push((key.public(), sig));
             }
 
             let bufx2 = serialize_cert(&certificate);
