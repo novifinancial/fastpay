@@ -74,56 +74,60 @@ FastPayError:
           - current_balance:
               TYPENAME: Balance
     7:
+      InvalidNewAccountId:
+        NEWTYPE:
+          TYPENAME: AccountId
+    8:
       PreviousTransferMustBeConfirmedFirst:
         STRUCT:
           - pending_confirmation:
               TYPENAME: TransferOrder
-    8:
-      ErrorWhileProcessingTransferOrder: UNIT
     9:
-      ErrorWhileRequestingCertificate: UNIT
+      ErrorWhileProcessingTransferOrder: UNIT
     10:
+      ErrorWhileRequestingCertificate: UNIT
+    11:
       MissingEarlierConfirmations:
         STRUCT:
           - current_sequence_number:
               TYPENAME: SequenceNumber
-    11:
-      UnexpectedTransactionIndex: UNIT
     12:
-      CertificateNotfound: UNIT
+      UnexpectedTransactionIndex: UNIT
     13:
+      CertificateNotfound: UNIT
+    14:
       UnknownSenderAccount:
         NEWTYPE:
           TYPENAME: AccountId
-    14:
+    15:
       UnknownRecipientAccount:
         NEWTYPE:
           TYPENAME: AccountId
-    15:
-      CertificateAuthorityReuse: UNIT
     16:
-      InvalidSequenceNumber: UNIT
+      CertificateAuthorityReuse: UNIT
     17:
-      SequenceOverflow: UNIT
+      InvalidSequenceNumber: UNIT
     18:
-      SequenceUnderflow: UNIT
+      SequenceOverflow: UNIT
     19:
-      AmountOverflow: UNIT
+      SequenceUnderflow: UNIT
     20:
-      AmountUnderflow: UNIT
+      AmountOverflow: UNIT
     21:
-      BalanceOverflow: UNIT
+      AmountUnderflow: UNIT
     22:
-      BalanceUnderflow: UNIT
+      BalanceOverflow: UNIT
     23:
-      WrongShard: UNIT
+      BalanceUnderflow: UNIT
     24:
-      InvalidCrossShardUpdate: UNIT
+      WrongShard: UNIT
     25:
-      InvalidDecoding: UNIT
+      InvalidCrossShardUpdate: UNIT
     26:
-      UnexpectedMessage: UNIT
+      InvalidDecoding: UNIT
     27:
+      UnexpectedMessage: UNIT
+    28:
       ClientIoError:
         STRUCT:
           - error: STR
@@ -138,6 +142,18 @@ Operation:
               TYPENAME: Amount
           - user_data:
               TYPENAME: UserData
+    1:
+      CreateAccount:
+        STRUCT:
+          - new_id:
+              TYPENAME: AccountId
+          - new_owner:
+              TYPENAME: PublicKeyBytes
+    2:
+      ChangeOwner:
+        STRUCT:
+          - new_owner:
+              TYPENAME: PublicKeyBytes
 PublicKeyBytes:
   NEWTYPESTRUCT:
     TUPLEARRAY:

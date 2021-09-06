@@ -46,6 +46,8 @@ pub enum FastPayError {
         current_balance
     )]
     InsufficientFunding { current_balance: Balance },
+    #[fail(display = "Invalid new account id: {}", 0)]
+    InvalidNewAccountId(AccountId),
     #[fail(
         display = "Cannot initiate transfer while a transfer order is still pending confirmation: {:?}",
         pending_confirmation
