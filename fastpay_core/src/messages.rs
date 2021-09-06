@@ -40,6 +40,13 @@ pub enum Operation {
         amount: Amount,
         user_data: UserData,
     },
+    CreateAccount {
+        new_id: AccountId,
+        new_owner: AccountOwner,
+    },
+    ChangeOwner {
+        new_owner: AccountOwner,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
@@ -165,12 +172,14 @@ impl Transfer {
     pub(crate) fn amount(&self) -> Option<Amount> {
         match &self.operation {
             Operation::Payment { amount, .. } => Some(*amount),
+            _ => None,
         }
     }
 
     pub(crate) fn amount_mut(&mut self) -> Option<&mut Amount> {
         match &mut self.operation {
             Operation::Payment { amount, .. } => Some(amount),
+            _ => None,
         }
     }
 }

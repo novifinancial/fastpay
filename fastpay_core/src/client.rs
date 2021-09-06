@@ -50,6 +50,8 @@ pub struct ClientState<AuthorityClient> {
     next_sequence_number: SequenceNumber,
     /// Pending transfer.
     pending_transfer: Option<TransferOrder>,
+    /// Pending new key pair.
+    pending_key_pair: Option<KeyPair>,
 
     // The remaining fields are used to minimize networking, and may not always be persisted locally.
     /// Transfer certificates that we have created ("sent").
@@ -122,6 +124,7 @@ impl<A> ClientState<A> {
             authority_clients,
             next_sequence_number,
             pending_transfer: None,
+            pending_key_pair: None,
             sent_certificates,
             received_certificates: received_certificates
                 .into_iter()
@@ -532,8 +535,22 @@ where
                 Operation::Payment { amount, .. } => {
                     new_balance = new_balance.try_sub((*amount).into())?;
                 }
+                Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => (),
             }
             if new_cert.value.transfer.sequence_number >= new_next_sequence_number {
+                assert_eq!(
+                    new_cert.value.transfer.sequence_number, new_next_sequence_number,
+                    "New certificates should be given in order"
+                );
+                if let Operation::ChangeOwner { new_owner } = &new_cert.value.transfer.operation {
+                    // TODO: add client support for initiating key rotations
+                    // TODO: support handing over the account to someone else.
+                    // TODO: crash resistance + key storage
+                    let key_pair = std::mem::take(&mut self.pending_key_pair)
+                        .expect("We are rotating the key for ourselves.");
+                    assert_eq!(new_owner, &key_pair.public(), "Idem");
+                    self.key_pair = key_pair;
+                }
                 new_next_sequence_number = new_cert
                     .value
                     .transfer
@@ -547,6 +564,7 @@ where
                 Operation::Payment { amount, .. } => {
                     new_balance = new_balance.try_add((*amount).into())?;
                 }
+                Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => (),
             }
         }
         // Atomic update
@@ -660,6 +678,9 @@ where
                         "Transfer should be received by us."
                     );
                 }
+                Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => {
+                    // TODO: decide what to do
+                }
             }
             self.communicate_transfers(
                 account_id.clone(),
@@ -676,6 +697,7 @@ where
                     Operation::Payment { amount, .. } => {
                         self.balance = self.balance.try_add((*amount).into())?;
                     }
+                    Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => (),
                 }
                 entry.insert(certificate);
             }

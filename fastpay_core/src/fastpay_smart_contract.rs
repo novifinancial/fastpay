@@ -74,12 +74,6 @@ impl FastPaySmartContract for FastPaySmartContractState {
         let transfer = &order.transfer;
         match &transfer.operation {
             Operation::Payment {
-                recipient: Address::FastPay(_),
-                ..
-            } => {
-                failure::bail!("Invalid redeem transaction");
-            }
-            Operation::Payment {
                 amount,
                 recipient: Address::Primary(_),
                 ..
@@ -100,6 +94,11 @@ impl FastPaySmartContract for FastPaySmartContractState {
                 self.total_balance = self.total_balance.try_sub(*amount)?;
                 // Transfer Primary coins to order.recipient
                 Ok(())
+            }
+            Operation::Payment { .. }
+            | Operation::CreateAccount { .. }
+            | Operation::ChangeOwner { .. } => {
+                failure::bail!("Invalid redeem transaction");
             }
         }
     }

@@ -239,6 +239,14 @@ impl std::fmt::Debug for AccountId {
     }
 }
 
+impl AccountId {
+    pub fn make_child(&self, num: SequenceNumber) -> Self {
+        let mut id = self.clone();
+        id.0.push(num);
+        id
+    }
+}
+
 impl Amount {
     pub fn zero() -> Self {
         Amount(0)

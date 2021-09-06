@@ -129,6 +129,14 @@ impl Authority for AuthorityState {
                             }
                         );
                     }
+                    Operation::CreateAccount { new_id, .. } => {
+                        let expected_id = account_id.make_child(transfer.sequence_number);
+                        fp_ensure!(
+                            new_id == &expected_id,
+                            FastPayError::InvalidNewAccountId(new_id.clone())
+                        );
+                    }
+                    Operation::ChangeOwner { .. } => (), // Nothing to check.
                 }
                 let signed_order = SignedTransferOrder::new(order, &self.key_pair);
                 account.pending_confirmation = Some(signed_order);
@@ -175,6 +183,7 @@ impl Authority for AuthorityState {
             Operation::Payment { amount, .. } => {
                 sender_balance = sender_balance.try_sub((*amount).into())?;
             }
+            Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => (),
         }
         sender_sequence_number = sender_sequence_number.increment()?;
 
@@ -220,6 +229,25 @@ impl Authority for AuthorityState {
                 });
                 Ok((info, cross_shard))
             }
+            Operation::CreateAccount { new_id, new_owner } => {
+                // If the new account is in the same shard, create the account.
+                if self.in_shard(new_id) {
+                    assert!(!self.accounts.contains_key(new_id)); // guaranteed under BFT assumptions.
+                    self.accounts
+                        .insert(new_id.clone(), AccountOffchainState::new(*new_owner));
+                    return Ok((info, None));
+                }
+                // Otherwise, we need to send a cross-shard update.
+                let cross_shard = Some(CrossShardUpdate {
+                    shard_id: self.which_shard(new_id),
+                    transfer_certificate: certificate,
+                });
+                Ok((info, cross_shard))
+            }
+            Operation::ChangeOwner { new_owner } => {
+                sender_account.owner = *new_owner;
+                Ok((info, None))
+            }
         }
     }
 
@@ -231,12 +259,6 @@ impl Authority for AuthorityState {
         // TODO: check certificate again?
         let transfer = &certificate.value.transfer;
         match &transfer.operation {
-            Operation::Payment {
-                recipient: Address::Primary(_),
-                ..
-            } => {
-                fp_bail!(FastPayError::InvalidCrossShardUpdate);
-            }
             Operation::Payment {
                 recipient: Address::FastPay(recipient),
                 amount,
@@ -253,6 +275,20 @@ impl Authority for AuthorityState {
                     .unwrap_or_else(|_| Balance::max());
                 recipient_account.received_log.push(certificate);
                 Ok(())
+            }
+            Operation::CreateAccount { new_id, new_owner } => {
+                fp_ensure!(self.in_shard(new_id), FastPayError::WrongShard);
+                assert!(!self.accounts.contains_key(new_id)); // guaranteed under BFT assumptions.
+                self.accounts
+                    .insert(new_id.clone(), AccountOffchainState::new(*new_owner));
+                Ok(())
+            }
+            Operation::Payment {
+                recipient: Address::Primary(_),
+                ..
+            }
+            | Operation::ChangeOwner { .. } => {
+                fp_bail!(FastPayError::InvalidCrossShardUpdate);
             }
         }
     }
