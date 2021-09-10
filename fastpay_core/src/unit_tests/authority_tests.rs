@@ -184,8 +184,9 @@ fn test_handle_confirmation_order_unknown_sender() {
 
     assert!(state
         .handle_confirmation_order(ConfirmationOrder::new(certified_transfer_order))
-        .is_ok());
+        .is_err());
     assert!(state.accounts.get(&dbg_account(2)).is_some());
+    assert!(state.accounts.get(&dbg_account(1)).is_none());
 }
 
 #[test]
@@ -301,7 +302,7 @@ fn test_handle_confirmation_order_receiver_equal_sender() {
 }
 
 #[test]
-fn test_handle_cross_shard_recipient_commit() {
+fn test_update_recipient_account() {
     let sender_key_pair = get_key_pair();
     // Sender has no account on this shard.
     let mut state = init_state_with_accounts(vec![(dbg_account(2), dbg_addr(2), Balance::from(1))]);
@@ -313,7 +314,7 @@ fn test_handle_cross_shard_recipient_commit() {
         &state,
     );
     assert!(state
-        .handle_cross_shard_recipient_commit(certified_transfer_order)
+        .update_recipient_account(certified_transfer_order)
         .is_ok());
     let account = state.accounts.get(&dbg_account(2)).unwrap();
     assert_eq!(Balance::from(11), account.balance);
@@ -487,11 +488,9 @@ fn init_state_with_accounts<I: IntoIterator<Item = (AccountId, AccountOwner, Bal
 ) -> AuthorityState {
     let mut state = init_state();
     for (id, owner, balance) in balances {
-        let account = state
-            .accounts
-            .entry(id)
-            .or_insert_with(|| AccountOffchainState::new(owner));
+        let mut account = AccountOffchainState::new(owner);
         account.balance = balance;
+        state.accounts.insert(id, account);
     }
     state
 }

@@ -49,6 +49,20 @@ pub enum Operation {
     },
 }
 
+impl Operation {
+    pub fn recipient(&self) -> Option<&AccountId> {
+        use Operation::*;
+        match self {
+            Payment {
+                recipient: Address::FastPay(id),
+                ..
+            } => Some(id),
+            CreateAccount { new_id, .. } => Some(new_id),
+            Payment { .. } | ChangeOwner { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Transfer {
     pub account_id: AccountId,
@@ -104,9 +118,26 @@ pub struct AccountInfoResponse {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct CrossShardUpdate {
-    pub shard_id: ShardId,
-    pub transfer_certificate: CertifiedTransferOrder,
+pub enum ConfirmationOutcome {
+    Complete,
+    Retry,
+    Cancel,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub enum CrossShardRequest {
+    UpdateRecipientAccount {
+        certificate: CertifiedTransferOrder,
+    },
+    VerifyAccountDeletion {
+        parent_id: AccountId,
+        sequence_number: SequenceNumber,
+        certificate: CertifiedTransferOrder,
+    },
+    UpdateSenderAccount {
+        certificate: CertifiedTransferOrder,
+        outcome: ConfirmationOutcome,
+    },
 }
 
 impl Hash for TransferOrder {

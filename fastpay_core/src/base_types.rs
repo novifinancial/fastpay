@@ -43,7 +43,7 @@ pub struct KeyPair(dalek::Keypair);
 pub struct PublicKeyBytes(pub [u8; dalek::PUBLIC_KEY_LENGTH]);
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Serialize, Deserialize)]
-pub struct AccountId(pub Vec<SequenceNumber>);
+pub struct AccountId(Vec<SequenceNumber>);
 
 pub type PrimaryAddress = PublicKeyBytes;
 pub type AuthorityName = PublicKeyBytes;
@@ -240,6 +240,24 @@ impl std::fmt::Debug for AccountId {
 }
 
 impl AccountId {
+    pub fn new(numbers: Vec<SequenceNumber>) -> Self {
+        assert!(!numbers.is_empty());
+        Self(numbers)
+    }
+
+    pub fn parent(&self) -> Option<AccountId> {
+        if self.0.len() <= 1 {
+            return None;
+        }
+        let mut parent = self.clone();
+        parent.0.pop()?;
+        Some(parent)
+    }
+
+    pub fn sequence_number(&self) -> Option<SequenceNumber> {
+        self.0.last().cloned()
+    }
+
     pub fn make_child(&self, num: SequenceNumber) -> Self {
         let mut id = self.clone();
         id.0.push(num);

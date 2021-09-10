@@ -94,8 +94,8 @@ pub enum FastPayError {
     BalanceUnderflow,
     #[fail(display = "Wrong shard used.")]
     WrongShard,
-    #[fail(display = "Invalid cross shard update.")]
-    InvalidCrossShardUpdate,
+    #[fail(display = "Invalid cross shard request.")]
+    InvalidCrossShardRequest,
     #[fail(display = "Cannot deserialize.")]
     InvalidDecoding,
     #[fail(display = "Unexpected message.")]

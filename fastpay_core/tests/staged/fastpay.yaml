@@ -52,6 +52,37 @@ CertifiedTransferOrder:
           TUPLE:
             - TYPENAME: PublicKeyBytes
             - TYPENAME: Signature
+ConfirmationOutcome:
+  ENUM:
+    0:
+      Complete: UNIT
+    1:
+      Retry: UNIT
+    2:
+      Cancel: UNIT
+CrossShardRequest:
+  ENUM:
+    0:
+      UpdateRecipientAccount:
+        STRUCT:
+          - certificate:
+              TYPENAME: CertifiedTransferOrder
+    1:
+      VerifyAccountDeletion:
+        STRUCT:
+          - parent_id:
+              TYPENAME: AccountId
+          - sequence_number:
+              TYPENAME: SequenceNumber
+          - certificate:
+              TYPENAME: CertifiedTransferOrder
+    2:
+      UpdateSenderAccount:
+        STRUCT:
+          - certificate:
+              TYPENAME: CertifiedTransferOrder
+          - outcome:
+              TYPENAME: ConfirmationOutcome
 FastPayError:
   ENUM:
     0:
@@ -122,7 +153,7 @@ FastPayError:
     24:
       WrongShard: UNIT
     25:
-      InvalidCrossShardUpdate: UNIT
+      InvalidCrossShardRequest: UNIT
     26:
       InvalidDecoding: UNIT
     27:
@@ -172,25 +203,25 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: SignedTransferOrder
     2:
-      Cert:
+      Confirmation:
         NEWTYPE:
           TYPENAME: CertifiedTransferOrder
     3:
-      CrossShard:
-        NEWTYPE:
-          TYPENAME: CertifiedTransferOrder
-    4:
       Error:
         NEWTYPE:
           TYPENAME: FastPayError
-    5:
-      InfoReq:
+    4:
+      InfoRequest:
         NEWTYPE:
           TYPENAME: AccountInfoRequest
-    6:
-      InfoResp:
+    5:
+      InfoResponse:
         NEWTYPE:
           TYPENAME: AccountInfoResponse
+    6:
+      CrossShardRequest:
+        NEWTYPE:
+          TYPENAME: CrossShardRequest
 Signature:
   NEWTYPESTRUCT:
     TUPLEARRAY:

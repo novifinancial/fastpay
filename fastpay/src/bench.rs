@@ -123,10 +123,10 @@ impl ClientServerBenchmark {
         // Seed user accounts and make one transaction per account (transfer order + confirmation).
         info!("Preparing transactions.");
         let mut orders: Vec<(u32, Bytes)> = Vec::new();
-        let mut next_recipient = AccountId(vec![((self.num_accounts - 1) as u64).into()]);
+        let mut next_recipient = AccountId::new(vec![((self.num_accounts - 1) as u64).into()]);
         for i in 0..self.num_accounts {
             // Create user account.
-            let id = AccountId(vec![(i as u64).into()]);
+            let id = AccountId::new(vec![(i as u64).into()]);
             let key_pair = get_key_pair();
             let owner = key_pair.public();
             let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
@@ -136,6 +136,7 @@ impl ClientServerBenchmark {
                 balance: Balance::from(Amount::from(100)),
                 next_sequence_number: SequenceNumber::from(0),
                 pending_confirmation: None,
+                ongoing_confirmation: None,
                 confirmed_log: Vec::new(),
                 synchronization_log: Vec::new(),
                 received_log: Vec::new(),
