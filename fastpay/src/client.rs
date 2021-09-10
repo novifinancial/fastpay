@@ -249,7 +249,7 @@ fn mass_update_recipients(
     certificates: Vec<(AccountId, Bytes)>,
 ) {
     for (_sender, buf) in certificates {
-        if let Ok(SerializedMessage::Cert(certificate)) = deserialize_message(&buf[..]) {
+        if let Ok(SerializedMessage::Confirmation(certificate)) = deserialize_message(&buf[..]) {
             accounts_config.update_for_received_transfer(*certificate);
         }
     }
@@ -257,7 +257,7 @@ fn mass_update_recipients(
 
 fn deserialize_response(response: &[u8]) -> Option<AccountInfoResponse> {
     match deserialize_message(response) {
-        Ok(SerializedMessage::InfoResp(info)) => Some(*info),
+        Ok(SerializedMessage::InfoResponse(info)) => Some(*info),
         Ok(SerializedMessage::Error(error)) => {
             error!("Received error value: {}", error);
             None
@@ -531,7 +531,7 @@ fn main() {
         } => {
             for i in 0..num {
                 let account = UserAccount::new(
-                    AccountId(vec![SequenceNumber::from(i as u64)]),
+                    AccountId::new(vec![SequenceNumber::from(i as u64)]),
                     initial_funding,
                 );
                 println!(

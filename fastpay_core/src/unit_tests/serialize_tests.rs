@@ -40,12 +40,12 @@ fn test_info_request() {
     assert!(result1.is_ok());
     assert!(result2.is_ok());
 
-    if let SerializedMessage::InfoReq(o) = result1.unwrap() {
+    if let SerializedMessage::InfoRequest(o) = result1.unwrap() {
         assert!(*o == req1);
     } else {
         panic!()
     }
-    if let SerializedMessage::InfoReq(o) = result2.unwrap() {
+    if let SerializedMessage::InfoRequest(o) = result2.unwrap() {
         assert!(*o == req2);
     } else {
         panic!()
@@ -153,7 +153,7 @@ fn test_cert() {
     let buf = serialize_cert(&cert);
     let result = deserialize_message(buf.as_slice());
     assert!(result.is_ok());
-    if let SerializedMessage::Cert(o) = result.unwrap() {
+    if let SerializedMessage::Confirmation(o) = result.unwrap() {
         assert!(*o == cert);
     } else {
         panic!()
@@ -226,7 +226,7 @@ fn test_info_response() {
         let buf = serialize_info_response(resp);
         let result = deserialize_message(buf.as_slice());
         assert!(result.is_ok());
-        if let SerializedMessage::InfoResp(o) = result.unwrap() {
+        if let SerializedMessage::InfoResponse(o) = result.unwrap() {
             assert!(*o == *resp);
         } else {
             panic!()
@@ -345,7 +345,7 @@ fn test_time_cert() {
     let now = Instant::now();
     let mut buf2 = buf.as_slice();
     for _ in 0..count {
-        if let SerializedMessage::Cert(cert) = deserialize_message(&mut buf2).unwrap() {
+        if let SerializedMessage::Confirmation(cert) = deserialize_message(&mut buf2).unwrap() {
             Signature::verify_batch(&cert.value.transfer, &cert.signatures).unwrap();
         }
     }
