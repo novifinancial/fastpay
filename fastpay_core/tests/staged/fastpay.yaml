@@ -23,6 +23,9 @@ AccountInfoResponse:
     - pending_confirmation:
         OPTION:
           TYPENAME: SignedTransferOrder
+    - ongoing_confirmation:
+        OPTION:
+          TYPENAME: CertifiedTransferOrder
     - requested_certificate:
         OPTION:
           TYPENAME: CertifiedTransferOrder

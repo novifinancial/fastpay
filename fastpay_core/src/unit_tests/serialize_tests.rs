@@ -194,6 +194,7 @@ fn test_info_response() {
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: None,
+        ongoing_confirmation: None,
         requested_certificate: None,
         requested_received_transfers: Vec::new(),
     };
@@ -202,6 +203,7 @@ fn test_info_response() {
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: Some(vote.clone()),
+        ongoing_confirmation: None,
         requested_certificate: None,
         requested_received_transfers: Vec::new(),
     };
@@ -210,6 +212,7 @@ fn test_info_response() {
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: None,
+        ongoing_confirmation: None,
         requested_certificate: Some(cert.clone()),
         requested_received_transfers: Vec::new(),
     };
@@ -218,6 +221,7 @@ fn test_info_response() {
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: Some(vote),
+        ongoing_confirmation: None,
         requested_certificate: Some(cert),
         requested_received_transfers: Vec::new(),
     };

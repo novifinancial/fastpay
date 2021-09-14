@@ -486,6 +486,7 @@ impl AccountOffchainState {
             balance: self.balance,
             next_sequence_number: self.next_sequence_number,
             pending_confirmation: self.pending_confirmation.clone(),
+            ongoing_confirmation: self.ongoing_confirmation.clone(),
             requested_certificate: None,
             requested_received_transfers: Vec::new(),
         }
