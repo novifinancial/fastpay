@@ -10,7 +10,7 @@ mod authority_tests;
 
 /// State of an (offchain) FastPay account.
 #[derive(Eq, PartialEq, Debug)]
-pub struct AccountOffchainState {
+pub struct AccountState {
     /// Owner of the account
     pub owner: AccountOwner,
     /// Balance of the FastPay account.
@@ -37,7 +37,7 @@ pub struct AuthorityState {
     /// The signature key pair of the authority.
     pub key_pair: KeyPair,
     /// Offchain states of FastPay accounts.
-    pub accounts: BTreeMap<AccountId, AccountOffchainState>,
+    pub accounts: BTreeMap<AccountId, AccountState>,
     /// The latest transaction index of the blockchain that the authority has seen.
     pub last_transaction_index: VersionNumber,
     /// The sharding ID of this authority shard. 0 if one shard.
@@ -311,7 +311,7 @@ impl Authority for AuthorityState {
             Operation::CreateAccount { new_id, new_owner } => {
                 fp_ensure!(self.in_shard(new_id), FastPayError::WrongShard);
                 assert!(!self.accounts.contains_key(new_id)); // guaranteed under BFT assumptions.
-                let mut account = AccountOffchainState::new(*new_owner);
+                let mut account = AccountState::new(*new_owner);
                 account.received_log.push(certificate.clone());
                 self.accounts.insert(new_id.clone(), account);
             }
@@ -471,7 +471,7 @@ impl Authority for AuthorityState {
     }
 }
 
-impl AccountOffchainState {
+impl AccountState {
     pub fn new(owner: AccountOwner) -> Self {
         Self {
             owner,
@@ -561,14 +561,14 @@ impl AuthorityState {
         Self::get_shard(self.number_of_shards, account_id)
     }
 
-    fn account_state(&self, account_id: &AccountId) -> Result<&AccountOffchainState, FastPayError> {
+    fn account_state(&self, account_id: &AccountId) -> Result<&AccountState, FastPayError> {
         self.accounts
             .get(account_id)
             .ok_or_else(|| FastPayError::UnknownSenderAccount(account_id.clone()))
     }
 
     #[cfg(test)]
-    pub fn accounts_mut(&mut self) -> &mut BTreeMap<AccountId, AccountOffchainState> {
+    pub fn accounts_mut(&mut self) -> &mut BTreeMap<AccountId, AccountState> {
         &mut self.accounts
     }
 }

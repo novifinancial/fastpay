@@ -131,7 +131,7 @@ impl ClientServerBenchmark {
             let owner = key_pair.public();
             let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
             assert!(states[shard].in_shard(&id));
-            let client = AccountOffchainState {
+            let client = AccountState {
                 owner,
                 balance: Balance::from(Amount::from(100)),
                 next_sequence_number: SequenceNumber::from(0),

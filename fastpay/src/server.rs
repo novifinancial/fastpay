@@ -39,7 +39,7 @@ fn make_shard_server(
         if AuthorityState::get_shard(num_shards, id) != shard {
             continue;
         }
-        let client = AccountOffchainState {
+        let client = AccountState {
             owner: *owner,
             balance: *balance,
             next_sequence_number: SequenceNumber::from(0),
