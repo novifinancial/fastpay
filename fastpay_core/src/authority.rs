@@ -203,7 +203,7 @@ impl Authority for AuthorityState {
                             FastPayError::InvalidNewAccountId(new_id.clone())
                         );
                     }
-                    Operation::ChangeOwner { .. } => (), // Nothing to check.
+                    Operation::CloseAccount | Operation::ChangeOwner { .. } => (), // Nothing to check.
                 }
                 let signed_order = SignedTransferOrder::new(order, &self.key_pair);
                 account.pending_confirmation = Some(signed_order);
@@ -315,7 +315,8 @@ impl Authority for AuthorityState {
                 account.received_log.push(certificate.clone());
                 self.accounts.insert(new_id.clone(), account);
             }
-            Operation::Payment {
+            Operation::CloseAccount
+            | Operation::Payment {
                 recipient: Address::Primary(_),
                 ..
             }
@@ -387,6 +388,10 @@ impl Authority for AuthorityState {
                     }
                     Operation::ChangeOwner { new_owner } => {
                         account.owner = *new_owner;
+                    }
+                    Operation::CloseAccount => {
+                        self.accounts.remove(sender);
+                        return Ok(CrossShardContinuation::Done);
                     }
                     Operation::CreateAccount { .. } => (),
                 }

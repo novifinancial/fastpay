@@ -535,7 +535,9 @@ where
                 Operation::Payment { amount, .. } => {
                     new_balance = new_balance.try_sub((*amount).into())?;
                 }
-                Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => (),
+                Operation::CreateAccount { .. }
+                | Operation::CloseAccount
+                | Operation::ChangeOwner { .. } => (),
             }
             if new_cert.value.transfer.sequence_number >= new_next_sequence_number {
                 assert_eq!(
@@ -564,7 +566,9 @@ where
                 Operation::Payment { amount, .. } => {
                     new_balance = new_balance.try_add((*amount).into())?;
                 }
-                Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => (),
+                Operation::CreateAccount { .. }
+                | Operation::CloseAccount
+                | Operation::ChangeOwner { .. } => (),
             }
         }
         // Atomic update
@@ -678,7 +682,9 @@ where
                         "Transfer should be received by us."
                     );
                 }
-                Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => {
+                Operation::CreateAccount { .. }
+                | Operation::CloseAccount
+                | Operation::ChangeOwner { .. } => {
                     // TODO: decide what to do
                 }
             }
@@ -697,7 +703,9 @@ where
                     Operation::Payment { amount, .. } => {
                         self.balance = self.balance.try_add((*amount).into())?;
                     }
-                    Operation::CreateAccount { .. } | Operation::ChangeOwner { .. } => (),
+                    Operation::CreateAccount { .. }
+                    | Operation::CloseAccount
+                    | Operation::ChangeOwner { .. } => (),
                 }
                 entry.insert(certificate);
             }
