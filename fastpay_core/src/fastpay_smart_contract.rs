@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 mod fastpay_smart_contract_tests;
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
-pub struct AccountOnchainState {
+pub struct AccountState {
     /// Prevent spending actions from this account to Primary to be redeemed more than once.
     /// It is the responsability of the owner of the account to redeem the previous action
     /// before initiating a new one. Otherwise, money can be lost.
@@ -22,7 +22,7 @@ pub struct FastPaySmartContractState {
     /// Committee of this FastPay instance.
     committee: Committee,
     /// Onchain states of FastPay smart contract.
-    pub accounts: BTreeMap<AccountId, AccountOnchainState>,
+    pub accounts: BTreeMap<AccountId, AccountState>,
     /// Primary coins in the smart contract.
     total_balance: Amount,
     /// The latest transaction index included in the blockchain.
@@ -85,7 +85,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
                 let account = self
                     .accounts
                     .entry(order.transfer.account_id.clone())
-                    .or_insert_with(AccountOnchainState::new);
+                    .or_insert_with(AccountState::new);
                 ensure!(
                     account.last_redeemed < Some(transfer.sequence_number),
                     "Transfer certificates to Primary must have increasing sequence numbers.",
@@ -105,7 +105,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
     }
 }
 
-impl AccountOnchainState {
+impl AccountState {
     fn new() -> Self {
         Self {
             last_redeemed: None,
