@@ -44,6 +44,7 @@ pub enum Operation {
         new_id: AccountId,
         new_owner: AccountOwner,
     },
+    CloseAccount,
     ChangeOwner {
         new_owner: AccountOwner,
     },
@@ -58,7 +59,7 @@ impl Operation {
                 ..
             } => Some(id),
             CreateAccount { new_id, .. } => Some(new_id),
-            Payment { .. } | ChangeOwner { .. } => None,
+            Operation::CloseAccount | Payment { .. } | ChangeOwner { .. } => None,
         }
     }
 }

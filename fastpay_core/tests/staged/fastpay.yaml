@@ -184,6 +184,8 @@ Operation:
           - new_owner:
               TYPENAME: PublicKeyBytes
     2:
+      CloseAccount: UNIT
+    3:
       ChangeOwner:
         STRUCT:
           - new_owner:
