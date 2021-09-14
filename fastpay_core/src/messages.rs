@@ -113,7 +113,7 @@ pub struct AccountInfoResponse {
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
     pub pending_confirmation: Option<SignedTransferOrder>,
-    pub ongoing_confirmation: Option<CertifiedTransferOrder>,
+    pub locked_confirmation: Option<CertifiedTransferOrder>,
     pub requested_certificate: Option<CertifiedTransferOrder>,
     pub requested_received_transfers: Vec<CertifiedTransferOrder>,
 }

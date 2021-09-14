@@ -20,7 +20,7 @@ pub struct AccountOffchainState {
     /// Whether we have signed a transfer for this sequence number already.
     pub pending_confirmation: Option<SignedTransferOrder>,
     /// Whether we are in the process of confirming a transfer for this sequence number already.
-    pub ongoing_confirmation: Option<CertifiedTransferOrder>,
+    pub locked_confirmation: Option<CertifiedTransferOrder>,
     /// All confirmed certificates for this sender.
     pub confirmed_log: Vec<CertifiedTransferOrder>,
     /// All executed Primary synchronization orders for this recipient.
@@ -243,13 +243,13 @@ impl Authority for AuthorityState {
             // Transfer was already confirmed.
             return Ok((info, CrossShardContinuation::Done));
         }
-        if let Some(previous) = &sender_account.ongoing_confirmation {
+        if let Some(previous) = &sender_account.locked_confirmation {
             // Confirmation is in progress.
             assert!(certificate.value.transfer == previous.value.transfer); // guaranteed under BFT assumptions.
             return Ok((info, CrossShardContinuation::Done));
         }
         // Lock sender's account during confirmation.
-        sender_account.ongoing_confirmation = Some(certificate.clone());
+        sender_account.locked_confirmation = Some(certificate.clone());
         let info = sender_account.make_account_info(sender.clone());
 
         if let Some(recipient) = transfer.operation.recipient() {
@@ -395,7 +395,7 @@ impl Authority for AuthorityState {
                 account.pending_confirmation = None;
                 account.confirmed_log.push(certificate);
                 // Release lock on the sender account.
-                account.ongoing_confirmation = None;
+                account.locked_confirmation = None;
             }
             ConfirmationOutcome::Cancel => {
                 // Do not execute the operation.
@@ -404,13 +404,13 @@ impl Authority for AuthorityState {
                 account.pending_confirmation = None;
                 account.confirmed_log.push(certificate);
                 // Release lock on the sender account.
-                account.ongoing_confirmation = None;
+                account.locked_confirmation = None;
             }
             ConfirmationOutcome::Retry => {
                 // Do not execute the operation.
                 // Do not advance the sequence number.
                 // Release lock on the sender account.
-                account.ongoing_confirmation = None;
+                account.locked_confirmation = None;
             }
         }
         Ok(CrossShardContinuation::Done)
@@ -473,7 +473,7 @@ impl AccountOffchainState {
             balance: Balance::zero(),
             next_sequence_number: SequenceNumber::new(),
             pending_confirmation: None,
-            ongoing_confirmation: None,
+            locked_confirmation: None,
             confirmed_log: Vec::new(),
             synchronization_log: Vec::new(),
             received_log: Vec::new(),
@@ -486,7 +486,7 @@ impl AccountOffchainState {
             balance: self.balance,
             next_sequence_number: self.next_sequence_number,
             pending_confirmation: self.pending_confirmation.clone(),
-            ongoing_confirmation: self.ongoing_confirmation.clone(),
+            locked_confirmation: self.locked_confirmation.clone(),
             requested_certificate: None,
             requested_received_transfers: Vec::new(),
         }
@@ -503,7 +503,7 @@ impl AccountOffchainState {
             balance,
             next_sequence_number: SequenceNumber::new(),
             pending_confirmation: None,
-            ongoing_confirmation: None,
+            locked_confirmation: None,
             confirmed_log: Vec::new(),
             synchronization_log: Vec::new(),
             received_log,

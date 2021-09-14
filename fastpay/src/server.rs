@@ -44,7 +44,7 @@ fn make_shard_server(
             balance: *balance,
             next_sequence_number: SequenceNumber::from(0),
             pending_confirmation: None,
-            ongoing_confirmation: None,
+            locked_confirmation: None,
             confirmed_log: Vec::new(),
             synchronization_log: Vec::new(),
             received_log: Vec::new(),
