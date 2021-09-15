@@ -132,11 +132,10 @@ impl ClientServerBenchmark {
             let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
             assert!(states[shard].in_shard(&id));
             let client = AccountState {
-                owner,
+                owner: Some(owner),
                 balance: Balance::from(Amount::from(100)),
                 next_sequence_number: SequenceNumber::from(0),
                 pending_confirmation: None,
-                locked_confirmation: None,
                 confirmed_log: Vec::new(),
                 synchronization_log: Vec::new(),
                 received_log: Vec::new(),

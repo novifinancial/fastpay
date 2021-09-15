@@ -40,11 +40,10 @@ fn make_shard_server(
             continue;
         }
         let client = AccountState {
-            owner: *owner,
+            owner: Some(*owner),
             balance: *balance,
             next_sequence_number: SequenceNumber::from(0),
             pending_confirmation: None,
-            locked_confirmation: None,
             confirmed_log: Vec::new(),
             synchronization_log: Vec::new(),
             received_log: Vec::new(),

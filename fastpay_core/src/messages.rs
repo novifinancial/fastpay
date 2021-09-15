@@ -111,10 +111,10 @@ pub struct AccountInfoRequest {
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct AccountInfoResponse {
     pub account_id: AccountId,
+    pub owner: Option<AccountOwner>,
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
     pub pending_confirmation: Option<SignedTransferOrder>,
-    pub locked_confirmation: Option<CertifiedTransferOrder>,
     pub requested_certificate: Option<CertifiedTransferOrder>,
     pub requested_received_transfers: Vec<CertifiedTransferOrder>,
 }
@@ -127,19 +127,8 @@ pub enum ConfirmationOutcome {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub enum CrossShardRequest {
-    UpdateRecipientAccount {
-        certificate: CertifiedTransferOrder,
-    },
-    VerifyAccountDeletion {
-        parent_id: AccountId,
-        sequence_number: SequenceNumber,
-        certificate: CertifiedTransferOrder,
-    },
-    UpdateSenderAccount {
-        certificate: CertifiedTransferOrder,
-        outcome: ConfirmationOutcome,
-    },
+pub struct CrossShardRequest {
+    pub certificate: CertifiedTransferOrder,
 }
 
 impl Hash for TransferOrder {

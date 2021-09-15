@@ -488,8 +488,7 @@ fn init_state_with_accounts<I: IntoIterator<Item = (AccountId, AccountOwner, Bal
 ) -> AuthorityState {
     let mut state = init_state();
     for (id, owner, balance) in balances {
-        let mut account = AccountState::new(owner);
-        account.balance = balance;
+        let account = AccountState::new_with_balance(owner, balance, Vec::new());
         state.accounts.insert(id, account);
     }
     state

@@ -16,6 +16,9 @@ AccountInfoResponse:
   STRUCT:
     - account_id:
         TYPENAME: AccountId
+    - owner:
+        OPTION:
+          TYPENAME: PublicKeyBytes
     - balance:
         TYPENAME: Balance
     - next_sequence_number:
@@ -23,9 +26,6 @@ AccountInfoResponse:
     - pending_confirmation:
         OPTION:
           TYPENAME: SignedTransferOrder
-    - locked_confirmation:
-        OPTION:
-          TYPENAME: CertifiedTransferOrder
     - requested_certificate:
         OPTION:
           TYPENAME: CertifiedTransferOrder
@@ -64,28 +64,9 @@ ConfirmationOutcome:
     2:
       Cancel: UNIT
 CrossShardRequest:
-  ENUM:
-    0:
-      UpdateRecipientAccount:
-        STRUCT:
-          - certificate:
-              TYPENAME: CertifiedTransferOrder
-    1:
-      VerifyAccountDeletion:
-        STRUCT:
-          - parent_id:
-              TYPENAME: AccountId
-          - sequence_number:
-              TYPENAME: SequenceNumber
-          - certificate:
-              TYPENAME: CertifiedTransferOrder
-    2:
-      UpdateSenderAccount:
-        STRUCT:
-          - certificate:
-              TYPENAME: CertifiedTransferOrder
-          - outcome:
-              TYPENAME: ConfirmationOutcome
+  STRUCT:
+    - certificate:
+        TYPENAME: CertifiedTransferOrder
 FastPayError:
   ENUM:
     0:
@@ -101,40 +82,38 @@ FastPayError:
     4:
       IncorrectTransferAmount: UNIT
     5:
-      UnexpectedSequenceNumber: UNIT
+      AccountIsNotReady: UNIT
     6:
+      UnexpectedSequenceNumber: UNIT
+    7:
       InsufficientFunding:
         STRUCT:
           - current_balance:
               TYPENAME: Balance
-    7:
+    8:
       InvalidNewAccountId:
         NEWTYPE:
           TYPENAME: AccountId
-    8:
+    9:
       PreviousTransferMustBeConfirmedFirst:
         STRUCT:
           - pending_confirmation:
               TYPENAME: TransferOrder
-    9:
-      ErrorWhileProcessingTransferOrder: UNIT
     10:
-      ErrorWhileRequestingCertificate: UNIT
+      ErrorWhileProcessingTransferOrder: UNIT
     11:
+      ErrorWhileRequestingCertificate: UNIT
+    12:
       MissingEarlierConfirmations:
         STRUCT:
           - current_sequence_number:
               TYPENAME: SequenceNumber
-    12:
-      UnexpectedTransactionIndex: UNIT
     13:
-      CertificateNotfound: UNIT
+      UnexpectedTransactionIndex: UNIT
     14:
-      UnknownSenderAccount:
-        NEWTYPE:
-          TYPENAME: AccountId
+      CertificateNotfound: UNIT
     15:
-      UnknownRecipientAccount:
+      UnknownSenderAccount:
         NEWTYPE:
           TYPENAME: AccountId
     16:

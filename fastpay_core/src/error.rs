@@ -37,6 +37,8 @@ pub enum FastPayError {
     // Transfer processing
     #[fail(display = "Transfers must have positive amount")]
     IncorrectTransferAmount,
+    #[fail(display = "Account is still pending confirmation of creation")]
+    AccountIsNotReady,
     #[fail(
         display = "The given sequence number must match the next expected sequence number of the account"
     )]
@@ -74,8 +76,6 @@ pub enum FastPayError {
     CertificateNotfound,
     #[fail(display = "Unknown sender's account {:?}", 0)]
     UnknownSenderAccount(AccountId),
-    #[fail(display = "Unknown recipient's account {:?}", 0)]
-    UnknownRecipientAccount(AccountId),
     #[fail(display = "Signatures in a certificate must be from different authorities.")]
     CertificateAuthorityReuse,
     #[fail(display = "Sequence numbers above the maximal value are not usable for transfers.")]
