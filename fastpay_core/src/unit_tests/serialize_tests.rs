@@ -191,37 +191,37 @@ fn test_info_response() {
 
     let resp1 = AccountInfoResponse {
         account_id: dbg_account(0x20),
+        owner: Some(sender_key.public()),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: None,
-        locked_confirmation: None,
         requested_certificate: None,
         requested_received_transfers: Vec::new(),
     };
     let resp2 = AccountInfoResponse {
         account_id: dbg_account(0x20),
+        owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: Some(vote.clone()),
-        locked_confirmation: None,
         requested_certificate: None,
         requested_received_transfers: Vec::new(),
     };
     let resp3 = AccountInfoResponse {
         account_id: dbg_account(0x20),
+        owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: None,
-        locked_confirmation: None,
         requested_certificate: Some(cert.clone()),
         requested_received_transfers: Vec::new(),
     };
     let resp4 = AccountInfoResponse {
         account_id: dbg_account(0x20),
+        owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: Some(vote),
-        locked_confirmation: None,
         requested_certificate: Some(cert),
         requested_received_transfers: Vec::new(),
     };

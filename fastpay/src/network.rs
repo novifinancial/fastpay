@@ -164,30 +164,12 @@ impl MessageHandler for RunningServerState {
                             .handle_account_info_request(*message)
                             .map(|info| Some(serialize_info_response(&info))),
                         SerializedMessage::CrossShardRequest(request) => {
-                            use CrossShardRequest::*;
-                            let result = match *request {
-                                UpdateRecipientAccount { certificate } => {
-                                    self.server.state.update_recipient_account(certificate)
-                                }
-                                VerifyAccountDeletion {
-                                    parent_id,
-                                    sequence_number,
-                                    certificate,
-                                } => self.server.state.verify_account_deletion(
-                                    parent_id,
-                                    sequence_number,
-                                    certificate,
-                                ),
-                                UpdateSenderAccount {
-                                    certificate,
-                                    outcome,
-                                } => self
-                                    .server
-                                    .state
-                                    .update_sender_account(certificate, outcome),
-                            };
-                            match result {
-                                Ok(cont) => self.handle_continuation(cont).await,
+                            match self
+                                .server
+                                .state
+                                .update_recipient_account(request.certificate)
+                            {
+                                Ok(()) => (),
                                 Err(error) => {
                                     error!("Failed to handle cross-shard request: {}", error);
                                 }
