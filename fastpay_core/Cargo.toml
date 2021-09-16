@@ -1,0 +1,28 @@
+[package]
+name = "fastpay_core"
+version = "0.1.0"
+authors = ["Libra <oncall+libra@xmail.facebook.com>"]
+publish = false
+edition = "2018"
+
+[dependencies]
+base64 = "0.12.3"
+bcs = "0.1.3"
+bincode = "1.3.1"
+failure = "0.1.8"
+futures = "0.3.5"
+rand = "0.7.3"
+serde = { version = "1.0.115", features = ["derive"] }
+tokio = { version = "0.2.22", features = ["full"] }
+ed25519 = { version = "1.0.1"}
+ed25519-dalek = { version = "1.0.1", features = ["batch", "serde"] }
+serde-reflection = "0.3.2"
+serde-name = "0.1.2"
+serde_yaml = "0.8.17"
+structopt = "0.3.21"
+
+[[bin]]
+name = "generate-format"
+path = "src/generate_format.rs"
+test = false
+
