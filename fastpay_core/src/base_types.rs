@@ -6,7 +6,10 @@ use ed25519_dalek::{Signer, Verifier};
 
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
-use std::convert::{TryFrom, TryInto};
+use std::{
+    convert::{TryFrom, TryInto},
+    str::FromStr,
+};
 
 use crate::error::FastPayError;
 
@@ -36,56 +39,41 @@ pub struct UserData(pub Option<[u8; 32]>);
 // TODO: Make sure secrets are not copyable and movable to control where they are in memory
 pub struct KeyPair(dalek::Keypair);
 
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash)]
 pub struct PublicKeyBytes(pub [u8; dalek::PUBLIC_KEY_LENGTH]);
 
-pub type PrimaryAddress = PublicKeyBytes;
-pub type FastPayAddress = PublicKeyBytes;
-pub type AuthorityName = PublicKeyBytes;
+#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Serialize, Deserialize)]
+pub struct AccountId(Vec<SequenceNumber>);
 
-pub fn get_key_pair() -> (FastPayAddress, KeyPair) {
+pub type PrimaryAddress = PublicKeyBytes;
+pub type AuthorityName = PublicKeyBytes;
+pub type AccountOwner = PublicKeyBytes;
+
+pub fn get_key_pair() -> KeyPair {
     let mut csprng = OsRng;
     let keypair = dalek::Keypair::generate(&mut csprng);
-    (PublicKeyBytes(keypair.public.to_bytes()), KeyPair(keypair))
-}
-
-pub fn address_as_base64<S>(key: &PublicKeyBytes, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::ser::Serializer,
-{
-    serializer.serialize_str(&encode_address(key))
-}
-
-pub fn address_from_base64<'de, D>(deserializer: D) -> Result<PublicKeyBytes, D::Error>
-where
-    D: serde::de::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    let value = decode_address(&s).map_err(|err| serde::de::Error::custom(err.to_string()))?;
-    Ok(value)
-}
-
-pub fn encode_address(key: &PublicKeyBytes) -> String {
-    base64::encode(&key.0[..])
-}
-
-pub fn decode_address(s: &str) -> Result<PublicKeyBytes, failure::Error> {
-    let value = base64::decode(s)?;
-    let mut address = [0u8; dalek::PUBLIC_KEY_LENGTH];
-    address.copy_from_slice(&value[..dalek::PUBLIC_KEY_LENGTH]);
-    Ok(PublicKeyBytes(address))
+    KeyPair(keypair)
 }
 
 #[cfg(test)]
-pub fn dbg_addr(name: u8) -> FastPayAddress {
+pub fn dbg_account(name: u8) -> AccountId {
+    AccountId(vec![SequenceNumber(name.into())])
+}
+
+#[cfg(test)]
+pub fn dbg_addr(name: u8) -> PublicKeyBytes {
     let addr = [name; dalek::PUBLIC_KEY_LENGTH];
     PublicKeyBytes(addr)
 }
 
-#[derive(Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub struct Signature(dalek::Signature);
 
 impl KeyPair {
+    pub fn public(&self) -> PublicKeyBytes {
+        PublicKeyBytes(self.0.public.to_bytes())
+    }
+
     /// Avoid implementing `clone` on secret keys to prevent mistakes.
     pub fn copy(&self) -> KeyPair {
         KeyPair(dalek::Keypair {
@@ -95,41 +83,185 @@ impl KeyPair {
     }
 }
 
+impl Serialize for PublicKeyBytes {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&self.to_string())
+        } else {
+            serializer.serialize_newtype_struct("PublicKeyBytes", &self.0)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKeyBytes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            let s = String::deserialize(deserializer)?;
+            let value =
+                Self::from_str(&s).map_err(|err| serde::de::Error::custom(err.to_string()))?;
+            Ok(value)
+        } else {
+            #[derive(Deserialize)]
+            #[serde(rename = "PublicKeyBytes")]
+            struct Foo([u8; dalek::PUBLIC_KEY_LENGTH]);
+
+            let value = Foo::deserialize(deserializer)?;
+            Ok(Self(value.0))
+        }
+    }
+}
+
 impl Serialize for KeyPair {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(&base64::encode(&self.0.to_bytes()))
+        // This is only used for JSON configuration.
+        assert!(serializer.is_human_readable());
+        serializer.serialize_str(&hex::encode(&self.0.to_bytes()))
     }
 }
 
 impl<'de> Deserialize<'de> for KeyPair {
-    fn deserialize<D>(deserializer: D) -> Result<KeyPair, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
+        // This is only used for JSON configuration.
+        assert!(deserializer.is_human_readable());
         let s = String::deserialize(deserializer)?;
-        let value = base64::decode(&s).map_err(|err| serde::de::Error::custom(err.to_string()))?;
+        let value = hex::decode(&s).map_err(|err| serde::de::Error::custom(err.to_string()))?;
         let key = dalek::Keypair::from_bytes(&value)
             .map_err(|err| serde::de::Error::custom(err.to_string()))?;
         Ok(KeyPair(key))
     }
 }
 
+impl Serialize for Signature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&hex::encode(&self.0.to_bytes()))
+        } else {
+            serializer.serialize_newtype_struct("Signature", &self.0)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Signature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            use ed25519_dalek::ed25519::signature::Signature;
+
+            let s = String::deserialize(deserializer)?;
+            let value = hex::decode(&s).map_err(|err| serde::de::Error::custom(err.to_string()))?;
+            let sig = dalek::Signature::from_bytes(&value)
+                .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+            Ok(Signature(sig))
+        } else {
+            #[derive(Deserialize)]
+            #[serde(rename = "Signature")]
+            struct Foo(dalek::Signature);
+
+            let value = Foo::deserialize(deserializer)?;
+            Ok(Self(value.0))
+        }
+    }
+}
+
+impl std::fmt::Display for PublicKeyBytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(&self.0[..]))
+    }
+}
+
+impl FromStr for PublicKeyBytes {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let value = hex::decode(s)?;
+        if value.len() != dalek::PUBLIC_KEY_LENGTH {
+            failure::bail!("Invalid length for hex-encoded public key");
+        }
+        let mut pubkey = [0u8; dalek::PUBLIC_KEY_LENGTH];
+        pubkey.copy_from_slice(&value[..dalek::PUBLIC_KEY_LENGTH]);
+        Ok(PublicKeyBytes(pubkey))
+    }
+}
+
+impl std::fmt::Display for AccountId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(&self.0).unwrap())
+    }
+}
+
+impl FromStr for AccountId {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(AccountId(serde_json::from_str(s)?))
+    }
+}
+
+impl std::fmt::Display for Signature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        let s = hex::encode(&self.0.to_bytes());
+        write!(f, "{}", s)
+    }
+}
+
 impl std::fmt::Debug for Signature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        let s = base64::encode(&self.0);
-        write!(f, "{}", s)?;
-        Ok(())
+        write!(f, "{}", self)
     }
 }
 
 impl std::fmt::Debug for PublicKeyBytes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        let s = base64::encode(&self.0);
-        write!(f, "{}", s)?;
-        Ok(())
+        write!(f, "{}", self)
+    }
+}
+
+impl std::fmt::Debug for AccountId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "{}", self)
+    }
+}
+
+impl AccountId {
+    pub fn new(numbers: Vec<SequenceNumber>) -> Self {
+        assert!(!numbers.is_empty());
+        Self(numbers)
+    }
+
+    pub fn parent(&self) -> Option<AccountId> {
+        if self.0.len() <= 1 {
+            return None;
+        }
+        let mut parent = self.clone();
+        parent.0.pop()?;
+        Some(parent)
+    }
+
+    pub fn sequence_number(&self) -> Option<SequenceNumber> {
+        self.0.last().cloned()
+    }
+
+    pub fn make_child(&self, num: SequenceNumber) -> Self {
+        let mut id = self.clone();
+        id.0.push(num);
+        id
     }
 }
 
@@ -308,7 +440,7 @@ impl Signature {
     fn check_internal<T>(
         &self,
         value: &T,
-        author: FastPayAddress,
+        author: PublicKeyBytes,
     ) -> Result<(), dalek::SignatureError>
     where
         T: Signable<Vec<u8>>,
@@ -319,7 +451,7 @@ impl Signature {
         public_key.verify(&message, &self.0)
     }
 
-    pub fn check<T>(&self, value: &T, author: FastPayAddress) -> Result<(), FastPayError>
+    pub fn check<T>(&self, value: &T, author: PublicKeyBytes) -> Result<(), FastPayError>
     where
         T: Signable<Vec<u8>>,
     {
@@ -332,7 +464,7 @@ impl Signature {
     fn verify_batch_internal<'a, T, I>(value: &'a T, votes: I) -> Result<(), dalek::SignatureError>
     where
         T: Signable<Vec<u8>>,
-        I: IntoIterator<Item = &'a (FastPayAddress, Signature)>,
+        I: IntoIterator<Item = &'a (PublicKeyBytes, Signature)>,
     {
         let mut msg = Vec::new();
         value.write(&mut msg);
@@ -350,7 +482,7 @@ impl Signature {
     pub fn verify_batch<'a, T, I>(value: &'a T, votes: I) -> Result<(), FastPayError>
     where
         T: Signable<Vec<u8>>,
-        I: IntoIterator<Item = &'a (FastPayAddress, Signature)>,
+        I: IntoIterator<Item = &'a (PublicKeyBytes, Signature)>,
     {
         Signature::verify_batch_internal(value, votes).map_err(|error| {
             FastPayError::InvalidSignature {

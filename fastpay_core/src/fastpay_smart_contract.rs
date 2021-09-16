@@ -22,7 +22,7 @@ pub struct FastPaySmartContractState {
     /// Committee of this FastPay instance.
     committee: Committee,
     /// Onchain states of FastPay smart contract.
-    pub accounts: BTreeMap<FastPayAddress, AccountOnchainState>,
+    pub accounts: BTreeMap<AccountId, AccountOnchainState>,
     /// Primary coins in the smart contract.
     total_balance: Amount,
     /// The latest transaction index included in the blockchain.
@@ -72,23 +72,35 @@ impl FastPaySmartContract for FastPaySmartContractState {
         transaction.transfer_certificate.check(&self.committee)?;
         let order = transaction.transfer_certificate.value;
         let transfer = &order.transfer;
-        ensure!(
-            self.total_balance >= transfer.amount,
-            "The balance on the blockchain cannot be negative",
-        );
-        let account = self
-            .accounts
-            .entry(transfer.sender)
-            .or_insert_with(AccountOnchainState::new);
-        ensure!(
-            account.last_redeemed < Some(transfer.sequence_number),
-            "Transfer certificates to Primary must have increasing sequence numbers.",
-        );
-        account.last_redeemed = Some(transfer.sequence_number);
-        self.total_balance = self.total_balance.try_sub(transfer.amount)?;
-        // Transfer Primary coins to order.recipient
-
-        Ok(())
+        match &transfer.operation {
+            Operation::Payment {
+                amount,
+                recipient: Address::Primary(_),
+                ..
+            } => {
+                ensure!(
+                    self.total_balance >= *amount,
+                    "The balance on the blockchain cannot be negative",
+                );
+                let account = self
+                    .accounts
+                    .entry(order.transfer.account_id.clone())
+                    .or_insert_with(AccountOnchainState::new);
+                ensure!(
+                    account.last_redeemed < Some(transfer.sequence_number),
+                    "Transfer certificates to Primary must have increasing sequence numbers.",
+                );
+                account.last_redeemed = Some(transfer.sequence_number);
+                self.total_balance = self.total_balance.try_sub(*amount)?;
+                // Transfer Primary coins to order.recipient
+                Ok(())
+            }
+            Operation::Payment { .. }
+            | Operation::CreateAccount { .. }
+            | Operation::ChangeOwner { .. } => {
+                failure::bail!("Invalid redeem transaction");
+            }
+        }
     }
 }
 

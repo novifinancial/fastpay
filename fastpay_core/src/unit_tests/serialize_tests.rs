@@ -22,12 +22,12 @@ fn test_error() {
 #[test]
 fn test_info_request() {
     let req1 = AccountInfoRequest {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         request_sequence_number: None,
         request_received_transfers_excluding_first_nth: None,
     };
     let req2 = AccountInfoRequest {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         request_sequence_number: Some(SequenceNumber::from(129)),
         request_received_transfers_excluding_first_nth: None,
     };
@@ -40,12 +40,12 @@ fn test_info_request() {
     assert!(result1.is_ok());
     assert!(result2.is_ok());
 
-    if let SerializedMessage::InfoReq(o) = result1.unwrap() {
+    if let SerializedMessage::InfoRequest(o) = result1.unwrap() {
         assert!(*o == req1);
     } else {
         panic!()
     }
-    if let SerializedMessage::InfoReq(o) = result2.unwrap() {
+    if let SerializedMessage::InfoRequest(o) = result2.unwrap() {
         assert!(*o == req2);
     } else {
         panic!()
@@ -54,14 +54,16 @@ fn test_info_request() {
 
 #[test]
 fn test_order() {
-    let (sender_name, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
 
     let transfer = Transfer {
-        sender: sender_name,
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        account_id: dbg_account(1),
+        operation: Operation::Payment {
+            recipient: Address::FastPay(dbg_account(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let transfer_order = TransferOrder::new(transfer, &sender_key);
 
@@ -74,13 +76,15 @@ fn test_order() {
         panic!()
     }
 
-    let (sender_name, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer2 = Transfer {
-        sender: sender_name,
-        recipient: Address::FastPay(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        account_id: dbg_account(1),
+        operation: Operation::Payment {
+            recipient: Address::FastPay(dbg_account(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let transfer_order2 = TransferOrder::new(transfer2, &sender_key);
 
@@ -96,18 +100,20 @@ fn test_order() {
 
 #[test]
 fn test_vote() {
-    let (sender_name, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
-        sender: sender_name,
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        account_id: dbg_account(1),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
-    let (authority_name, authority_key) = get_key_pair();
-    let vote = SignedTransferOrder::new(order, authority_name, &authority_key);
+    let key = get_key_pair();
+    let vote = SignedTransferOrder::new(order, &key);
 
     let buf = serialize_vote(&vote);
     let result = deserialize_message(buf.as_slice());
@@ -121,13 +127,15 @@ fn test_vote() {
 
 #[test]
 fn test_cert() {
-    let (sender_name, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
-        sender: sender_name,
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        account_id: dbg_account(1),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
     let mut cert = CertifiedTransferOrder {
@@ -136,16 +144,16 @@ fn test_cert() {
     };
 
     for _ in 0..3 {
-        let (authority_name, authority_key) = get_key_pair();
-        let sig = Signature::new(&cert.value.transfer, &authority_key);
+        let key = get_key_pair();
+        let sig = Signature::new(&cert.value.transfer, &key);
 
-        cert.signatures.push((authority_name, sig));
+        cert.signatures.push((key.public(), sig));
     }
 
     let buf = serialize_cert(&cert);
     let result = deserialize_message(buf.as_slice());
     assert!(result.is_ok());
-    if let SerializedMessage::Cert(o) = result.unwrap() {
+    if let SerializedMessage::Confirmation(o) = result.unwrap() {
         assert!(*o == cert);
     } else {
         panic!()
@@ -154,18 +162,20 @@ fn test_cert() {
 
 #[test]
 fn test_info_response() {
-    let (sender_name, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
-        sender: sender_name,
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        account_id: dbg_account(1),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
-    let (auth_name, auth_key) = get_key_pair();
-    let vote = SignedTransferOrder::new(order.clone(), auth_name, &auth_key);
+    let auth_key = get_key_pair();
+    let vote = SignedTransferOrder::new(order.clone(), &auth_key);
 
     let mut cert = CertifiedTransferOrder {
         value: order,
@@ -173,41 +183,45 @@ fn test_info_response() {
     };
 
     for _ in 0..3 {
-        let (authority_name, authority_key) = get_key_pair();
-        let sig = Signature::new(&cert.value.transfer, &authority_key);
+        let key = get_key_pair();
+        let sig = Signature::new(&cert.value.transfer, &key);
 
-        cert.signatures.push((authority_name, sig));
+        cert.signatures.push((key.public(), sig));
     }
 
     let resp1 = AccountInfoResponse {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: None,
+        locked_confirmation: None,
         requested_certificate: None,
         requested_received_transfers: Vec::new(),
     };
     let resp2 = AccountInfoResponse {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: Some(vote.clone()),
+        locked_confirmation: None,
         requested_certificate: None,
         requested_received_transfers: Vec::new(),
     };
     let resp3 = AccountInfoResponse {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: None,
+        locked_confirmation: None,
         requested_certificate: Some(cert.clone()),
         requested_received_transfers: Vec::new(),
     };
     let resp4 = AccountInfoResponse {
-        sender: dbg_addr(0x20),
+        account_id: dbg_account(0x20),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending_confirmation: Some(vote),
+        locked_confirmation: None,
         requested_certificate: Some(cert),
         requested_received_transfers: Vec::new(),
     };
@@ -216,7 +230,7 @@ fn test_info_response() {
         let buf = serialize_info_response(resp);
         let result = deserialize_message(buf.as_slice());
         assert!(result.is_ok());
-        if let SerializedMessage::InfoResp(o) = result.unwrap() {
+        if let SerializedMessage::InfoResponse(o) = result.unwrap() {
             assert!(*o == *resp);
         } else {
             panic!()
@@ -226,13 +240,15 @@ fn test_info_response() {
 
 #[test]
 fn test_time_order() {
-    let (sender_name, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
-        sender: sender_name,
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        account_id: dbg_account(1),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
 
     let mut buf = Vec::new();
@@ -259,22 +275,24 @@ fn test_time_order() {
 
 #[test]
 fn test_time_vote() {
-    let (sender_name, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
-        sender: sender_name,
-        recipient: Address::Primary(dbg_addr(0x20)),
-        amount: Amount::from(5),
+        account_id: dbg_account(1),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0x20)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
 
-    let (authority_name, authority_key) = get_key_pair();
+    let key = get_key_pair();
 
     let mut buf = Vec::new();
     let now = Instant::now();
     for _ in 0..100 {
-        let vote = SignedTransferOrder::new(order.clone(), authority_name, &authority_key);
+        let vote = SignedTransferOrder::new(order.clone(), &key);
         serialize_vote_into(&mut buf, &vote).unwrap();
     }
     println!("Write Vote: {} microsec", now.elapsed().as_micros() / 100);
@@ -298,13 +316,15 @@ fn test_time_vote() {
 #[test]
 fn test_time_cert() {
     let count = 100;
-    let (sender_name, sender_key) = get_key_pair();
+    let sender_key = get_key_pair();
     let transfer = Transfer {
-        sender: sender_name,
-        recipient: Address::Primary(dbg_addr(0)),
-        amount: Amount::from(5),
+        account_id: dbg_account(1),
+        operation: Operation::Payment {
+            recipient: Address::Primary(dbg_addr(0)),
+            amount: Amount::from(5),
+            user_data: UserData::default(),
+        },
         sequence_number: SequenceNumber::new(),
-        user_data: UserData::default(),
     };
     let order = TransferOrder::new(transfer, &sender_key);
     let mut cert = CertifiedTransferOrder {
@@ -313,9 +333,9 @@ fn test_time_cert() {
     };
 
     for _ in 0..7 {
-        let (authority_name, authority_key) = get_key_pair();
-        let sig = Signature::new(&cert.value.transfer, &authority_key);
-        cert.signatures.push((authority_name, sig));
+        let key = get_key_pair();
+        let sig = Signature::new(&cert.value.transfer, &key);
+        cert.signatures.push((key.public(), sig));
     }
 
     let mut buf = Vec::new();
@@ -329,7 +349,7 @@ fn test_time_cert() {
     let now = Instant::now();
     let mut buf2 = buf.as_slice();
     for _ in 0..count {
-        if let SerializedMessage::Cert(cert) = deserialize_message(&mut buf2).unwrap() {
+        if let SerializedMessage::Confirmation(cert) = deserialize_message(&mut buf2).unwrap() {
             Signature::verify_batch(&cert.value.transfer, &cert.signatures).unwrap();
         }
     }

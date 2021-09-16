@@ -55,7 +55,7 @@ ACCOUNT2="`tail -n -1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 ./client --committee committee.json --accounts accounts.json benchmark
 
 # Inspect state of first account
-grep "$ACCOUNT1" accounts.json
+fgrep "$ACCOUNT1" accounts.json
 
 # Kill servers
 kill %1 %2 %3 %4 %5 %6 %7 %8 %9 %10 %11 %12 %13 %14 %15 %16

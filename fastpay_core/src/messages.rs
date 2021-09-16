@@ -15,36 +15,65 @@ use std::{
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct FundingTransaction {
-    pub recipient: FastPayAddress,
+    pub recipient: AccountId,
     pub primary_coins: Amount,
     // TODO: Authenticated by Primary sender.
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct PrimarySynchronizationOrder {
-    pub recipient: FastPayAddress,
+    pub recipient: AccountId,
     pub amount: Amount,
     pub transaction_index: VersionNumber,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Address {
     Primary(PrimaryAddress),
-    FastPay(FastPayAddress),
+    FastPay(AccountId),
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub enum Operation {
+    Payment {
+        recipient: Address,
+        amount: Amount,
+        user_data: UserData,
+    },
+    CreateAccount {
+        new_id: AccountId,
+        new_owner: AccountOwner,
+    },
+    ChangeOwner {
+        new_owner: AccountOwner,
+    },
+}
+
+impl Operation {
+    pub fn recipient(&self) -> Option<&AccountId> {
+        use Operation::*;
+        match self {
+            Payment {
+                recipient: Address::FastPay(id),
+                ..
+            } => Some(id),
+            CreateAccount { new_id, .. } => Some(new_id),
+            Payment { .. } | ChangeOwner { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Transfer {
-    pub sender: FastPayAddress,
-    pub recipient: Address,
-    pub amount: Amount,
+    pub account_id: AccountId,
+    pub operation: Operation,
     pub sequence_number: SequenceNumber,
-    pub user_data: UserData,
 }
 
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct TransferOrder {
     pub transfer: Transfer,
+    pub owner: AccountOwner,
     pub signature: Signature,
 }
 
@@ -73,25 +102,43 @@ pub struct ConfirmationOrder {
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct AccountInfoRequest {
-    pub sender: FastPayAddress,
+    pub account_id: AccountId,
     pub request_sequence_number: Option<SequenceNumber>,
     pub request_received_transfers_excluding_first_nth: Option<usize>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct AccountInfoResponse {
-    pub sender: FastPayAddress,
+    pub account_id: AccountId,
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
     pub pending_confirmation: Option<SignedTransferOrder>,
+    pub locked_confirmation: Option<CertifiedTransferOrder>,
     pub requested_certificate: Option<CertifiedTransferOrder>,
     pub requested_received_transfers: Vec<CertifiedTransferOrder>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct CrossShardUpdate {
-    pub shard_id: ShardId,
-    pub transfer_certificate: CertifiedTransferOrder,
+pub enum ConfirmationOutcome {
+    Complete,
+    Retry,
+    Cancel,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub enum CrossShardRequest {
+    UpdateRecipientAccount {
+        certificate: CertifiedTransferOrder,
+    },
+    VerifyAccountDeletion {
+        parent_id: AccountId,
+        sequence_number: SequenceNumber,
+        certificate: CertifiedTransferOrder,
+    },
+    UpdateSenderAccount {
+        certificate: CertifiedTransferOrder,
+        outcome: ConfirmationOutcome,
+    },
 }
 
 impl Hash for TransferOrder {
@@ -141,9 +188,31 @@ impl PartialEq for CertifiedTransferOrder {
     }
 }
 
+impl TransferOrder {
+    pub fn key(&self) -> (AccountId, SequenceNumber) {
+        (
+            self.transfer.account_id.clone(),
+            self.transfer.sequence_number,
+        )
+    }
+}
+
+/// Non-testing code should make the pattern matching explicit so that
+/// we kwow where to add protocols in the future.
+#[cfg(test)]
 impl Transfer {
-    pub fn key(&self) -> (FastPayAddress, SequenceNumber) {
-        (self.sender, self.sequence_number)
+    pub(crate) fn amount(&self) -> Option<Amount> {
+        match &self.operation {
+            Operation::Payment { amount, .. } => Some(*amount),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn amount_mut(&mut self) -> Option<&mut Amount> {
+        match &mut self.operation {
+            Operation::Payment { amount, .. } => Some(amount),
+            _ => None,
+        }
     }
 }
 
@@ -152,22 +221,23 @@ impl TransferOrder {
         let signature = Signature::new(&transfer, secret);
         Self {
             transfer,
+            owner: secret.public(),
             signature,
         }
     }
 
     pub fn check_signature(&self) -> Result<(), FastPayError> {
-        self.signature.check(&self.transfer, self.transfer.sender)
+        self.signature.check(&self.transfer, self.owner)
     }
 }
 
 impl SignedTransferOrder {
     /// Use signing key to create a signed object.
-    pub fn new(value: TransferOrder, authority: AuthorityName, secret: &KeyPair) -> Self {
-        let signature = Signature::new(&value.transfer, secret);
+    pub fn new(value: TransferOrder, key_pair: &KeyPair) -> Self {
+        let signature = Signature::new(&value.transfer, key_pair);
         Self {
             value,
-            authority,
+            authority: key_pair.public(),
             signature,
         }
     }
@@ -240,11 +310,6 @@ impl<'a> SignatureAggregator<'a> {
 }
 
 impl CertifiedTransferOrder {
-    pub fn key(&self) -> (FastPayAddress, SequenceNumber) {
-        let transfer = &self.value.transfer;
-        transfer.key()
-    }
-
     /// Verify the certificate.
     pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
         // Check the quorum.
@@ -267,7 +332,7 @@ impl CertifiedTransferOrder {
             FastPayError::CertificateRequiresQuorum
         );
         // All what is left is checking signatures!
-        let inner_sig = (self.value.transfer.sender, self.value.signature);
+        let inner_sig = (self.value.owner, self.value.signature);
         Signature::verify_batch(
             &self.value.transfer,
             std::iter::once(&inner_sig).chain(&self.signatures),

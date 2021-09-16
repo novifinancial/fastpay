@@ -15,11 +15,12 @@ mod serialize_tests;
 pub enum SerializedMessage {
     Order(Box<TransferOrder>),
     Vote(Box<SignedTransferOrder>),
-    Cert(Box<CertifiedTransferOrder>),
-    CrossShard(Box<CertifiedTransferOrder>),
+    Confirmation(Box<CertifiedTransferOrder>),
     Error(Box<FastPayError>),
-    InfoReq(Box<AccountInfoRequest>),
-    InfoResp(Box<AccountInfoResponse>),
+    InfoRequest(Box<AccountInfoRequest>),
+    InfoResponse(Box<AccountInfoResponse>),
+    // Internal to an authority
+    CrossShardRequest(Box<CrossShardRequest>),
 }
 
 // This helper structure is only here to avoid cloning while serializing commands.
@@ -30,10 +31,11 @@ enum ShallowSerializedMessage<'a> {
     Order(&'a TransferOrder),
     Vote(&'a SignedTransferOrder),
     Cert(&'a CertifiedTransferOrder),
-    CrossShard(&'a CertifiedTransferOrder),
     Error(&'a FastPayError),
-    InfoReq(&'a AccountInfoRequest),
-    InfoResp(&'a AccountInfoResponse),
+    InfoRequest(&'a AccountInfoRequest),
+    InfoResponse(&'a AccountInfoResponse),
+    // Internal to an authority
+    CrossShardRequest(&'a CrossShardRequest),
 }
 
 fn serialize_into<T, W>(writer: W, msg: &T) -> Result<(), failure::Error>
@@ -91,15 +93,15 @@ where
 }
 
 pub fn serialize_info_request(value: &AccountInfoRequest) -> Vec<u8> {
-    serialize(&ShallowSerializedMessage::InfoReq(value))
+    serialize(&ShallowSerializedMessage::InfoRequest(value))
 }
 
 pub fn serialize_info_response(value: &AccountInfoResponse) -> Vec<u8> {
-    serialize(&ShallowSerializedMessage::InfoResp(value))
+    serialize(&ShallowSerializedMessage::InfoResponse(value))
 }
 
-pub fn serialize_cross_shard(value: &CertifiedTransferOrder) -> Vec<u8> {
-    serialize(&ShallowSerializedMessage::CrossShard(value))
+pub fn serialize_cross_shard_request(value: &CrossShardRequest) -> Vec<u8> {
+    serialize(&ShallowSerializedMessage::CrossShardRequest(value))
 }
 
 pub fn serialize_vote(value: &SignedTransferOrder) -> Vec<u8> {

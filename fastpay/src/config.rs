@@ -5,7 +5,7 @@ use crate::transport::NetworkProtocol;
 use fastpay_core::{
     base_types::*,
     client::ClientState,
-    messages::{Address, CertifiedTransferOrder},
+    messages::{Address, CertifiedTransferOrder, Operation},
 };
 
 use serde::{Deserialize, Serialize};
@@ -18,11 +18,7 @@ use std::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthorityConfig {
     pub network_protocol: NetworkProtocol,
-    #[serde(
-        serialize_with = "address_as_base64",
-        deserialize_with = "address_from_base64"
-    )]
-    pub address: FastPayAddress,
+    pub name: AuthorityName,
     pub host: String,
     pub base_port: u32,
     pub num_shards: u32,
@@ -84,7 +80,7 @@ impl CommitteeConfig {
     pub fn voting_rights(&self) -> BTreeMap<AuthorityName, usize> {
         let mut map = BTreeMap::new();
         for authority in &self.authorities {
-            map.insert(authority.address, 1);
+            map.insert(authority.name, 1);
         }
         map
     }
@@ -92,12 +88,8 @@ impl CommitteeConfig {
 
 #[derive(Serialize, Deserialize)]
 pub struct UserAccount {
-    #[serde(
-        serialize_with = "address_as_base64",
-        deserialize_with = "address_from_base64"
-    )]
-    pub address: FastPayAddress,
-    pub key: KeyPair,
+    pub account_id: AccountId,
+    pub key_pair: KeyPair,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
     pub sent_certificates: Vec<CertifiedTransferOrder>,
@@ -105,11 +97,11 @@ pub struct UserAccount {
 }
 
 impl UserAccount {
-    pub fn new(balance: Balance) -> Self {
-        let (address, key) = get_key_pair();
+    pub fn new(account_id: AccountId, balance: Balance) -> Self {
+        let key_pair = get_key_pair();
         Self {
-            address,
-            key,
+            account_id,
+            key_pair,
             next_sequence_number: SequenceNumber::new(),
             balance,
             sent_certificates: Vec::new(),
@@ -119,20 +111,24 @@ impl UserAccount {
 }
 
 pub struct AccountsConfig {
-    accounts: BTreeMap<FastPayAddress, UserAccount>,
+    accounts: BTreeMap<AccountId, UserAccount>,
 }
 
 impl AccountsConfig {
-    pub fn get(&self, address: &FastPayAddress) -> Option<&UserAccount> {
-        self.accounts.get(address)
+    pub fn get(&self, account_id: &AccountId) -> Option<&UserAccount> {
+        self.accounts.get(account_id)
     }
 
     pub fn insert(&mut self, account: UserAccount) {
-        self.accounts.insert(account.address, account);
+        self.accounts.insert(account.account_id.clone(), account);
     }
 
     pub fn num_accounts(&self) -> usize {
         self.accounts.len()
+    }
+
+    pub fn last_account(&mut self) -> Option<&UserAccount> {
+        self.accounts.values().last()
     }
 
     pub fn accounts_mut(&mut self) -> impl Iterator<Item = &mut UserAccount> {
@@ -142,7 +138,7 @@ impl AccountsConfig {
     pub fn update_from_state<A>(&mut self, state: &ClientState<A>) {
         let account = self
             .accounts
-            .get_mut(&state.address())
+            .get_mut(state.account_id())
             .expect("Updated account should already exist");
         account.next_sequence_number = state.next_sequence_number();
         account.balance = state.balance();
@@ -152,13 +148,18 @@ impl AccountsConfig {
 
     pub fn update_for_received_transfer(&mut self, certificate: CertifiedTransferOrder) {
         let transfer = &certificate.value.transfer;
-        if let Address::FastPay(recipient) = &transfer.recipient {
+        if let Operation::Payment {
+            recipient: Address::FastPay(recipient),
+            amount,
+            ..
+        } = &transfer.operation
+        {
             if let Some(config) = self.accounts.get_mut(recipient) {
                 if let Err(position) = config
                     .received_certificates
-                    .binary_search_by_key(&certificate.key(), CertifiedTransferOrder::key)
+                    .binary_search_by_key(&certificate.value.key(), |order| order.value.key())
                 {
-                    config.balance = config.balance.try_add(transfer.amount.into()).unwrap();
+                    config.balance = config.balance.try_add((*amount).into()).unwrap();
                     config.received_certificates.insert(position, certificate)
                 }
             }
@@ -176,7 +177,7 @@ impl AccountsConfig {
         Ok(Self {
             accounts: stream
                 .filter_map(Result::ok)
-                .map(|account: UserAccount| (account.address, account))
+                .map(|account: UserAccount| (account.account_id.clone(), account))
                 .collect(),
         })
     }
@@ -193,7 +194,7 @@ impl AccountsConfig {
 }
 
 pub struct InitialStateConfig {
-    pub accounts: Vec<(FastPayAddress, Balance)>,
+    pub accounts: Vec<(AccountId, AccountOwner, Balance)>,
 }
 
 impl InitialStateConfig {
@@ -204,12 +205,13 @@ impl InitialStateConfig {
         for line in reader.lines() {
             let line = line?;
             let elements = line.split(':').collect::<Vec<_>>();
-            if elements.len() != 2 {
-                failure::bail!("expecting two columns separated with ':'")
+            if elements.len() != 3 {
+                failure::bail!("expecting three columns separated with ':'")
             }
-            let address = decode_address(elements[0])?;
-            let balance = elements[1].parse()?;
-            accounts.push((address, balance));
+            let id = elements[0].parse()?;
+            let pubkey = elements[1].parse()?;
+            let balance = elements[2].parse()?;
+            accounts.push((id, pubkey, balance));
         }
         Ok(Self { accounts })
     }
@@ -217,8 +219,8 @@ impl InitialStateConfig {
     pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
-        for (address, balance) in &self.accounts {
-            writeln!(writer, "{}:{}", encode_address(address), balance)?;
+        for (id, pubkey, balance) in &self.accounts {
+            writeln!(writer, "{}:{}:{}", id, pubkey, balance)?;
         }
         Ok(())
     }

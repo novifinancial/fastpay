@@ -25,6 +25,8 @@ macro_rules! fp_ensure {
 /// Custom error type for FastPay.
 pub enum FastPayError {
     // Signature verification
+    #[fail(display = "Request was not signed by an authorized owner")]
+    InvalidOwner,
     #[fail(display = "Signature is not valid: {}", error)]
     InvalidSignature { error: String },
     #[fail(display = "Value was not signed by a known authority")]
@@ -44,6 +46,8 @@ pub enum FastPayError {
         current_balance
     )]
     InsufficientFunding { current_balance: Balance },
+    #[fail(display = "Invalid new account id: {}", 0)]
+    InvalidNewAccountId(AccountId),
     #[fail(
         display = "Cannot initiate transfer while a transfer order is still pending confirmation: {:?}",
         pending_confirmation
@@ -59,7 +63,7 @@ pub enum FastPayError {
         display = "Cannot confirm a transfer while previous transfer orders are still pending confirmation: {:?}",
         current_sequence_number
     )]
-    MissingEalierConfirmations {
+    MissingEarlierConfirmations {
         current_sequence_number: VersionNumber,
     },
     // Synchronization validation
@@ -68,8 +72,10 @@ pub enum FastPayError {
     // Account access
     #[fail(display = "No certificate for this account and sequence number")]
     CertificateNotfound,
-    #[fail(display = "Unknown sender's account")]
-    UnknownSenderAccount,
+    #[fail(display = "Unknown sender's account {:?}", 0)]
+    UnknownSenderAccount(AccountId),
+    #[fail(display = "Unknown recipient's account {:?}", 0)]
+    UnknownRecipientAccount(AccountId),
     #[fail(display = "Signatures in a certificate must be from different authorities.")]
     CertificateAuthorityReuse,
     #[fail(display = "Sequence numbers above the maximal value are not usable for transfers.")]
@@ -88,8 +94,8 @@ pub enum FastPayError {
     BalanceUnderflow,
     #[fail(display = "Wrong shard used.")]
     WrongShard,
-    #[fail(display = "Invalid cross shard update.")]
-    InvalidCrossShardUpdate,
+    #[fail(display = "Invalid cross shard request.")]
+    InvalidCrossShardRequest,
     #[fail(display = "Cannot deserialize.")]
     InvalidDecoding,
     #[fail(display = "Unexpected message.")]

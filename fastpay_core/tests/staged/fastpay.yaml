@@ -1,8 +1,12 @@
 ---
+AccountId:
+  NEWTYPESTRUCT:
+    SEQ:
+      TYPENAME: SequenceNumber
 AccountInfoRequest:
   STRUCT:
-    - sender:
-        TYPENAME: PublicKeyBytes
+    - account_id:
+        TYPENAME: AccountId
     - request_sequence_number:
         OPTION:
           TYPENAME: SequenceNumber
@@ -10,8 +14,8 @@ AccountInfoRequest:
         OPTION: U64
 AccountInfoResponse:
   STRUCT:
-    - sender:
-        TYPENAME: PublicKeyBytes
+    - account_id:
+        TYPENAME: AccountId
     - balance:
         TYPENAME: Balance
     - next_sequence_number:
@@ -19,6 +23,9 @@ AccountInfoResponse:
     - pending_confirmation:
         OPTION:
           TYPENAME: SignedTransferOrder
+    - locked_confirmation:
+        OPTION:
+          TYPENAME: CertifiedTransferOrder
     - requested_certificate:
         OPTION:
           TYPENAME: CertifiedTransferOrder
@@ -34,7 +41,7 @@ Address:
     1:
       FastPay:
         NEWTYPE:
-          TYPENAME: PublicKeyBytes
+          TYPENAME: AccountId
 Amount:
   NEWTYPESTRUCT: U64
 Balance:
@@ -48,73 +55,139 @@ CertifiedTransferOrder:
           TUPLE:
             - TYPENAME: PublicKeyBytes
             - TYPENAME: Signature
+ConfirmationOutcome:
+  ENUM:
+    0:
+      Complete: UNIT
+    1:
+      Retry: UNIT
+    2:
+      Cancel: UNIT
+CrossShardRequest:
+  ENUM:
+    0:
+      UpdateRecipientAccount:
+        STRUCT:
+          - certificate:
+              TYPENAME: CertifiedTransferOrder
+    1:
+      VerifyAccountDeletion:
+        STRUCT:
+          - parent_id:
+              TYPENAME: AccountId
+          - sequence_number:
+              TYPENAME: SequenceNumber
+          - certificate:
+              TYPENAME: CertifiedTransferOrder
+    2:
+      UpdateSenderAccount:
+        STRUCT:
+          - certificate:
+              TYPENAME: CertifiedTransferOrder
+          - outcome:
+              TYPENAME: ConfirmationOutcome
 FastPayError:
   ENUM:
     0:
+      InvalidOwner: UNIT
+    1:
       InvalidSignature:
         STRUCT:
           - error: STR
-    1:
-      UnknownSigner: UNIT
     2:
-      CertificateRequiresQuorum: UNIT
+      UnknownSigner: UNIT
     3:
-      IncorrectTransferAmount: UNIT
+      CertificateRequiresQuorum: UNIT
     4:
-      UnexpectedSequenceNumber: UNIT
+      IncorrectTransferAmount: UNIT
     5:
+      UnexpectedSequenceNumber: UNIT
+    6:
       InsufficientFunding:
         STRUCT:
           - current_balance:
               TYPENAME: Balance
-    6:
+    7:
+      InvalidNewAccountId:
+        NEWTYPE:
+          TYPENAME: AccountId
+    8:
       PreviousTransferMustBeConfirmedFirst:
         STRUCT:
           - pending_confirmation:
               TYPENAME: TransferOrder
-    7:
-      ErrorWhileProcessingTransferOrder: UNIT
-    8:
-      ErrorWhileRequestingCertificate: UNIT
     9:
-      MissingEalierConfirmations:
+      ErrorWhileProcessingTransferOrder: UNIT
+    10:
+      ErrorWhileRequestingCertificate: UNIT
+    11:
+      MissingEarlierConfirmations:
         STRUCT:
           - current_sequence_number:
               TYPENAME: SequenceNumber
-    10:
-      UnexpectedTransactionIndex: UNIT
-    11:
-      CertificateNotfound: UNIT
     12:
-      UnknownSenderAccount: UNIT
+      UnexpectedTransactionIndex: UNIT
     13:
-      CertificateAuthorityReuse: UNIT
+      CertificateNotfound: UNIT
     14:
-      InvalidSequenceNumber: UNIT
+      UnknownSenderAccount:
+        NEWTYPE:
+          TYPENAME: AccountId
     15:
-      SequenceOverflow: UNIT
+      UnknownRecipientAccount:
+        NEWTYPE:
+          TYPENAME: AccountId
     16:
-      SequenceUnderflow: UNIT
+      CertificateAuthorityReuse: UNIT
     17:
-      AmountOverflow: UNIT
+      InvalidSequenceNumber: UNIT
     18:
-      AmountUnderflow: UNIT
+      SequenceOverflow: UNIT
     19:
-      BalanceOverflow: UNIT
+      SequenceUnderflow: UNIT
     20:
-      BalanceUnderflow: UNIT
+      AmountOverflow: UNIT
     21:
-      WrongShard: UNIT
+      AmountUnderflow: UNIT
     22:
-      InvalidCrossShardUpdate: UNIT
+      BalanceOverflow: UNIT
     23:
-      InvalidDecoding: UNIT
+      BalanceUnderflow: UNIT
     24:
-      UnexpectedMessage: UNIT
+      WrongShard: UNIT
     25:
+      InvalidCrossShardRequest: UNIT
+    26:
+      InvalidDecoding: UNIT
+    27:
+      UnexpectedMessage: UNIT
+    28:
       ClientIoError:
         STRUCT:
           - error: STR
+Operation:
+  ENUM:
+    0:
+      Payment:
+        STRUCT:
+          - recipient:
+              TYPENAME: Address
+          - amount:
+              TYPENAME: Amount
+          - user_data:
+              TYPENAME: UserData
+    1:
+      CreateAccount:
+        STRUCT:
+          - new_id:
+              TYPENAME: AccountId
+          - new_owner:
+              TYPENAME: PublicKeyBytes
+    2:
+      ChangeOwner:
+        STRUCT:
+          - new_owner:
+              TYPENAME: PublicKeyBytes
 PublicKeyBytes:
   NEWTYPESTRUCT:
     TUPLEARRAY:
@@ -133,25 +206,25 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: SignedTransferOrder
     2:
-      Cert:
+      Confirmation:
         NEWTYPE:
           TYPENAME: CertifiedTransferOrder
     3:
-      CrossShard:
-        NEWTYPE:
-          TYPENAME: CertifiedTransferOrder
-    4:
       Error:
         NEWTYPE:
           TYPENAME: FastPayError
-    5:
-      InfoReq:
+    4:
+      InfoRequest:
         NEWTYPE:
           TYPENAME: AccountInfoRequest
-    6:
-      InfoResp:
+    5:
+      InfoResponse:
         NEWTYPE:
           TYPENAME: AccountInfoResponse
+    6:
+      CrossShardRequest:
+        NEWTYPE:
+          TYPENAME: CrossShardRequest
 Signature:
   NEWTYPESTRUCT:
     TUPLEARRAY:
@@ -167,20 +240,18 @@ SignedTransferOrder:
         TYPENAME: Signature
 Transfer:
   STRUCT:
-    - sender:
-        TYPENAME: PublicKeyBytes
-    - recipient:
-        TYPENAME: Address
-    - amount:
-        TYPENAME: Amount
+    - account_id:
+        TYPENAME: AccountId
+    - operation:
+        TYPENAME: Operation
     - sequence_number:
         TYPENAME: SequenceNumber
-    - user_data:
-        TYPENAME: UserData
 TransferOrder:
   STRUCT:
     - transfer:
         TYPENAME: Transfer
+    - owner:
+        TYPENAME: PublicKeyBytes
     - signature:
         TYPENAME: Signature
 UserData:

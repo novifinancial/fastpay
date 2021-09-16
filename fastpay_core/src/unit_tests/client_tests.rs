@@ -63,15 +63,16 @@ fn init_local_authorities(
     let mut voting_rights = BTreeMap::new();
     for _ in 0..count {
         let key_pair = get_key_pair();
-        voting_rights.insert(key_pair.0, 1);
+        voting_rights.insert(key_pair.public(), 1);
         key_pairs.push(key_pair);
     }
     let committee = Committee::new(voting_rights);
 
     let mut clients = HashMap::new();
-    for (address, secret) in key_pairs {
-        let state = AuthorityState::new(committee.clone(), address, secret);
-        clients.insert(address, LocalAuthorityClient::new(state));
+    for key_pair in key_pairs {
+        let name = key_pair.public();
+        let state = AuthorityState::new(committee.clone(), name, key_pair);
+        clients.insert(name, LocalAuthorityClient::new(state));
     }
     (clients, committee)
 }
@@ -84,7 +85,7 @@ fn init_local_authorities_bad_1(
     let mut voting_rights = BTreeMap::new();
     for i in 0..count {
         let key_pair = get_key_pair();
-        voting_rights.insert(key_pair.0, 1);
+        voting_rights.insert(key_pair.public(), 1);
         if i + 1 < (count + 2) / 3 {
             // init 1 authority with a bad keypair
             key_pairs.push(get_key_pair());
@@ -95,22 +96,24 @@ fn init_local_authorities_bad_1(
     let committee = Committee::new(voting_rights);
 
     let mut clients = HashMap::new();
-    for (address, secret) in key_pairs {
-        let state = AuthorityState::new(committee.clone(), address, secret);
-        clients.insert(address, LocalAuthorityClient::new(state));
+    for key_pair in key_pairs {
+        let name = key_pair.public();
+        let state = AuthorityState::new(committee.clone(), name, key_pair);
+        clients.insert(name, LocalAuthorityClient::new(state));
     }
     (clients, committee)
 }
 
 #[cfg(test)]
 fn make_client(
+    account_id: AccountId,
     authority_clients: HashMap<AuthorityName, LocalAuthorityClient>,
     committee: Committee,
 ) -> ClientState<LocalAuthorityClient> {
-    let (address, secret) = get_key_pair();
+    let key_pair = get_key_pair();
     ClientState::new(
-        address,
-        secret,
+        account_id,
+        key_pair,
         committee,
         authority_clients,
         SequenceNumber::new(),
@@ -123,14 +126,16 @@ fn make_client(
 #[cfg(test)]
 fn fund_account<I: IntoIterator<Item = i128>>(
     clients: &mut HashMap<AuthorityName, LocalAuthorityClient>,
-    address: FastPayAddress,
+    account_id: AccountId,
+    owner: AccountOwner,
     balances: I,
 ) {
     let mut balances = balances.into_iter().map(Balance::from);
     for (_, client) in clients.iter_mut() {
         client.0.as_ref().try_lock().unwrap().accounts_mut().insert(
-            address,
+            account_id.clone(),
             AccountOffchainState::new_with_balance(
+                owner,
                 balances.next().unwrap_or_else(Balance::zero),
                 /* no receive log to justify the balances */ Vec::new(),
             ),
@@ -141,9 +146,22 @@ fn fund_account<I: IntoIterator<Item = i128>>(
 #[cfg(test)]
 fn init_local_client_state(balances: Vec<i128>) -> ClientState<LocalAuthorityClient> {
     let (mut authority_clients, committee) = init_local_authorities(balances.len());
-    let client = make_client(authority_clients.clone(), committee);
-    fund_account(&mut authority_clients, client.address, balances);
-    client
+    let zeroes = vec![0; balances.len()];
+    let client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
+    fund_account(
+        &mut authority_clients,
+        client1.account_id.clone(),
+        client1.key_pair.public(),
+        balances,
+    );
+    let client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
+    fund_account(
+        &mut authority_clients,
+        client2.account_id.clone(),
+        client2.key_pair.public(),
+        zeroes,
+    );
+    client1
 }
 
 #[cfg(test)]
@@ -151,9 +169,22 @@ fn init_local_client_state_with_bad_authority(
     balances: Vec<i128>,
 ) -> ClientState<LocalAuthorityClient> {
     let (mut authority_clients, committee) = init_local_authorities_bad_1(balances.len());
-    let client = make_client(authority_clients.clone(), committee);
-    fund_account(&mut authority_clients, client.address, balances);
-    client
+    let zeroes = vec![0; balances.len()];
+    let client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
+    fund_account(
+        &mut authority_clients,
+        client1.account_id.clone(),
+        client1.key_pair.public(),
+        balances,
+    );
+    let client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
+    fund_account(
+        &mut authority_clients,
+        client2.account_id.clone(),
+        client2.key_pair.public(),
+        zeroes,
+    );
+    client1
 }
 
 #[test]
@@ -174,14 +205,12 @@ fn test_get_strong_majority_balance() {
 #[test]
 fn test_initiating_valid_transfer() {
     let mut rt = Runtime::new().unwrap();
-    let (recipient, _) = get_key_pair();
-
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
     let certificate = rt
         .block_on(sender.transfer_to_fastpay(
             Amount::from(3),
-            recipient,
+            dbg_account(2),
             UserData(Some(*b"hello...........hello...........")),
         ))
         .unwrap();
@@ -192,7 +221,7 @@ fn test_initiating_valid_transfer() {
         Balance::from(1)
     );
     assert_eq!(
-        rt.block_on(sender.request_certificate(sender.address, SequenceNumber::from(0)))
+        rt.block_on(sender.request_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
             .unwrap(),
         certificate
     );
@@ -201,14 +230,12 @@ fn test_initiating_valid_transfer() {
 #[test]
 fn test_initiating_valid_transfer_despite_bad_authority() {
     let mut rt = Runtime::new().unwrap();
-    let (recipient, _) = get_key_pair();
-
     let mut sender = init_local_client_state_with_bad_authority(vec![4, 4, 4, 4]);
     sender.balance = Balance::from(4);
     let certificate = rt
         .block_on(sender.transfer_to_fastpay(
             Amount::from(3),
-            recipient,
+            dbg_account(2),
             UserData(Some(*b"hello...........hello...........")),
         ))
         .unwrap();
@@ -219,7 +246,7 @@ fn test_initiating_valid_transfer_despite_bad_authority() {
         Balance::from(1)
     );
     assert_eq!(
-        rt.block_on(sender.request_certificate(sender.address, SequenceNumber::from(0)))
+        rt.block_on(sender.request_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
             .unwrap(),
         certificate
     );
@@ -228,12 +255,10 @@ fn test_initiating_valid_transfer_despite_bad_authority() {
 #[test]
 fn test_initiating_transfer_low_funds() {
     let mut rt = Runtime::new().unwrap();
-    let (recipient, _) = get_key_pair();
-
     let mut sender = init_local_client_state(vec![2, 2, 4, 4]);
     sender.balance = Balance::from(2);
     assert!(rt
-        .block_on(sender.transfer_to_fastpay(Amount::from(3), recipient, UserData::default()))
+        .block_on(sender.transfer_to_fastpay(Amount::from(3), dbg_account(2), UserData::default()))
         .is_err());
     // Trying to overspend does not block an account.
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(0));
@@ -248,9 +273,20 @@ fn test_initiating_transfer_low_funds() {
 fn test_bidirectional_transfer() {
     let mut rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
-    let mut client1 = make_client(authority_clients.clone(), committee.clone());
-    let mut client2 = make_client(authority_clients.clone(), committee);
-    fund_account(&mut authority_clients, client1.address, vec![2, 3, 4, 4]);
+    let mut client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
+    let mut client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
+    fund_account(
+        &mut authority_clients,
+        client1.account_id.clone(),
+        client1.key_pair.public(),
+        vec![2, 3, 4, 4],
+    );
+    fund_account(
+        &mut authority_clients,
+        client2.account_id.clone(),
+        client2.key_pair.public(),
+        vec![0; 4],
+    );
     // Update client1's local balance accordingly.
     client1.balance = rt.block_on(client1.get_strong_majority_balance());
     assert_eq!(client1.balance, Balance::from(3));
@@ -258,7 +294,7 @@ fn test_bidirectional_transfer() {
     let certificate = rt
         .block_on(client1.transfer_to_fastpay(
             Amount::from(3),
-            client2.address,
+            client2.account_id.clone(),
             UserData::default(),
         ))
         .unwrap();
@@ -271,13 +307,15 @@ fn test_bidirectional_transfer() {
     );
     assert_eq!(client1.balance, Balance::from(0));
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_sequence_number(client1.address)),
+        rt.block_on(client1.get_strong_majority_sequence_number(client1.account_id.clone())),
         SequenceNumber::from(1)
     );
 
     assert_eq!(
-        rt.block_on(client1.request_certificate(client1.address, SequenceNumber::from(0)))
-            .unwrap(),
+        rt.block_on(
+            client1.request_certificate(client1.account_id.clone(), SequenceNumber::from(0))
+        )
+        .unwrap(),
         certificate
     );
     // Our sender already confirmed.
@@ -297,8 +335,12 @@ fn test_bidirectional_transfer() {
 
     // Send back some money.
     assert_eq!(client2.next_sequence_number, SequenceNumber::from(0));
-    rt.block_on(client2.transfer_to_fastpay(Amount::from(1), client1.address, UserData::default()))
-        .unwrap();
+    rt.block_on(client2.transfer_to_fastpay(
+        Amount::from(1),
+        client1.account_id.clone(),
+        UserData::default(),
+    ))
+    .unwrap();
     assert_eq!(client2.next_sequence_number, SequenceNumber::from(1));
     assert_eq!(client2.pending_transfer, None);
     assert_eq!(
@@ -306,7 +348,7 @@ fn test_bidirectional_transfer() {
         Balance::from(2)
     );
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_sequence_number(client2.address)),
+        rt.block_on(client2.get_strong_majority_sequence_number(client2.account_id.clone())),
         SequenceNumber::from(1)
     );
     assert_eq!(
@@ -319,15 +361,25 @@ fn test_bidirectional_transfer() {
 fn test_receiving_unconfirmed_transfer() {
     let mut rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
-    let mut client1 = make_client(authority_clients.clone(), committee.clone());
-    let mut client2 = make_client(authority_clients.clone(), committee);
-    fund_account(&mut authority_clients, client1.address, vec![2, 3, 4, 4]);
-    // not updating client1.balance
+    let mut client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
+    let mut client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
+    fund_account(
+        &mut authority_clients,
+        client1.account_id.clone(),
+        client1.key_pair.public(),
+        vec![2, 3, 4, 4],
+    );
+    fund_account(
+        &mut authority_clients,
+        client2.account_id.clone(),
+        client2.key_pair.public(),
+        vec![0; 4],
+    );
 
     let certificate = rt
         .block_on(client1.transfer_to_fastpay_unsafe_unconfirmed(
             Amount::from(2),
-            client2.address,
+            client2.account_id.clone(),
             UserData::default(),
         ))
         .unwrap();
@@ -341,7 +393,7 @@ fn test_receiving_unconfirmed_transfer() {
         Balance::from(3)
     );
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_sequence_number(client1.address)),
+        rt.block_on(client1.get_strong_majority_sequence_number(client1.account_id.clone())),
         SequenceNumber::from(0)
     );
     // Let the receiver confirm in last resort.
@@ -357,11 +409,27 @@ fn test_receiving_unconfirmed_transfer() {
 fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
     let mut rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
-    let mut client0 = make_client(authority_clients.clone(), committee.clone());
-    let mut client1 = make_client(authority_clients.clone(), committee.clone());
-    let mut client2 = make_client(authority_clients.clone(), committee);
-    fund_account(&mut authority_clients, client0.address, vec![2, 3, 4, 4]);
-    // not updating client balances
+    let mut client0 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
+    let mut client1 = make_client(dbg_account(2), authority_clients.clone(), committee.clone());
+    let mut client2 = make_client(dbg_account(3), authority_clients.clone(), committee);
+    fund_account(
+        &mut authority_clients,
+        client0.account_id.clone(),
+        client0.key_pair.public(),
+        vec![2, 3, 4, 4],
+    );
+    fund_account(
+        &mut authority_clients,
+        client1.account_id.clone(),
+        client1.key_pair.public(),
+        vec![0; 4],
+    );
+    fund_account(
+        &mut authority_clients,
+        client2.account_id.clone(),
+        client2.key_pair.public(),
+        vec![0; 4],
+    );
 
     // transferring funds from client0 to client1.
     // confirming to a quorum of node only at the end.
@@ -369,7 +437,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
         client0
             .transfer_to_fastpay_unsafe_unconfirmed(
                 Amount::from(1),
-                client1.address,
+                client1.account_id.clone(),
                 UserData::default(),
             )
             .await
@@ -377,14 +445,14 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
         client0
             .transfer_to_fastpay_unsafe_unconfirmed(
                 Amount::from(1),
-                client1.address,
+                client1.account_id.clone(),
                 UserData::default(),
             )
             .await
             .unwrap();
         client0
             .communicate_transfers(
-                client0.address,
+                client0.account_id.clone(),
                 client0.sent_certificates.clone(),
                 CommunicateAction::SynchronizeNextSequenceNumber(client0.next_sequence_number),
             )
@@ -395,7 +463,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
     let certificate = rt
         .block_on(client1.transfer_to_fastpay_unsafe_unconfirmed(
             Amount::from(2),
-            client2.address,
+            client2.account_id.clone(),
             UserData::default(),
         ))
         .unwrap();
@@ -412,7 +480,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
         Balance::from(2)
     );
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_sequence_number(client1.address)),
+        rt.block_on(client1.get_strong_majority_sequence_number(client1.account_id.clone())),
         SequenceNumber::from(0)
     );
     // Let the receiver confirm in last resort.

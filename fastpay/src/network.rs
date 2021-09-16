@@ -140,29 +140,17 @@ impl MessageHandler for RunningServerState {
                             .state
                             .handle_transfer_order(*message)
                             .map(|info| Some(serialize_info_response(&info))),
-                        SerializedMessage::Cert(message) => {
+                        SerializedMessage::Confirmation(message) => {
                             let confirmation_order = ConfirmationOrder {
-                                transfer_certificate: message.as_ref().clone(),
+                                transfer_certificate: *message,
                             };
                             match self
                                 .server
                                 .state
                                 .handle_confirmation_order(confirmation_order)
                             {
-                                Ok((info, send_shard)) => {
-                                    // Send a message to other shard
-                                    if let Some(cross_shard_update) = send_shard {
-                                        let shard = cross_shard_update.shard_id;
-                                        let tmp_out = serialize_cross_shard(&message);
-                                        debug!(
-                                            "Scheduling cross shard query: {} -> {}",
-                                            self.server.state.shard_id, shard
-                                        );
-                                        self.cross_shard_sender
-                                            .send((tmp_out, shard))
-                                            .await
-                                            .expect("internal channel should not fail");
-                                    };
+                                Ok((info, continuation)) => {
+                                    self.handle_continuation(continuation).await;
 
                                     // Response
                                     Ok(Some(serialize_info_response(&info)))
@@ -170,23 +158,42 @@ impl MessageHandler for RunningServerState {
                                 Err(error) => Err(error),
                             }
                         }
-                        SerializedMessage::InfoReq(message) => self
+                        SerializedMessage::InfoRequest(message) => self
                             .server
                             .state
                             .handle_account_info_request(*message)
                             .map(|info| Some(serialize_info_response(&info))),
-                        SerializedMessage::CrossShard(message) => {
-                            match self
-                                .server
-                                .state
-                                .handle_cross_shard_recipient_commit(*message)
-                            {
-                                Ok(_) => Ok(None), // Nothing to reply
+                        SerializedMessage::CrossShardRequest(request) => {
+                            use CrossShardRequest::*;
+                            let result = match *request {
+                                UpdateRecipientAccount { certificate } => {
+                                    self.server.state.update_recipient_account(certificate)
+                                }
+                                VerifyAccountDeletion {
+                                    parent_id,
+                                    sequence_number,
+                                    certificate,
+                                } => self.server.state.verify_account_deletion(
+                                    parent_id,
+                                    sequence_number,
+                                    certificate,
+                                ),
+                                UpdateSenderAccount {
+                                    certificate,
+                                    outcome,
+                                } => self
+                                    .server
+                                    .state
+                                    .update_sender_account(certificate, outcome),
+                            };
+                            match result {
+                                Ok(cont) => self.handle_continuation(cont).await,
                                 Err(error) => {
-                                    error!("Failed to handle cross-shard query: {}", error);
-                                    Ok(None) // Nothing to reply
+                                    error!("Failed to handle cross-shard request: {}", error);
                                 }
                             }
+                            // No user to respond to.
+                            Ok(None)
                         }
                         _ => Err(FastPayError::UnexpectedMessage),
                     }
@@ -210,6 +217,31 @@ impl MessageHandler for RunningServerState {
                     warn!("User query failed: {}", error);
                     self.server.user_errors += 1;
                     Some(serialize_error(&error))
+                }
+            }
+        })
+    }
+}
+
+impl RunningServerState {
+    fn handle_continuation(
+        &mut self,
+        continuation: CrossShardContinuation,
+    ) -> futures::future::BoxFuture<()> {
+        Box::pin(async move {
+            use CrossShardContinuation::*;
+            match continuation {
+                Done => (),
+                Request { shard_id, request } => {
+                    let buffer = serialize_cross_shard_request(&request);
+                    debug!(
+                        "Scheduling cross shard query: {} -> {}",
+                        self.server.state.shard_id, shard_id
+                    );
+                    self.cross_shard_sender
+                        .send((buffer, shard_id))
+                        .await
+                        .expect("internal channel should not fail");
                 }
             }
         })
@@ -276,7 +308,7 @@ impl Client {
             Ok(response) => {
                 // Parse reply
                 match deserialize_message(&response[..]) {
-                    Ok(SerializedMessage::InfoResp(resp)) => Ok(*resp),
+                    Ok(SerializedMessage::InfoResponse(resp)) => Ok(*resp),
                     Ok(SerializedMessage::Error(error)) => Err(*error),
                     Err(_) => Err(FastPayError::InvalidDecoding),
                     _ => Err(FastPayError::UnexpectedMessage),
@@ -293,7 +325,7 @@ impl AuthorityClient for Client {
         order: TransferOrder,
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         Box::pin(async move {
-            let shard = AuthorityState::get_shard(self.num_shards, &order.transfer.sender);
+            let shard = AuthorityState::get_shard(self.num_shards, &order.transfer.account_id);
             self.send_recv_bytes(shard, serialize_transfer_order(&order))
                 .await
         })
@@ -307,7 +339,7 @@ impl AuthorityClient for Client {
         Box::pin(async move {
             let shard = AuthorityState::get_shard(
                 self.num_shards,
-                &order.transfer_certificate.value.transfer.sender,
+                &order.transfer_certificate.value.transfer.account_id,
             );
             self.send_recv_bytes(shard, serialize_cert(&order.transfer_certificate))
                 .await
@@ -320,7 +352,7 @@ impl AuthorityClient for Client {
         request: AccountInfoRequest,
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         Box::pin(async move {
-            let shard = AuthorityState::get_shard(self.num_shards, &request.sender);
+            let shard = AuthorityState::get_shard(self.num_shards, &request.account_id);
             self.send_recv_bytes(shard, serialize_info_request(&request))
                 .await
         })
