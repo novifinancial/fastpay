@@ -71,7 +71,7 @@ pub enum FastPayError {
     UnexpectedTransactionIndex,
     // Account access
     #[fail(display = "No certificate for this account and sequence number")]
-    CertificateNotfound,
+    CertificateNotFound,
     #[fail(display = "Unknown sender's account {:?}", 0)]
     UnknownSenderAccount(AccountId),
     #[fail(display = "Unknown recipient's account {:?}", 0)]

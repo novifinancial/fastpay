@@ -456,7 +456,7 @@ impl Authority for AuthorityState {
             if let Some(cert) = account.confirmed_log.get(usize::from(seq)) {
                 response.requested_certificate = Some(cert.clone());
             } else {
-                fp_bail!(FastPayError::CertificateNotfound)
+                fp_bail!(FastPayError::CertificateNotFound)
             }
         }
         if let Some(idx) = request.request_received_transfers_excluding_first_nth {

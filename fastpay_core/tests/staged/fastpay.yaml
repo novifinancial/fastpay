@@ -128,7 +128,7 @@ FastPayError:
     12:
       UnexpectedTransactionIndex: UNIT
     13:
-      CertificateNotfound: UNIT
+      CertificateNotFound: UNIT
     14:
       UnknownSenderAccount:
         NEWTYPE:
