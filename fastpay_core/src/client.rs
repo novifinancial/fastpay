@@ -505,7 +505,7 @@ where
         );
         let request = Request {
             account_id: self.account_id.clone(),
-            operation: Operation::Payment {
+            operation: Operation::Transfer {
                 recipient,
                 amount,
                 user_data,
@@ -530,7 +530,7 @@ where
         let mut new_next_sequence_number = self.next_sequence_number;
         for new_cert in &sent_certificates {
             match &new_cert.value.operation {
-                Operation::Payment { amount, .. } => {
+                Operation::Transfer { amount, .. } => {
                     new_balance = new_balance.try_sub((*amount).into())?;
                 }
                 Operation::OpenAccount { .. }
@@ -560,7 +560,7 @@ where
         }
         for old_cert in &self.sent_certificates {
             match &old_cert.value.operation {
-                Operation::Payment { amount, .. } => {
+                Operation::Transfer { amount, .. } => {
                     new_balance = new_balance.try_add((*amount).into())?;
                 }
                 Operation::OpenAccount { .. }
@@ -673,7 +673,7 @@ where
             let request = &certificate.value;
             let account_id = &request.account_id;
             match &request.operation {
-                Operation::Payment { recipient, .. } => {
+                Operation::Transfer { recipient, .. } => {
                     ensure!(
                         recipient == &Address::FastPay(self.account_id.clone()), // TODO: avoid copy
                         "Request should be received by us."
@@ -698,7 +698,7 @@ where
             if let btree_map::Entry::Vacant(entry) = self.received_certificates.entry(request.key())
             {
                 match &request.operation {
-                    Operation::Payment { amount, .. } => {
+                    Operation::Transfer { amount, .. } => {
                         self.balance = self.balance.try_add((*amount).into())?;
                     }
                     Operation::OpenAccount { .. }
@@ -720,7 +720,7 @@ where
         Box::pin(async move {
             let request = Request {
                 account_id: self.account_id.clone(),
-                operation: Operation::Payment {
+                operation: Operation::Transfer {
                     recipient: Address::FastPay(recipient),
                     amount,
                     user_data,

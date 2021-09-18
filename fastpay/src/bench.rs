@@ -144,7 +144,7 @@ impl ClientServerBenchmark {
 
             let request = Request {
                 account_id: id.clone(),
-                operation: Operation::Payment {
+                operation: Operation::Transfer {
                     recipient: Address::FastPay(next_recipient),
                     amount: Amount::from(50),
                     user_data: UserData::default(),

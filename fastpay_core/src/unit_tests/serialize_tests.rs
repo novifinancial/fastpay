@@ -58,7 +58,7 @@ fn test_order() {
 
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::FastPay(dbg_account(0x20)),
             amount: Amount::from(5),
             user_data: UserData::default(),
@@ -79,7 +79,7 @@ fn test_order() {
     let sender_key = get_key_pair();
     let request2 = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::FastPay(dbg_account(0x20)),
             amount: Amount::from(5),
             user_data: UserData::default(),
@@ -102,7 +102,7 @@ fn test_order() {
 fn test_vote() {
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::Primary(dbg_addr(0x20)),
             amount: Amount::from(5),
             user_data: UserData::default(),
@@ -126,7 +126,7 @@ fn test_vote() {
 fn test_cert() {
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::Primary(dbg_addr(0x20)),
             amount: Amount::from(5),
             user_data: UserData::default(),
@@ -160,7 +160,7 @@ fn test_info_response() {
     let sender_key = get_key_pair();
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::Primary(dbg_addr(0x20)),
             amount: Amount::from(5),
             user_data: UserData::default(),
@@ -236,7 +236,7 @@ fn test_time_order() {
     let sender_key = get_key_pair();
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::Primary(dbg_addr(0x20)),
             amount: Amount::from(5),
             user_data: UserData::default(),
@@ -270,7 +270,7 @@ fn test_time_order() {
 fn test_time_vote() {
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::Primary(dbg_addr(0x20)),
             amount: Amount::from(5),
             user_data: UserData::default(),
@@ -307,7 +307,7 @@ fn test_time_cert() {
     let count = 100;
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::Primary(dbg_addr(0)),
             amount: Amount::from(5),
             user_data: UserData::default(),
