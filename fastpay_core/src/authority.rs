@@ -141,7 +141,7 @@ impl Authority for AuthorityState {
                             }
                         );
                     }
-                    Operation::CreateAccount { new_id, .. } => {
+                    Operation::OpenAccount { new_id, .. } => {
                         let expected_id = account_id.make_child(transfer.sequence_number);
                         fp_ensure!(
                             new_id == &expected_id,
@@ -198,7 +198,7 @@ impl Authority for AuthorityState {
 
         // Execute the sender's side of the operation.
         let info = match &transfer.operation {
-            Operation::CreateAccount { .. } => sender_account.make_account_info(sender.clone()),
+            Operation::OpenAccount { .. } => sender_account.make_account_info(sender.clone()),
             Operation::ChangeOwner { new_owner } => {
                 sender_account.owner = Some(*new_owner);
                 sender_account.make_account_info(sender.clone())
@@ -253,7 +253,7 @@ impl Authority for AuthorityState {
                     .unwrap_or_else(|_| Balance::max());
                 account.received_log.push(certificate.clone());
             }
-            Operation::CreateAccount { new_id, new_owner } => {
+            Operation::OpenAccount { new_id, new_owner } => {
                 fp_ensure!(self.in_shard(new_id), FastPayError::WrongShard);
                 let account = self.accounts.entry(new_id.clone()).or_default();
                 assert!(account.owner.is_none()); // guaranteed under BFT assumptions.
