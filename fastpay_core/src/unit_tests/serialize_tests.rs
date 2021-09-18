@@ -100,7 +100,6 @@ fn test_order() {
 
 #[test]
 fn test_vote() {
-    let sender_key = get_key_pair();
     let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Payment {
@@ -110,10 +109,8 @@ fn test_vote() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = RequestOrder::new(request, &sender_key);
-
     let key = get_key_pair();
-    let vote = SignedRequestOrder::new(order, &key);
+    let vote = SignedRequest::new(request, &key);
 
     let buf = serialize_vote(&vote);
     let result = deserialize_message(buf.as_slice());
@@ -127,7 +124,6 @@ fn test_vote() {
 
 #[test]
 fn test_cert() {
-    let sender_key = get_key_pair();
     let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Payment {
@@ -137,15 +133,14 @@ fn test_cert() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = RequestOrder::new(request, &sender_key);
-    let mut cert = CertifiedRequestOrder {
-        value: order,
+    let mut cert = CertifiedRequest {
+        value: request,
         signatures: Vec::new(),
     };
 
     for _ in 0..3 {
         let key = get_key_pair();
-        let sig = Signature::new(&cert.value.request, &key);
+        let sig = Signature::new(&cert.value, &key);
 
         cert.signatures.push((key.public(), sig));
     }
@@ -172,19 +167,17 @@ fn test_info_response() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = RequestOrder::new(request, &sender_key);
-
     let auth_key = get_key_pair();
-    let vote = SignedRequestOrder::new(order.clone(), &auth_key);
+    let vote = SignedRequest::new(request.clone(), &auth_key);
 
-    let mut cert = CertifiedRequestOrder {
-        value: order,
+    let mut cert = CertifiedRequest {
+        value: request,
         signatures: Vec::new(),
     };
 
     for _ in 0..3 {
         let key = get_key_pair();
-        let sig = Signature::new(&cert.value.request, &key);
+        let sig = Signature::new(&cert.value, &key);
 
         cert.signatures.push((key.public(), sig));
     }
@@ -275,7 +268,6 @@ fn test_time_order() {
 
 #[test]
 fn test_time_vote() {
-    let sender_key = get_key_pair();
     let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Payment {
@@ -285,14 +277,13 @@ fn test_time_vote() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = RequestOrder::new(request, &sender_key);
 
     let key = get_key_pair();
 
     let mut buf = Vec::new();
     let now = Instant::now();
     for _ in 0..100 {
-        let vote = SignedRequestOrder::new(order.clone(), &key);
+        let vote = SignedRequest::new(request.clone(), &key);
         serialize_vote_into(&mut buf, &vote).unwrap();
     }
     println!("Write Vote: {} microsec", now.elapsed().as_micros() / 100);
@@ -301,9 +292,7 @@ fn test_time_vote() {
     let now = Instant::now();
     for _ in 0..100 {
         if let SerializedMessage::Vote(vote) = deserialize_message(&mut buf2).unwrap() {
-            vote.signature
-                .check(&vote.value.request, vote.authority)
-                .unwrap();
+            vote.signature.check(&vote.value, vote.authority).unwrap();
         }
     }
     assert!(deserialize_message(&mut buf2).is_err());
@@ -316,7 +305,6 @@ fn test_time_vote() {
 #[test]
 fn test_time_cert() {
     let count = 100;
-    let sender_key = get_key_pair();
     let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Payment {
@@ -326,15 +314,14 @@ fn test_time_cert() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = RequestOrder::new(request, &sender_key);
-    let mut cert = CertifiedRequestOrder {
-        value: order,
+    let mut cert = CertifiedRequest {
+        value: request,
         signatures: Vec::new(),
     };
 
     for _ in 0..7 {
         let key = get_key_pair();
-        let sig = Signature::new(&cert.value.request, &key);
+        let sig = Signature::new(&cert.value, &key);
         cert.signatures.push((key.public(), sig));
     }
 
@@ -350,7 +337,7 @@ fn test_time_cert() {
     let mut buf2 = buf.as_slice();
     for _ in 0..count {
         if let SerializedMessage::Confirmation(cert) = deserialize_message(&mut buf2).unwrap() {
-            Signature::verify_batch(&cert.value.request, &cert.signatures).unwrap();
+            Signature::verify_batch(&cert.value, &cert.signatures).unwrap();
         }
     }
     assert!(deserialize_message(buf2).is_err());

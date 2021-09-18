@@ -141,13 +141,13 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
     );
     let mut serialized_certificates = Vec::new();
     for order in orders {
-        let mut certificate = CertifiedRequestOrder {
-            value: order.clone(),
+        let mut certificate = CertifiedRequest {
+            value: order.request.clone(),
             signatures: Vec::new(),
         };
         for i in 0..committee.quorum_threshold() {
             let (pubx, secx) = keys.get(i).unwrap();
-            let sig = Signature::new(&certificate.value.request, secx);
+            let sig = Signature::new(&certificate.value, secx);
             certificate.signatures.push((*pubx, sig));
         }
         let serialized_certificate = serialize_cert(&certificate);
@@ -159,7 +159,7 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
 /// Try to aggregate votes into certificates.
 fn make_benchmark_certificates_from_votes(
     committee_config: &CommitteeConfig,
-    votes: Vec<SignedRequestOrder>,
+    votes: Vec<SignedRequest>,
 ) -> Vec<(AccountId, Bytes)> {
     let committee = Committee::new(committee_config.voting_rights());
     let mut aggregators = HashMap::new();
@@ -167,7 +167,7 @@ fn make_benchmark_certificates_from_votes(
     let mut done_senders = HashSet::new();
     for vote in votes {
         // We aggregate votes indexed by sender.
-        let account_id = vote.value.request.account_id.clone();
+        let account_id = vote.value.account_id.clone();
         if done_senders.contains(&account_id) {
             continue;
         }
@@ -178,7 +178,7 @@ fn make_benchmark_certificates_from_votes(
         let value = vote.value;
         let aggregator = aggregators
             .entry(account_id.clone())
-            .or_insert_with(|| SignatureAggregator::try_new(value, &committee).unwrap());
+            .or_insert_with(|| SignatureAggregator::new(value, &committee));
         match aggregator.append(vote.authority, vote.signature) {
             Ok(Some(certificate)) => {
                 debug!("Found certificate: {:?}", certificate);

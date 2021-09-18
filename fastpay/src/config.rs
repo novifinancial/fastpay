@@ -5,7 +5,7 @@ use crate::transport::NetworkProtocol;
 use fastpay_core::{
     base_types::*,
     client::ClientState,
-    messages::{Address, CertifiedRequestOrder, Operation},
+    messages::{Address, CertifiedRequest, Operation},
 };
 
 use serde::{Deserialize, Serialize};
@@ -92,8 +92,8 @@ pub struct UserAccount {
     pub key_pair: KeyPair,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
-    pub sent_certificates: Vec<CertifiedRequestOrder>,
-    pub received_certificates: Vec<CertifiedRequestOrder>,
+    pub sent_certificates: Vec<CertifiedRequest>,
+    pub received_certificates: Vec<CertifiedRequest>,
 }
 
 impl UserAccount {
@@ -146,8 +146,8 @@ impl AccountsConfig {
         account.received_certificates = state.received_certificates().cloned().collect();
     }
 
-    pub fn update_for_received_request(&mut self, certificate: CertifiedRequestOrder) {
-        let request = &certificate.value.request;
+    pub fn update_for_received_request(&mut self, certificate: CertifiedRequest) {
+        let request = &certificate.value;
         if let Operation::Payment {
             recipient: Address::FastPay(recipient),
             amount,

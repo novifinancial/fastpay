@@ -26,20 +26,14 @@ fn test_signed_values() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = RequestOrder::new(request.clone(), &key1);
-    let mut bad_order = RequestOrder::new(request, &key2);
-    bad_order.owner = name1;
 
-    let v = SignedRequestOrder::new(order.clone(), &key1);
+    let v = SignedRequest::new(request.clone(), &key1);
     assert!(v.check(&committee).is_ok());
 
-    let v = SignedRequestOrder::new(order.clone(), &key2);
+    let v = SignedRequest::new(request.clone(), &key2);
     assert!(v.check(&committee).is_err());
 
-    let v = SignedRequestOrder::new(order, &key3);
-    assert!(v.check(&committee).is_err());
-
-    let v = SignedRequestOrder::new(bad_order, &key1);
+    let v = SignedRequest::new(request, &key3);
     assert!(v.check(&committee).is_err());
 }
 
@@ -65,15 +59,12 @@ fn test_certificates() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = RequestOrder::new(request.clone(), &key1);
-    let mut bad_order = RequestOrder::new(request, &key2);
-    bad_order.owner = name1;
 
-    let v1 = SignedRequestOrder::new(order.clone(), &key1);
-    let v2 = SignedRequestOrder::new(order.clone(), &key2);
-    let v3 = SignedRequestOrder::new(order.clone(), &key3);
+    let v1 = SignedRequest::new(request.clone(), &key1);
+    let v2 = SignedRequest::new(request.clone(), &key2);
+    let v3 = SignedRequest::new(request.clone(), &key3);
 
-    let mut builder = SignatureAggregator::try_new(order.clone(), &committee).unwrap();
+    let mut builder = SignatureAggregator::new(request.clone(), &committee);
     assert!(builder
         .append(v1.authority, v1.signature)
         .unwrap()
@@ -83,12 +74,10 @@ fn test_certificates() {
     c.signatures.pop();
     assert!(c.check(&committee).is_err());
 
-    let mut builder = SignatureAggregator::try_new(order, &committee).unwrap();
+    let mut builder = SignatureAggregator::new(request, &committee);
     assert!(builder
         .append(v1.authority, v1.signature)
         .unwrap()
         .is_none());
     assert!(builder.append(v3.authority, v3.signature).is_err());
-
-    assert!(SignatureAggregator::try_new(bad_order, &committee).is_err());
 }

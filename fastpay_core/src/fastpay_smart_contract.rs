@@ -70,8 +70,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
         transaction: RedeemTransaction,
     ) -> Result<(), failure::Error> {
         transaction.request_certificate.check(&self.committee)?;
-        let order = transaction.request_certificate.value;
-        let request = &order.request;
+        let request = transaction.request_certificate.value;
         match &request.operation {
             Operation::Payment {
                 amount,
@@ -84,7 +83,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
                 );
                 let account = self
                     .accounts
-                    .entry(order.request.account_id.clone())
+                    .entry(request.account_id.clone())
                     .or_insert_with(AccountState::new);
                 ensure!(
                     account.last_redeemed < Some(request.sequence_number),
@@ -92,7 +91,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
                 );
                 account.last_redeemed = Some(request.sequence_number);
                 self.total_balance = self.total_balance.try_sub(*amount)?;
-                // Request Primary coins to order.recipient
+                // Request Primary coins to recipient
                 Ok(())
             }
             Operation::Payment { .. }
