@@ -159,13 +159,13 @@ impl ClientServerBenchmark {
             assert!(!bufx.is_empty());
 
             // Make certificate
-            let mut certificate = CertifiedRequestOrder {
-                value: order,
+            let mut certificate = CertifiedRequest {
+                value: request,
                 signatures: Vec::new(),
             };
             for i in 0..committee.quorum_threshold() {
                 let key = keys.get(i).unwrap();
-                let sig = Signature::new(&certificate.value.request, key);
+                let sig = Signature::new(&certificate.value, key);
                 certificate.signatures.push((key.public(), sig));
             }
 

@@ -60,21 +60,15 @@ fn test_handle_redeem_transaction_ok() {
     let account_id = redeem_transaction
         .request_certificate
         .value
-        .request
         .account_id
         .clone();
     let amount = redeem_transaction
         .request_certificate
         .value
-        .request
         .amount()
         .unwrap();
     let account = contract_state.accounts.get(&account_id).unwrap();
-    let sequence_number = redeem_transaction
-        .request_certificate
-        .value
-        .request
-        .sequence_number;
+    let sequence_number = redeem_transaction.request_certificate.value.sequence_number;
     assert_eq!(account.last_redeemed, Some(sequence_number));
     old_total_balance = old_total_balance.try_sub(amount).unwrap();
     assert_eq!(contract_state.total_balance, old_total_balance);
@@ -94,12 +88,10 @@ fn test_handle_redeem_transaction_negative_balance() {
     *redeem_transaction
         .request_certificate
         .value
-        .request
         .amount_mut()
         .unwrap() = redeem_transaction
         .request_certificate
         .value
-        .request
         .amount_mut()
         .unwrap()
         .try_add(too_much_money)
@@ -150,8 +142,7 @@ fn init_funding_transaction() -> FundingTransaction {
 
 #[cfg(test)]
 fn init_redeem_transaction(committee: Committee, secret: KeyPair) -> RedeemTransaction {
-    let sender_key = get_key_pair();
-    let primary_request = Request {
+    let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Payment {
             recipient: Address::Primary(dbg_addr(2)),
@@ -160,9 +151,8 @@ fn init_redeem_transaction(committee: Committee, secret: KeyPair) -> RedeemTrans
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = RequestOrder::new(primary_request, &sender_key);
-    let vote = SignedRequestOrder::new(order.clone(), &secret);
-    let mut builder = SignatureAggregator::try_new(order, &committee).unwrap();
+    let vote = SignedRequest::new(request.clone(), &secret);
+    let mut builder = SignatureAggregator::new(request, &committee);
     let certificate = builder
         .append(vote.authority, vote.signature)
         .unwrap()

@@ -25,13 +25,13 @@ AccountInfoResponse:
         TYPENAME: SequenceNumber
     - pending_confirmation:
         OPTION:
-          TYPENAME: SignedRequestOrder
+          TYPENAME: SignedRequest
     - queried_certificate:
         OPTION:
-          TYPENAME: CertifiedRequestOrder
+          TYPENAME: CertifiedRequest
     - queried_received_requests:
         SEQ:
-          TYPENAME: CertifiedRequestOrder
+          TYPENAME: CertifiedRequest
 Address:
   ENUM:
     0:
@@ -46,10 +46,10 @@ Amount:
   NEWTYPESTRUCT: U64
 Balance:
   NEWTYPESTRUCT: I128
-CertifiedRequestOrder:
+CertifiedRequest:
   STRUCT:
     - value:
-        TYPENAME: RequestOrder
+        TYPENAME: Request
     - signatures:
         SEQ:
           TUPLE:
@@ -66,7 +66,7 @@ ConfirmationOutcome:
 CrossShardRequest:
   STRUCT:
     - certificate:
-        TYPENAME: CertifiedRequestOrder
+        TYPENAME: CertifiedRequest
 FastPayError:
   ENUM:
     0:
@@ -98,7 +98,7 @@ FastPayError:
       PreviousRequestMustBeConfirmedFirst:
         STRUCT:
           - pending_confirmation:
-              TYPENAME: RequestOrder
+              TYPENAME: Request
     10:
       ErrorWhileProcessingRequestOrder: UNIT
     11:
@@ -201,11 +201,11 @@ SerializedMessage:
     1:
       Vote:
         NEWTYPE:
-          TYPENAME: SignedRequestOrder
+          TYPENAME: SignedRequest
     2:
       Confirmation:
         NEWTYPE:
-          TYPENAME: CertifiedRequestOrder
+          TYPENAME: CertifiedRequest
     3:
       Error:
         NEWTYPE:
@@ -227,10 +227,10 @@ Signature:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 64
-SignedRequestOrder:
+SignedRequest:
   STRUCT:
     - value:
-        TYPENAME: RequestOrder
+        TYPENAME: Request
     - authority:
         TYPENAME: PublicKeyBytes
     - signature:

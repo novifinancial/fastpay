@@ -342,14 +342,7 @@ fn test_handle_confirmation_order_ok() {
     next_sequence_number = next_sequence_number.increment().unwrap();
     let mut remaining_balance = old_account.balance;
     remaining_balance = remaining_balance
-        .try_sub(
-            certified_request_order
-                .value
-                .request
-                .amount()
-                .unwrap()
-                .into(),
-        )
+        .try_sub(certified_request_order.value.amount().unwrap().into())
         .unwrap();
 
     let (info, _) = state
@@ -367,12 +360,7 @@ fn test_handle_confirmation_order_ok() {
     let recipient_account = state.accounts.get(&dbg_account(2)).unwrap();
     assert_eq!(
         recipient_account.balance,
-        certified_request_order
-            .value
-            .request
-            .amount()
-            .unwrap()
-            .into()
+        certified_request_order.value.amount().unwrap().into()
     );
 
     let info_query = AccountInfoQuery {
@@ -385,7 +373,6 @@ fn test_handle_confirmation_order_ok() {
     assert_eq!(
         response.queried_received_requests[0]
             .value
-            .request
             .amount()
             .unwrap(),
         Amount::from(5)
@@ -525,10 +512,10 @@ fn init_certified_request_order(
     recipient: Address,
     amount: Amount,
     state: &AuthorityState,
-) -> CertifiedRequestOrder {
-    let request_order = init_request_order(account_id, key_pair, recipient, amount);
-    let vote = SignedRequestOrder::new(request_order.clone(), &state.key_pair);
-    let mut builder = SignatureAggregator::try_new(request_order, &state.committee).unwrap();
+) -> CertifiedRequest {
+    let request = init_request_order(account_id, key_pair, recipient, amount).request;
+    let vote = SignedRequest::new(request.clone(), &state.key_pair);
+    let mut builder = SignatureAggregator::new(request, &state.committee);
     builder
         .append(vote.authority, vote.signature)
         .unwrap()

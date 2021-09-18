@@ -79,26 +79,26 @@ pub struct RequestOrder {
 }
 
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct SignedRequestOrder {
-    pub value: RequestOrder,
+pub struct SignedRequest {
+    pub value: Request,
     pub authority: AuthorityName,
     pub signature: Signature,
 }
 
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct CertifiedRequestOrder {
-    pub value: RequestOrder,
+pub struct CertifiedRequest {
+    pub value: Request,
     pub signatures: Vec<(AuthorityName, Signature)>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct RedeemTransaction {
-    pub request_certificate: CertifiedRequestOrder,
+    pub request_certificate: CertifiedRequest,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct ConfirmationOrder {
-    pub request_certificate: CertifiedRequestOrder,
+    pub request_certificate: CertifiedRequest,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -114,9 +114,9 @@ pub struct AccountInfoResponse {
     pub owner: Option<AccountOwner>,
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
-    pub pending_confirmation: Option<SignedRequestOrder>,
-    pub queried_certificate: Option<CertifiedRequestOrder>,
-    pub queried_received_requests: Vec<CertifiedRequestOrder>,
+    pub pending_confirmation: Option<SignedRequest>,
+    pub queried_certificate: Option<CertifiedRequest>,
+    pub queried_received_requests: Vec<CertifiedRequest>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -128,35 +128,37 @@ pub enum ConfirmationOutcome {
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct CrossShardRequest {
-    pub certificate: CertifiedRequestOrder,
+    pub certificate: CertifiedRequest,
 }
 
 impl Hash for RequestOrder {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.request.hash(state);
+        self.owner.hash(state);
     }
 }
 
 impl PartialEq for RequestOrder {
     fn eq(&self, other: &Self) -> bool {
-        self.request == other.request
+        self.request == other.request && self.owner == other.owner
     }
 }
 
-impl Hash for SignedRequestOrder {
+impl Hash for SignedRequest {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state);
         self.authority.hash(state);
     }
 }
 
-impl PartialEq for SignedRequestOrder {
+impl PartialEq for SignedRequest {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value && self.authority == other.authority
     }
 }
 
-impl Hash for CertifiedRequestOrder {
+// TODO: review this
+impl Hash for CertifiedRequest {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state);
         self.signatures.len().hash(state);
@@ -166,7 +168,7 @@ impl Hash for CertifiedRequestOrder {
     }
 }
 
-impl PartialEq for CertifiedRequestOrder {
+impl PartialEq for CertifiedRequest {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
             && self.signatures.len() == other.signatures.len()
@@ -178,12 +180,9 @@ impl PartialEq for CertifiedRequestOrder {
     }
 }
 
-impl RequestOrder {
+impl Request {
     pub fn key(&self) -> (AccountId, SequenceNumber) {
-        (
-            self.request.account_id.clone(),
-            self.request.sequence_number,
-        )
+        (self.account_id.clone(), self.sequence_number)
     }
 }
 
@@ -221,10 +220,10 @@ impl RequestOrder {
     }
 }
 
-impl SignedRequestOrder {
+impl SignedRequest {
     /// Use signing key to create a signed object.
-    pub fn new(value: RequestOrder, key_pair: &KeyPair) -> Self {
-        let signature = Signature::new(&value.request, key_pair);
+    pub fn new(value: Request, key_pair: &KeyPair) -> Self {
+        let signature = Signature::new(&value, key_pair);
         Self {
             value,
             authority: key_pair.public(),
@@ -234,10 +233,9 @@ impl SignedRequestOrder {
 
     /// Verify the signature and return the non-zero voting right of the authority.
     pub fn check(&self, committee: &Committee) -> Result<usize, FastPayError> {
-        self.value.check_signature()?;
         let weight = committee.weight(&self.authority);
         fp_ensure!(weight > 0, FastPayError::UnknownSigner);
-        self.signature.check(&self.value.request, self.authority)?;
+        self.signature.check(&self.value, self.authority)?;
         Ok(weight)
     }
 }
@@ -246,23 +244,17 @@ pub struct SignatureAggregator<'a> {
     committee: &'a Committee,
     weight: usize,
     used_authorities: HashSet<AuthorityName>,
-    partial: CertifiedRequestOrder,
+    partial: CertifiedRequest,
 }
 
 impl<'a> SignatureAggregator<'a> {
     /// Start aggregating signatures for the given value into a certificate.
-    pub fn try_new(value: RequestOrder, committee: &'a Committee) -> Result<Self, FastPayError> {
-        value.check_signature()?;
-        Ok(Self::new_unsafe(value, committee))
-    }
-
-    /// Same as try_new but we don't check the order.
-    pub fn new_unsafe(value: RequestOrder, committee: &'a Committee) -> Self {
+    pub fn new(value: Request, committee: &'a Committee) -> Self {
         Self {
             committee,
             weight: 0,
             used_authorities: HashSet::new(),
-            partial: CertifiedRequestOrder {
+            partial: CertifiedRequest {
                 value,
                 signatures: Vec::new(),
             },
@@ -276,8 +268,8 @@ impl<'a> SignatureAggregator<'a> {
         &mut self,
         authority: AuthorityName,
         signature: Signature,
-    ) -> Result<Option<CertifiedRequestOrder>, FastPayError> {
-        signature.check(&self.partial.value.request, authority)?;
+    ) -> Result<Option<CertifiedRequest>, FastPayError> {
+        signature.check(&self.partial.value, authority)?;
         // Check that each authority only appears once.
         fp_ensure!(
             !self.used_authorities.contains(&authority),
@@ -299,7 +291,7 @@ impl<'a> SignatureAggregator<'a> {
     }
 }
 
-impl CertifiedRequestOrder {
+impl CertifiedRequest {
     /// Verify the certificate.
     pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
         // Check the quorum.
@@ -322,16 +314,12 @@ impl CertifiedRequestOrder {
             FastPayError::CertificateRequiresQuorum
         );
         // All what is left is checking signatures!
-        let inner_sig = (self.value.owner, self.value.signature);
-        Signature::verify_batch(
-            &self.value.request,
-            std::iter::once(&inner_sig).chain(&self.signatures),
-        )
+        Signature::verify_batch(&self.value, &self.signatures)
     }
 }
 
 impl RedeemTransaction {
-    pub fn new(request_certificate: CertifiedRequestOrder) -> Self {
+    pub fn new(request_certificate: CertifiedRequest) -> Self {
         Self {
             request_certificate,
         }
@@ -339,7 +327,7 @@ impl RedeemTransaction {
 }
 
 impl ConfirmationOrder {
-    pub fn new(request_certificate: CertifiedRequestOrder) -> Self {
+    pub fn new(request_certificate: CertifiedRequest) -> Self {
         Self {
             request_certificate,
         }

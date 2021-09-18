@@ -321,7 +321,7 @@ impl AuthorityClient for Client {
         Box::pin(async move {
             let shard = AuthorityState::get_shard(
                 self.num_shards,
-                &order.request_certificate.value.request.account_id,
+                &order.request_certificate.value.account_id,
             );
             self.send_recv_bytes(shard, serialize_cert(&order.request_certificate))
                 .await
