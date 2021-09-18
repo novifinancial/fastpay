@@ -54,15 +54,15 @@ pub enum FastPayError {
         display = "Cannot initiate transfer while a transfer order is still pending confirmation: {:?}",
         pending_confirmation
     )]
-    PreviousTransferMustBeConfirmedFirst { pending_confirmation: TransferOrder },
-    #[fail(display = "Transfer order was processed but no signature was produced by authority")]
-    ErrorWhileProcessingTransferOrder,
+    PreviousRequestMustBeConfirmedFirst { pending_confirmation: RequestOrder },
+    #[fail(display = "Request order was processed but no signature was produced by authority")]
+    ErrorWhileProcessingRequestOrder,
     #[fail(
         display = "An invalid answer was returned by the authority while requesting a certificate"
     )]
     ErrorWhileRequestingCertificate,
     #[fail(
-        display = "Cannot confirm a transfer while previous transfer orders are still pending confirmation: {:?}",
+        display = "Cannot confirm a request while previous request orders are still pending confirmation: {:?}",
         current_sequence_number
     )]
     MissingEarlierConfirmations {
@@ -78,7 +78,7 @@ pub enum FastPayError {
     UnknownSenderAccount(AccountId),
     #[fail(display = "Signatures in a certificate must be from different authorities.")]
     CertificateAuthorityReuse,
-    #[fail(display = "Sequence numbers above the maximal value are not usable for transfers.")]
+    #[fail(display = "Sequence numbers above the maximal value are not usable for requests.")]
     InvalidSequenceNumber,
     #[fail(display = "Sequence number overflow.")]
     SequenceOverflow,

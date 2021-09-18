@@ -3,14 +3,14 @@ AccountId:
   NEWTYPESTRUCT:
     SEQ:
       TYPENAME: SequenceNumber
-AccountInfoRequest:
+AccountInfoQuery:
   STRUCT:
     - account_id:
         TYPENAME: AccountId
-    - request_sequence_number:
+    - query_sequence_number:
         OPTION:
           TYPENAME: SequenceNumber
-    - request_received_transfers_excluding_first_nth:
+    - query_received_requests_excluding_first_nth:
         OPTION: U64
 AccountInfoResponse:
   STRUCT:
@@ -25,13 +25,13 @@ AccountInfoResponse:
         TYPENAME: SequenceNumber
     - pending_confirmation:
         OPTION:
-          TYPENAME: SignedTransferOrder
-    - requested_certificate:
+          TYPENAME: SignedRequestOrder
+    - queried_certificate:
         OPTION:
-          TYPENAME: CertifiedTransferOrder
-    - requested_received_transfers:
+          TYPENAME: CertifiedRequestOrder
+    - queried_received_requests:
         SEQ:
-          TYPENAME: CertifiedTransferOrder
+          TYPENAME: CertifiedRequestOrder
 Address:
   ENUM:
     0:
@@ -46,10 +46,10 @@ Amount:
   NEWTYPESTRUCT: U64
 Balance:
   NEWTYPESTRUCT: I128
-CertifiedTransferOrder:
+CertifiedRequestOrder:
   STRUCT:
     - value:
-        TYPENAME: TransferOrder
+        TYPENAME: RequestOrder
     - signatures:
         SEQ:
           TUPLE:
@@ -66,7 +66,7 @@ ConfirmationOutcome:
 CrossShardRequest:
   STRUCT:
     - certificate:
-        TYPENAME: CertifiedTransferOrder
+        TYPENAME: CertifiedRequestOrder
 FastPayError:
   ENUM:
     0:
@@ -95,12 +95,12 @@ FastPayError:
         NEWTYPE:
           TYPENAME: AccountId
     9:
-      PreviousTransferMustBeConfirmedFirst:
+      PreviousRequestMustBeConfirmedFirst:
         STRUCT:
           - pending_confirmation:
-              TYPENAME: TransferOrder
+              TYPENAME: RequestOrder
     10:
-      ErrorWhileProcessingTransferOrder: UNIT
+      ErrorWhileProcessingRequestOrder: UNIT
     11:
       ErrorWhileRequestingCertificate: UNIT
     12:
@@ -156,7 +156,7 @@ Operation:
           - user_data:
               TYPENAME: UserData
     1:
-      CreateAccount:
+      OpenAccount:
         STRUCT:
           - new_id:
               TYPENAME: AccountId
@@ -174,6 +174,22 @@ PublicKeyBytes:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 32
+Request:
+  STRUCT:
+    - account_id:
+        TYPENAME: AccountId
+    - operation:
+        TYPENAME: Operation
+    - sequence_number:
+        TYPENAME: SequenceNumber
+RequestOrder:
+  STRUCT:
+    - request:
+        TYPENAME: Request
+    - owner:
+        TYPENAME: PublicKeyBytes
+    - signature:
+        TYPENAME: Signature
 SequenceNumber:
   NEWTYPESTRUCT: U64
 SerializedMessage:
@@ -181,23 +197,23 @@ SerializedMessage:
     0:
       Order:
         NEWTYPE:
-          TYPENAME: TransferOrder
+          TYPENAME: RequestOrder
     1:
       Vote:
         NEWTYPE:
-          TYPENAME: SignedTransferOrder
+          TYPENAME: SignedRequestOrder
     2:
       Confirmation:
         NEWTYPE:
-          TYPENAME: CertifiedTransferOrder
+          TYPENAME: CertifiedRequestOrder
     3:
       Error:
         NEWTYPE:
           TYPENAME: FastPayError
     4:
-      InfoRequest:
+      InfoQuery:
         NEWTYPE:
-          TYPENAME: AccountInfoRequest
+          TYPENAME: AccountInfoQuery
     5:
       InfoResponse:
         NEWTYPE:
@@ -211,27 +227,11 @@ Signature:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 64
-SignedTransferOrder:
+SignedRequestOrder:
   STRUCT:
     - value:
-        TYPENAME: TransferOrder
+        TYPENAME: RequestOrder
     - authority:
-        TYPENAME: PublicKeyBytes
-    - signature:
-        TYPENAME: Signature
-Transfer:
-  STRUCT:
-    - account_id:
-        TYPENAME: AccountId
-    - operation:
-        TYPENAME: Operation
-    - sequence_number:
-        TYPENAME: SequenceNumber
-TransferOrder:
-  STRUCT:
-    - transfer:
-        TYPENAME: Transfer
-    - owner:
         TYPENAME: PublicKeyBytes
     - signature:
         TYPENAME: Signature

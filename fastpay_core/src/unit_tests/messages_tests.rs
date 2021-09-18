@@ -17,7 +17,7 @@ fn test_signed_values() {
     authorities.insert(name2, /* voting right */ 0);
     let committee = Committee::new(authorities);
 
-    let transfer = Transfer {
+    let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Payment {
             recipient: Address::FastPay(dbg_account(2)),
@@ -26,20 +26,20 @@ fn test_signed_values() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = TransferOrder::new(transfer.clone(), &key1);
-    let mut bad_order = TransferOrder::new(transfer, &key2);
+    let order = RequestOrder::new(request.clone(), &key1);
+    let mut bad_order = RequestOrder::new(request, &key2);
     bad_order.owner = name1;
 
-    let v = SignedTransferOrder::new(order.clone(), &key1);
+    let v = SignedRequestOrder::new(order.clone(), &key1);
     assert!(v.check(&committee).is_ok());
 
-    let v = SignedTransferOrder::new(order.clone(), &key2);
+    let v = SignedRequestOrder::new(order.clone(), &key2);
     assert!(v.check(&committee).is_err());
 
-    let v = SignedTransferOrder::new(order, &key3);
+    let v = SignedRequestOrder::new(order, &key3);
     assert!(v.check(&committee).is_err());
 
-    let v = SignedTransferOrder::new(bad_order, &key1);
+    let v = SignedRequestOrder::new(bad_order, &key1);
     assert!(v.check(&committee).is_err());
 }
 
@@ -56,7 +56,7 @@ fn test_certificates() {
     authorities.insert(name2, /* voting right */ 1);
     let committee = Committee::new(authorities);
 
-    let transfer = Transfer {
+    let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Payment {
             recipient: Address::FastPay(dbg_account(1)),
@@ -65,13 +65,13 @@ fn test_certificates() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = TransferOrder::new(transfer.clone(), &key1);
-    let mut bad_order = TransferOrder::new(transfer, &key2);
+    let order = RequestOrder::new(request.clone(), &key1);
+    let mut bad_order = RequestOrder::new(request, &key2);
     bad_order.owner = name1;
 
-    let v1 = SignedTransferOrder::new(order.clone(), &key1);
-    let v2 = SignedTransferOrder::new(order.clone(), &key2);
-    let v3 = SignedTransferOrder::new(order.clone(), &key3);
+    let v1 = SignedRequestOrder::new(order.clone(), &key1);
+    let v2 = SignedRequestOrder::new(order.clone(), &key2);
+    let v3 = SignedRequestOrder::new(order.clone(), &key3);
 
     let mut builder = SignatureAggregator::try_new(order.clone(), &committee).unwrap();
     assert!(builder

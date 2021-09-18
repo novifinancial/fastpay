@@ -65,47 +65,47 @@ impl Operation {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Transfer {
+pub struct Request {
     pub account_id: AccountId,
     pub operation: Operation,
     pub sequence_number: SequenceNumber,
 }
 
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct TransferOrder {
-    pub transfer: Transfer,
+pub struct RequestOrder {
+    pub request: Request,
     pub owner: AccountOwner,
     pub signature: Signature,
 }
 
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct SignedTransferOrder {
-    pub value: TransferOrder,
+pub struct SignedRequestOrder {
+    pub value: RequestOrder,
     pub authority: AuthorityName,
     pub signature: Signature,
 }
 
 #[derive(Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct CertifiedTransferOrder {
-    pub value: TransferOrder,
+pub struct CertifiedRequestOrder {
+    pub value: RequestOrder,
     pub signatures: Vec<(AuthorityName, Signature)>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct RedeemTransaction {
-    pub transfer_certificate: CertifiedTransferOrder,
+    pub request_certificate: CertifiedRequestOrder,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct ConfirmationOrder {
-    pub transfer_certificate: CertifiedTransferOrder,
+    pub request_certificate: CertifiedRequestOrder,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct AccountInfoRequest {
+pub struct AccountInfoQuery {
     pub account_id: AccountId,
-    pub request_sequence_number: Option<SequenceNumber>,
-    pub request_received_transfers_excluding_first_nth: Option<usize>,
+    pub query_sequence_number: Option<SequenceNumber>,
+    pub query_received_requests_excluding_first_nth: Option<usize>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -114,9 +114,9 @@ pub struct AccountInfoResponse {
     pub owner: Option<AccountOwner>,
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
-    pub pending_confirmation: Option<SignedTransferOrder>,
-    pub requested_certificate: Option<CertifiedTransferOrder>,
-    pub requested_received_transfers: Vec<CertifiedTransferOrder>,
+    pub pending_confirmation: Option<SignedRequestOrder>,
+    pub queried_certificate: Option<CertifiedRequestOrder>,
+    pub queried_received_requests: Vec<CertifiedRequestOrder>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -128,35 +128,35 @@ pub enum ConfirmationOutcome {
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct CrossShardRequest {
-    pub certificate: CertifiedTransferOrder,
+    pub certificate: CertifiedRequestOrder,
 }
 
-impl Hash for TransferOrder {
+impl Hash for RequestOrder {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.transfer.hash(state);
+        self.request.hash(state);
     }
 }
 
-impl PartialEq for TransferOrder {
+impl PartialEq for RequestOrder {
     fn eq(&self, other: &Self) -> bool {
-        self.transfer == other.transfer
+        self.request == other.request
     }
 }
 
-impl Hash for SignedTransferOrder {
+impl Hash for SignedRequestOrder {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state);
         self.authority.hash(state);
     }
 }
 
-impl PartialEq for SignedTransferOrder {
+impl PartialEq for SignedRequestOrder {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value && self.authority == other.authority
     }
 }
 
-impl Hash for CertifiedTransferOrder {
+impl Hash for CertifiedRequestOrder {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state);
         self.signatures.len().hash(state);
@@ -166,7 +166,7 @@ impl Hash for CertifiedTransferOrder {
     }
 }
 
-impl PartialEq for CertifiedTransferOrder {
+impl PartialEq for CertifiedRequestOrder {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
             && self.signatures.len() == other.signatures.len()
@@ -178,11 +178,11 @@ impl PartialEq for CertifiedTransferOrder {
     }
 }
 
-impl TransferOrder {
+impl RequestOrder {
     pub fn key(&self) -> (AccountId, SequenceNumber) {
         (
-            self.transfer.account_id.clone(),
-            self.transfer.sequence_number,
+            self.request.account_id.clone(),
+            self.request.sequence_number,
         )
     }
 }
@@ -190,7 +190,7 @@ impl TransferOrder {
 /// Non-testing code should make the pattern matching explicit so that
 /// we kwow where to add protocols in the future.
 #[cfg(test)]
-impl Transfer {
+impl Request {
     pub(crate) fn amount(&self) -> Option<Amount> {
         match &self.operation {
             Operation::Payment { amount, .. } => Some(*amount),
@@ -206,25 +206,25 @@ impl Transfer {
     }
 }
 
-impl TransferOrder {
-    pub fn new(transfer: Transfer, secret: &KeyPair) -> Self {
-        let signature = Signature::new(&transfer, secret);
+impl RequestOrder {
+    pub fn new(request: Request, secret: &KeyPair) -> Self {
+        let signature = Signature::new(&request, secret);
         Self {
-            transfer,
+            request,
             owner: secret.public(),
             signature,
         }
     }
 
     pub fn check_signature(&self) -> Result<(), FastPayError> {
-        self.signature.check(&self.transfer, self.owner)
+        self.signature.check(&self.request, self.owner)
     }
 }
 
-impl SignedTransferOrder {
+impl SignedRequestOrder {
     /// Use signing key to create a signed object.
-    pub fn new(value: TransferOrder, key_pair: &KeyPair) -> Self {
-        let signature = Signature::new(&value.transfer, key_pair);
+    pub fn new(value: RequestOrder, key_pair: &KeyPair) -> Self {
+        let signature = Signature::new(&value.request, key_pair);
         Self {
             value,
             authority: key_pair.public(),
@@ -237,7 +237,7 @@ impl SignedTransferOrder {
         self.value.check_signature()?;
         let weight = committee.weight(&self.authority);
         fp_ensure!(weight > 0, FastPayError::UnknownSigner);
-        self.signature.check(&self.value.transfer, self.authority)?;
+        self.signature.check(&self.value.request, self.authority)?;
         Ok(weight)
     }
 }
@@ -246,23 +246,23 @@ pub struct SignatureAggregator<'a> {
     committee: &'a Committee,
     weight: usize,
     used_authorities: HashSet<AuthorityName>,
-    partial: CertifiedTransferOrder,
+    partial: CertifiedRequestOrder,
 }
 
 impl<'a> SignatureAggregator<'a> {
     /// Start aggregating signatures for the given value into a certificate.
-    pub fn try_new(value: TransferOrder, committee: &'a Committee) -> Result<Self, FastPayError> {
+    pub fn try_new(value: RequestOrder, committee: &'a Committee) -> Result<Self, FastPayError> {
         value.check_signature()?;
         Ok(Self::new_unsafe(value, committee))
     }
 
     /// Same as try_new but we don't check the order.
-    pub fn new_unsafe(value: TransferOrder, committee: &'a Committee) -> Self {
+    pub fn new_unsafe(value: RequestOrder, committee: &'a Committee) -> Self {
         Self {
             committee,
             weight: 0,
             used_authorities: HashSet::new(),
-            partial: CertifiedTransferOrder {
+            partial: CertifiedRequestOrder {
                 value,
                 signatures: Vec::new(),
             },
@@ -276,8 +276,8 @@ impl<'a> SignatureAggregator<'a> {
         &mut self,
         authority: AuthorityName,
         signature: Signature,
-    ) -> Result<Option<CertifiedTransferOrder>, FastPayError> {
-        signature.check(&self.partial.value.transfer, authority)?;
+    ) -> Result<Option<CertifiedRequestOrder>, FastPayError> {
+        signature.check(&self.partial.value.request, authority)?;
         // Check that each authority only appears once.
         fp_ensure!(
             !self.used_authorities.contains(&authority),
@@ -299,7 +299,7 @@ impl<'a> SignatureAggregator<'a> {
     }
 }
 
-impl CertifiedTransferOrder {
+impl CertifiedRequestOrder {
     /// Verify the certificate.
     pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
         // Check the quorum.
@@ -324,26 +324,26 @@ impl CertifiedTransferOrder {
         // All what is left is checking signatures!
         let inner_sig = (self.value.owner, self.value.signature);
         Signature::verify_batch(
-            &self.value.transfer,
+            &self.value.request,
             std::iter::once(&inner_sig).chain(&self.signatures),
         )
     }
 }
 
 impl RedeemTransaction {
-    pub fn new(transfer_certificate: CertifiedTransferOrder) -> Self {
+    pub fn new(request_certificate: CertifiedRequestOrder) -> Self {
         Self {
-            transfer_certificate,
+            request_certificate,
         }
     }
 }
 
 impl ConfirmationOrder {
-    pub fn new(transfer_certificate: CertifiedTransferOrder) -> Self {
+    pub fn new(request_certificate: CertifiedRequestOrder) -> Self {
         Self {
-            transfer_certificate,
+            request_certificate,
         }
     }
 }
 
-impl BcsSignable for Transfer {}
+impl BcsSignable for Request {}

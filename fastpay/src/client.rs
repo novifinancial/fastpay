@@ -88,16 +88,16 @@ fn make_client_state(
     )
 }
 
-/// Make one transfer order per account, up to `max_orders` transfers.
-fn make_benchmark_transfer_orders(
+/// Make one request order per account, up to `max_orders` requests.
+fn make_benchmark_request_orders(
     accounts_config: &mut AccountsConfig,
     max_orders: usize,
-) -> (Vec<TransferOrder>, Vec<(AccountId, Bytes)>) {
+) -> (Vec<RequestOrder>, Vec<(AccountId, Bytes)>) {
     let mut orders = Vec::new();
     let mut serialized_orders = Vec::new();
     let mut next_recipient = accounts_config.last_account().unwrap().account_id.clone();
     for account in accounts_config.accounts_mut() {
-        let transfer = Transfer {
+        let request = Request {
             account_id: account.account_id.clone(),
             operation: Operation::Payment {
                 recipient: Address::FastPay(next_recipient),
@@ -106,11 +106,11 @@ fn make_benchmark_transfer_orders(
             },
             sequence_number: account.next_sequence_number,
         };
-        debug!("Preparing transfer order: {:?}", transfer);
+        debug!("Preparing request order: {:?}", request);
         account.next_sequence_number = account.next_sequence_number.increment().unwrap();
-        let order = TransferOrder::new(transfer.clone(), &account.key_pair);
+        let order = RequestOrder::new(request.clone(), &account.key_pair);
         orders.push(order.clone());
-        let serialized_order = serialize_transfer_order(&order);
+        let serialized_order = serialize_request_order(&order);
         serialized_orders.push((account.account_id.clone(), serialized_order.into()));
         if serialized_orders.len() >= max_orders {
             break;
@@ -123,7 +123,7 @@ fn make_benchmark_transfer_orders(
 
 /// Try to make certificates from orders and server configs
 fn make_benchmark_certificates_from_orders_and_server_configs(
-    orders: Vec<TransferOrder>,
+    orders: Vec<RequestOrder>,
     server_config: Vec<&str>,
 ) -> Vec<(AccountId, Bytes)> {
     let mut keys = Vec::new();
@@ -141,17 +141,17 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
     );
     let mut serialized_certificates = Vec::new();
     for order in orders {
-        let mut certificate = CertifiedTransferOrder {
+        let mut certificate = CertifiedRequestOrder {
             value: order.clone(),
             signatures: Vec::new(),
         };
         for i in 0..committee.quorum_threshold() {
             let (pubx, secx) = keys.get(i).unwrap();
-            let sig = Signature::new(&certificate.value.transfer, secx);
+            let sig = Signature::new(&certificate.value.request, secx);
             certificate.signatures.push((*pubx, sig));
         }
         let serialized_certificate = serialize_cert(&certificate);
-        serialized_certificates.push((order.transfer.account_id, serialized_certificate.into()));
+        serialized_certificates.push((order.request.account_id, serialized_certificate.into()));
     }
     serialized_certificates
 }
@@ -159,7 +159,7 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
 /// Try to aggregate votes into certificates.
 fn make_benchmark_certificates_from_votes(
     committee_config: &CommitteeConfig,
-    votes: Vec<SignedTransferOrder>,
+    votes: Vec<SignedRequestOrder>,
 ) -> Vec<(AccountId, Bytes)> {
     let committee = Committee::new(committee_config.voting_rights());
     let mut aggregators = HashMap::new();
@@ -167,12 +167,12 @@ fn make_benchmark_certificates_from_votes(
     let mut done_senders = HashSet::new();
     for vote in votes {
         // We aggregate votes indexed by sender.
-        let account_id = vote.value.transfer.account_id.clone();
+        let account_id = vote.value.request.account_id.clone();
         if done_senders.contains(&account_id) {
             continue;
         }
         debug!(
-            "Processing vote on {:?}'s transfer by {:?}",
+            "Processing vote on {:?}'s request by {:?}",
             account_id, vote.authority,
         );
         let value = vote.value;
@@ -250,7 +250,7 @@ fn mass_update_recipients(
 ) {
     for (_sender, buf) in certificates {
         if let Ok(SerializedMessage::Confirmation(certificate)) = deserialize_message(&buf[..]) {
-            accounts_config.update_for_received_transfer(*certificate);
+            accounts_config.update_for_received_request(*certificate);
         }
     }
 }
@@ -457,11 +457,11 @@ fn main() {
 
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
-                warn!("Starting benchmark phase 1 (transfer orders)");
+                warn!("Starting benchmark phase 1 (request orders)");
                 let (orders, serialize_orders) =
-                    make_benchmark_transfer_orders(&mut accounts_config, max_orders);
+                    make_benchmark_request_orders(&mut accounts_config, max_orders);
                 let responses = mass_broadcast_orders(
-                    "transfer",
+                    "request",
                     &committee_config,
                     buffer_size,
                     send_timeout,
@@ -509,7 +509,7 @@ fn main() {
                             None => acc,
                         });
                 warn!(
-                    "Received {} valid confirmations for {} transfers.",
+                    "Received {} valid confirmations for {} requests.",
                     num_valid,
                     confirmed.len()
                 );
