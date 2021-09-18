@@ -142,7 +142,7 @@ impl ClientServerBenchmark {
             };
             states[shard].accounts.insert(id.clone(), client);
 
-            let transfer = Transfer {
+            let request = Request {
                 account_id: id.clone(),
                 operation: Operation::Payment {
                     recipient: Address::FastPay(next_recipient),
@@ -151,21 +151,21 @@ impl ClientServerBenchmark {
                 },
                 sequence_number: SequenceNumber::from(0),
             };
-            let order = TransferOrder::new(transfer.clone(), &key_pair);
+            let order = RequestOrder::new(request.clone(), &key_pair);
             let shard = AuthorityState::get_shard(self.num_shards, &id);
 
             // Serialize order
-            let bufx = serialize_transfer_order(&order);
+            let bufx = serialize_request_order(&order);
             assert!(!bufx.is_empty());
 
             // Make certificate
-            let mut certificate = CertifiedTransferOrder {
+            let mut certificate = CertifiedRequestOrder {
                 value: order,
                 signatures: Vec::new(),
             };
             for i in 0..committee.quorum_threshold() {
                 let key = keys.get(i).unwrap();
-                let sig = Signature::new(&certificate.value.transfer, key);
+                let sig = Signature::new(&certificate.value.request, key);
                 certificate.signatures.push((key.public(), sig));
             }
 

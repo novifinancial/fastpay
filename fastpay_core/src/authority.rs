@@ -18,13 +18,13 @@ pub struct AccountState {
     /// Sequence number tracking orders.
     pub next_sequence_number: SequenceNumber,
     /// Whether we have signed a transfer for this sequence number already.
-    pub pending_confirmation: Option<SignedTransferOrder>,
+    pub pending_confirmation: Option<SignedRequestOrder>,
     /// All confirmed certificates for this sender.
-    pub confirmed_log: Vec<CertifiedTransferOrder>,
+    pub confirmed_log: Vec<CertifiedRequestOrder>,
     /// All executed Primary synchronization orders for this recipient.
     pub synchronization_log: Vec<PrimarySynchronizationOrder>,
     /// All confirmed certificates as a receiver.
-    pub received_log: Vec<CertifiedTransferOrder>,
+    pub received_log: Vec<CertifiedRequestOrder>,
 }
 
 pub struct AuthorityState {
@@ -57,54 +57,54 @@ pub enum CrossShardContinuation {
 /// All commands return either the current account info or an error.
 /// Repeating commands produces no changes and returns no error.
 pub trait Authority {
-    /// Initiate a new transfer to a FastPay or Primary account.
-    fn handle_transfer_order(
+    /// Initiate a new request to a FastPay or Primary account.
+    fn handle_request_order(
         &mut self,
-        order: TransferOrder,
+        order: RequestOrder,
     ) -> Result<AccountInfoResponse, FastPayError>;
 
-    /// Confirm a transfer to a FastPay or Primary account.
+    /// Confirm a request to a FastPay or Primary account.
     fn handle_confirmation_order(
         &mut self,
         order: ConfirmationOrder,
     ) -> Result<(AccountInfoResponse, CrossShardContinuation), FastPayError>;
 
-    /// Force synchronization to finalize transfers from Primary to FastPay.
+    /// Force synchronization to finalize requests from Primary to FastPay.
     fn handle_primary_synchronization_order(
         &mut self,
         order: PrimarySynchronizationOrder,
     ) -> Result<AccountInfoResponse, FastPayError>;
 
-    /// Handle information requests for this account.
-    fn handle_account_info_request(
+    /// Handle information queries for this account.
+    fn handle_account_info_query(
         &self,
-        request: AccountInfoRequest,
+        query: AccountInfoQuery,
     ) -> Result<AccountInfoResponse, FastPayError>;
 
     /// (Trusted) Try to update the recipient account in a confirmation order.
     /// Returns the next action to execute.
     fn update_recipient_account(
         &mut self,
-        certificate: CertifiedTransferOrder,
+        certificate: CertifiedRequestOrder,
     ) -> Result<(), FastPayError>;
 }
 
 impl Authority for AuthorityState {
-    /// Initiate a new transfer.
-    fn handle_transfer_order(
+    /// Initiate a new request.
+    fn handle_request_order(
         &mut self,
-        order: TransferOrder,
+        order: RequestOrder,
     ) -> Result<AccountInfoResponse, FastPayError> {
-        // Check the sender's signature and retrieve the transfer data.
+        // Check the sender's signature and retrieve the request data.
         fp_ensure!(
-            self.in_shard(&order.transfer.account_id),
+            self.in_shard(&order.request.account_id),
             FastPayError::WrongShard
         );
         order.check_signature()?;
-        let transfer = &order.transfer;
-        let account_id = order.transfer.account_id.clone();
+        let request = &order.request;
+        let account_id = order.request.account_id.clone();
         fp_ensure!(
-            transfer.sequence_number <= SequenceNumber::max(),
+            request.sequence_number <= SequenceNumber::max(),
             FastPayError::InvalidSequenceNumber
         );
         match self.accounts.get_mut(&account_id) {
@@ -116,19 +116,19 @@ impl Authority for AuthorityState {
                 );
                 if let Some(pending_confirmation) = &account.pending_confirmation {
                     fp_ensure!(
-                        &pending_confirmation.value.transfer == transfer,
-                        FastPayError::PreviousTransferMustBeConfirmedFirst {
+                        &pending_confirmation.value.request == request,
+                        FastPayError::PreviousRequestMustBeConfirmedFirst {
                             pending_confirmation: pending_confirmation.value.clone()
                         }
                     );
-                    // This exact transfer order was already signed. Return the previous value.
+                    // This exact request order was already signed. Return the previous value.
                     return Ok(account.make_account_info(account_id));
                 }
                 fp_ensure!(
-                    account.next_sequence_number == transfer.sequence_number,
+                    account.next_sequence_number == request.sequence_number,
                     FastPayError::UnexpectedSequenceNumber
                 );
-                match &transfer.operation {
+                match &request.operation {
                     Operation::Payment { amount, .. } => {
                         fp_ensure!(
                             *amount > Amount::zero(),
@@ -142,7 +142,7 @@ impl Authority for AuthorityState {
                         );
                     }
                     Operation::OpenAccount { new_id, .. } => {
-                        let expected_id = account_id.make_child(transfer.sequence_number);
+                        let expected_id = account_id.make_child(request.sequence_number);
                         fp_ensure!(
                             new_id == &expected_id,
                             FastPayError::InvalidNewAccountId(new_id.clone())
@@ -150,27 +150,27 @@ impl Authority for AuthorityState {
                     }
                     Operation::CloseAccount | Operation::ChangeOwner { .. } => (), // Nothing to check.
                 }
-                let signed_order = SignedTransferOrder::new(order, &self.key_pair);
+                let signed_order = SignedRequestOrder::new(order, &self.key_pair);
                 account.pending_confirmation = Some(signed_order);
                 Ok(account.make_account_info(account_id))
             }
         }
     }
 
-    /// Confirm a transfer.
+    /// Confirm a request.
     fn handle_confirmation_order(
         &mut self,
         confirmation_order: ConfirmationOrder,
     ) -> Result<(AccountInfoResponse, CrossShardContinuation), FastPayError> {
-        let certificate = confirmation_order.transfer_certificate;
-        // Check the certificate and retrieve the transfer data.
+        let certificate = confirmation_order.request_certificate;
+        // Check the certificate and retrieve the request data.
         fp_ensure!(
-            self.in_shard(&certificate.value.transfer.account_id),
+            self.in_shard(&certificate.value.request.account_id),
             FastPayError::WrongShard
         );
         certificate.check(&self.committee)?;
-        let sender = certificate.value.transfer.account_id.clone();
-        let transfer = certificate.value.transfer.clone();
+        let sender = certificate.value.request.account_id.clone();
+        let request = certificate.value.request.clone();
 
         let mut sender_account = self
             .accounts
@@ -180,13 +180,13 @@ impl Authority for AuthorityState {
             sender_account.owner.is_some(),
             FastPayError::AccountIsNotReady
         );
-        if sender_account.next_sequence_number < transfer.sequence_number {
+        if sender_account.next_sequence_number < request.sequence_number {
             fp_bail!(FastPayError::MissingEarlierConfirmations {
                 current_sequence_number: sender_account.next_sequence_number
             });
         }
-        if sender_account.next_sequence_number > transfer.sequence_number {
-            // Transfer was already confirmed.
+        if sender_account.next_sequence_number > request.sequence_number {
+            // Request was already confirmed.
             let info = sender_account.make_account_info(sender.clone());
             return Ok((info, CrossShardContinuation::Done));
         }
@@ -197,7 +197,7 @@ impl Authority for AuthorityState {
         sender_account.confirmed_log.push(certificate.clone());
 
         // Execute the sender's side of the operation.
-        let info = match &transfer.operation {
+        let info = match &request.operation {
             Operation::OpenAccount { .. } => sender_account.make_account_info(sender.clone()),
             Operation::ChangeOwner { new_owner } => {
                 sender_account.owner = Some(*new_owner);
@@ -215,7 +215,7 @@ impl Authority for AuthorityState {
             }
         };
 
-        if let Some(recipient) = transfer.operation.recipient() {
+        if let Some(recipient) = request.operation.recipient() {
             // Update recipient.
             if self.in_shard(recipient) {
                 // Execute the operation locally.
@@ -235,11 +235,11 @@ impl Authority for AuthorityState {
 
     fn update_recipient_account(
         &mut self,
-        certificate: CertifiedTransferOrder,
+        certificate: CertifiedRequestOrder,
     ) -> Result<(), FastPayError> {
-        let transfer = &certificate.value.transfer;
+        let request = &certificate.value.request;
         // Execute the recipient's side of the operation.
-        match &transfer.operation {
+        match &request.operation {
             Operation::Payment {
                 recipient: Address::FastPay(recipient),
                 amount,
@@ -271,7 +271,7 @@ impl Authority for AuthorityState {
         Ok(())
     }
 
-    /// Finalize a transfer from Primary.
+    /// Finalize a request from Primary.
     fn handle_primary_synchronization_order(
         &mut self,
         order: PrimarySynchronizationOrder,
@@ -297,22 +297,22 @@ impl Authority for AuthorityState {
         Ok(recipient_account.make_account_info(recipient))
     }
 
-    fn handle_account_info_request(
+    fn handle_account_info_query(
         &self,
-        request: AccountInfoRequest,
+        query: AccountInfoQuery,
     ) -> Result<AccountInfoResponse, FastPayError> {
-        fp_ensure!(self.in_shard(&request.account_id), FastPayError::WrongShard);
-        let account = self.account_state(&request.account_id)?;
-        let mut response = account.make_account_info(request.account_id);
-        if let Some(seq) = request.request_sequence_number {
+        fp_ensure!(self.in_shard(&query.account_id), FastPayError::WrongShard);
+        let account = self.account_state(&query.account_id)?;
+        let mut response = account.make_account_info(query.account_id);
+        if let Some(seq) = query.query_sequence_number {
             if let Some(cert) = account.confirmed_log.get(usize::from(seq)) {
-                response.requested_certificate = Some(cert.clone());
+                response.queried_certificate = Some(cert.clone());
             } else {
                 fp_bail!(FastPayError::CertificateNotfound)
             }
         }
-        if let Some(idx) = request.request_received_transfers_excluding_first_nth {
-            response.requested_received_transfers = account.received_log[idx..].to_vec();
+        if let Some(idx) = query.query_received_requests_excluding_first_nth {
+            response.queried_received_requests = account.received_log[idx..].to_vec();
         }
         Ok(response)
     }
@@ -340,8 +340,8 @@ impl AccountState {
             balance: self.balance,
             next_sequence_number: self.next_sequence_number,
             pending_confirmation: self.pending_confirmation.clone(),
-            requested_certificate: None,
-            requested_received_transfers: Vec::new(),
+            queried_certificate: None,
+            queried_received_requests: Vec::new(),
         }
     }
 
@@ -349,7 +349,7 @@ impl AccountState {
     pub fn new_with_balance(
         owner: AccountOwner,
         balance: Balance,
-        received_log: Vec<CertifiedTransferOrder>,
+        received_log: Vec<CertifiedRequestOrder>,
     ) -> Self {
         Self {
             owner: Some(owner),

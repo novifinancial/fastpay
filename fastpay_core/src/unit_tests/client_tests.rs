@@ -18,12 +18,12 @@ use tokio::runtime::Runtime;
 struct LocalAuthorityClient(Arc<Mutex<AuthorityState>>);
 
 impl AuthorityClient for LocalAuthorityClient {
-    fn handle_transfer_order(
+    fn handle_request_order(
         &mut self,
-        order: TransferOrder,
+        order: RequestOrder,
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         let state = self.0.clone();
-        Box::pin(async move { state.lock().await.handle_transfer_order(order) })
+        Box::pin(async move { state.lock().await.handle_request_order(order) })
     }
 
     fn handle_confirmation_order(
@@ -40,12 +40,12 @@ impl AuthorityClient for LocalAuthorityClient {
         })
     }
 
-    fn handle_account_info_request(
+    fn handle_account_info_query(
         &mut self,
-        request: AccountInfoRequest,
+        query: AccountInfoQuery,
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         let state = self.0.clone();
-        Box::pin(async move { state.lock().await.handle_account_info_request(request) })
+        Box::pin(async move { state.lock().await.handle_account_info_query(query) })
     }
 }
 
@@ -215,13 +215,13 @@ fn test_initiating_valid_transfer() {
         ))
         .unwrap();
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(sender.pending_transfer, None);
+    assert_eq!(sender.pending_request, None);
     assert_eq!(
         rt.block_on(sender.get_strong_majority_balance()),
         Balance::from(1)
     );
     assert_eq!(
-        rt.block_on(sender.request_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
+        rt.block_on(sender.query_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
             .unwrap(),
         certificate
     );
@@ -240,13 +240,13 @@ fn test_initiating_valid_transfer_despite_bad_authority() {
         ))
         .unwrap();
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(sender.pending_transfer, None);
+    assert_eq!(sender.pending_request, None);
     assert_eq!(
         rt.block_on(sender.get_strong_majority_balance()),
         Balance::from(1)
     );
     assert_eq!(
-        rt.block_on(sender.request_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
+        rt.block_on(sender.query_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
             .unwrap(),
         certificate
     );
@@ -262,7 +262,7 @@ fn test_initiating_transfer_low_funds() {
         .is_err());
     // Trying to overspend does not block an account.
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(0));
-    assert_eq!(sender.pending_transfer, None);
+    assert_eq!(sender.pending_request, None);
     assert_eq!(
         rt.block_on(sender.get_strong_majority_balance()),
         Balance::from(2)
@@ -300,7 +300,7 @@ fn test_bidirectional_transfer() {
         .unwrap();
 
     assert_eq!(client1.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(client1.pending_transfer, None);
+    assert_eq!(client1.pending_request, None);
     assert_eq!(
         rt.block_on(client1.get_strong_majority_balance()),
         Balance::from(0)
@@ -312,10 +312,8 @@ fn test_bidirectional_transfer() {
     );
 
     assert_eq!(
-        rt.block_on(
-            client1.request_certificate(client1.account_id.clone(), SequenceNumber::from(0))
-        )
-        .unwrap(),
+        rt.block_on(client1.query_certificate(client1.account_id.clone(), SequenceNumber::from(0)))
+            .unwrap(),
         certificate
     );
     // Our sender already confirmed.
@@ -342,7 +340,7 @@ fn test_bidirectional_transfer() {
     ))
     .unwrap();
     assert_eq!(client2.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(client2.pending_transfer, None);
+    assert_eq!(client2.pending_request, None);
     assert_eq!(
         rt.block_on(client2.get_strong_majority_balance()),
         Balance::from(2)
@@ -386,7 +384,7 @@ fn test_receiving_unconfirmed_transfer() {
     // Transfer was executed locally, creating negative balance.
     assert_eq!(client1.balance, Balance::from(-2));
     assert_eq!(client1.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(client1.pending_transfer, None);
+    assert_eq!(client1.pending_request, None);
     // ..but not confirmed remotely, hence an unchanged balance and sequence number.
     assert_eq!(
         rt.block_on(client1.get_strong_majority_balance()),
@@ -451,7 +449,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
             .await
             .unwrap();
         client0
-            .communicate_transfers(
+            .communicate_requests(
                 client0.account_id.clone(),
                 client0.sent_certificates.clone(),
                 CommunicateAction::SynchronizeNextSequenceNumber(client0.next_sequence_number),
@@ -459,7 +457,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
             .await
             .unwrap();
     });
-    // transferring funds from client1 to client2 without confirmation
+    // requestring funds from client1 to client2 without confirmation
     let certificate = rt
         .block_on(client1.transfer_to_fastpay_unsafe_unconfirmed(
             Amount::from(2),
@@ -467,13 +465,13 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
             UserData::default(),
         ))
         .unwrap();
-    // Transfers were executed locally, possibly creating negative balances.
+    // Requests were executed locally, possibly creating negative balances.
     assert_eq!(client0.balance, Balance::from(-2));
     assert_eq!(client0.next_sequence_number, SequenceNumber::from(2));
-    assert_eq!(client0.pending_transfer, None);
+    assert_eq!(client0.pending_request, None);
     assert_eq!(client1.balance, Balance::from(-2));
     assert_eq!(client1.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(client1.pending_transfer, None);
+    assert_eq!(client1.pending_request, None);
     // Last one was not confirmed remotely, hence an unchanged (remote) balance and sequence number.
     assert_eq!(
         rt.block_on(client1.get_strong_majority_balance()),
