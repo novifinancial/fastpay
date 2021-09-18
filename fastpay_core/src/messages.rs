@@ -8,10 +8,7 @@ use super::{base_types::*, committee::Committee, error::*};
 mod messages_tests;
 
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashSet,
-    hash::{Hash, Hasher},
-};
+use std::collections::HashSet;
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct FundingTransaction {
@@ -71,44 +68,51 @@ pub struct Request {
     pub sequence_number: SequenceNumber,
 }
 
-#[derive(Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct RequestOrder {
     pub request: Request,
     pub owner: AccountOwner,
     pub signature: Signature,
 }
 
-#[derive(Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct SignedRequest {
     pub value: Request,
     pub authority: AuthorityName,
     pub signature: Signature,
 }
 
-#[derive(Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CertifiedRequest {
     pub value: Request,
     pub signatures: Vec<(AuthorityName, Signature)>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct RedeemTransaction {
     pub request_certificate: CertifiedRequest,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct ConfirmationOrder {
     pub request_certificate: CertifiedRequest,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct AccountInfoQuery {
     pub account_id: AccountId,
     pub query_sequence_number: Option<SequenceNumber>,
     pub query_received_requests_excluding_first_nth: Option<usize>,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct AccountInfoResponse {
     pub account_id: AccountId,
     pub owner: Option<AccountOwner>,
@@ -126,58 +130,10 @@ pub enum ConfirmationOutcome {
     Cancel,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CrossShardRequest {
     pub certificate: CertifiedRequest,
-}
-
-impl Hash for RequestOrder {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.request.hash(state);
-        self.owner.hash(state);
-    }
-}
-
-impl PartialEq for RequestOrder {
-    fn eq(&self, other: &Self) -> bool {
-        self.request == other.request && self.owner == other.owner
-    }
-}
-
-impl Hash for SignedRequest {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.value.hash(state);
-        self.authority.hash(state);
-    }
-}
-
-impl PartialEq for SignedRequest {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value && self.authority == other.authority
-    }
-}
-
-// TODO: review this
-impl Hash for CertifiedRequest {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.value.hash(state);
-        self.signatures.len().hash(state);
-        for (name, _) in self.signatures.iter() {
-            name.hash(state);
-        }
-    }
-}
-
-impl PartialEq for CertifiedRequest {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-            && self.signatures.len() == other.signatures.len()
-            && self
-                .signatures
-                .iter()
-                .map(|(name, _)| name)
-                .eq(other.signatures.iter().map(|(name, _)| name))
-    }
 }
 
 impl Request {

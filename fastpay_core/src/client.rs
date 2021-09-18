@@ -587,7 +587,8 @@ where
         with_confirmation: bool,
     ) -> Result<CertifiedRequest, failure::Error> {
         ensure!(
-            self.pending_request == None || self.pending_request.as_ref() == Some(&order),
+            self.pending_request.is_none()
+                || self.pending_request.as_ref().unwrap().request == order.request,
             "Client state has a different pending request",
         );
         ensure!(
