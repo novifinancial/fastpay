@@ -9,7 +9,8 @@ use std::collections::BTreeMap;
 mod authority_tests;
 
 /// State of an (offchain) FastPay account.
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct AccountState {
     /// Owner of the account. An account without owner cannot execute operations.
     pub owner: Option<AccountOwner>,
