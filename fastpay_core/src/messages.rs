@@ -215,7 +215,11 @@ impl RequestOrder {
         }
     }
 
-    pub fn check_signature(&self) -> Result<(), FastPayError> {
+    pub fn check(&self, authentication_method: &Option<AccountOwner>) -> Result<(), FastPayError> {
+        fp_ensure!(
+            authentication_method == &Some(self.owner),
+            FastPayError::InvalidOwner
+        );
         self.signature.check(&self.request, self.owner)
     }
 }

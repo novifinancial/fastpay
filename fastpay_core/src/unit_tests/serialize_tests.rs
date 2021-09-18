@@ -254,9 +254,10 @@ fn test_time_order() {
 
     let mut buf2 = buf.as_slice();
     let now = Instant::now();
+    let owner = Some(sender_key.public());
     for _ in 0..100 {
         if let SerializedMessage::Order(order) = deserialize_message(&mut buf2).unwrap() {
-            order.check_signature().unwrap();
+            order.check(&owner).unwrap();
         }
     }
     assert!(deserialize_message(&mut buf2).is_err());
