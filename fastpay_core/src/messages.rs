@@ -40,7 +40,7 @@ pub enum Operation {
         amount: Amount,
         user_data: UserData,
     },
-    CreateAccount {
+    OpenAccount {
         new_id: AccountId,
         new_owner: AccountOwner,
     },
@@ -58,7 +58,7 @@ impl Operation {
                 recipient: Address::FastPay(id),
                 ..
             } => Some(id),
-            CreateAccount { new_id, .. } => Some(new_id),
+            OpenAccount { new_id, .. } => Some(new_id),
             Operation::CloseAccount | Payment { .. } | ChangeOwner { .. } => None,
         }
     }
