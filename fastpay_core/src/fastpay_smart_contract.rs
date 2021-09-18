@@ -72,7 +72,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
         transaction.request_certificate.check(&self.committee)?;
         let request = transaction.request_certificate.value;
         match &request.operation {
-            Operation::Payment {
+            Operation::Transfer {
                 amount,
                 recipient: Address::Primary(_),
                 ..
@@ -94,7 +94,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
                 // Request Primary coins to recipient
                 Ok(())
             }
-            Operation::Payment { .. }
+            Operation::Transfer { .. }
             | Operation::OpenAccount { .. }
             | Operation::CloseAccount
             | Operation::ChangeOwner { .. } => {

@@ -129,7 +129,7 @@ impl Authority for AuthorityState {
                     FastPayError::UnexpectedSequenceNumber
                 );
                 match &request.operation {
-                    Operation::Payment { amount, .. } => {
+                    Operation::Transfer { amount, .. } => {
                         fp_ensure!(
                             *amount > Amount::zero(),
                             FastPayError::IncorrectTransferAmount
@@ -209,7 +209,7 @@ impl Authority for AuthorityState {
                 info.owner = None; // Signal that the account was deleted.
                 info
             }
-            Operation::Payment { amount, .. } => {
+            Operation::Transfer { amount, .. } => {
                 sender_account.balance = sender_account.balance.try_sub((*amount).into())?;
                 sender_account.make_account_info(sender.clone())
             }
@@ -240,7 +240,7 @@ impl Authority for AuthorityState {
         let request = &certificate.value;
         // Execute the recipient's side of the operation.
         match &request.operation {
-            Operation::Payment {
+            Operation::Transfer {
                 recipient: Address::FastPay(recipient),
                 amount,
                 ..
@@ -261,7 +261,7 @@ impl Authority for AuthorityState {
                 account.received_log.push(certificate.clone());
             }
             Operation::CloseAccount
-            | Operation::Payment {
+            | Operation::Transfer {
                 recipient: Address::Primary(_),
                 ..
             }

@@ -19,7 +19,7 @@ fn test_signed_values() {
 
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::FastPay(dbg_account(2)),
             amount: Amount::from(1),
             user_data: UserData::default(),
@@ -52,7 +52,7 @@ fn test_certificates() {
 
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::FastPay(dbg_account(1)),
             amount: Amount::from(1),
             user_data: UserData::default(),

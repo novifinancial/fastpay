@@ -144,7 +144,7 @@ fn init_funding_transaction() -> FundingTransaction {
 fn init_redeem_transaction(committee: Committee, secret: KeyPair) -> RedeemTransaction {
     let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::Primary(dbg_addr(2)),
             amount: Amount::from(3),
             user_data: UserData::default(),

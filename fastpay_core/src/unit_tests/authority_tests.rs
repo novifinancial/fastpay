@@ -495,7 +495,7 @@ fn init_request_order(
 ) -> RequestOrder {
     let request = Request {
         account_id,
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient,
             amount,
             user_data: UserData::default(),

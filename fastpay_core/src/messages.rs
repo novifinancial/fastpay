@@ -35,7 +35,7 @@ pub enum Address {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Operation {
-    Payment {
+    Transfer {
         recipient: Address,
         amount: Amount,
         user_data: UserData,
@@ -54,12 +54,12 @@ impl Operation {
     pub fn recipient(&self) -> Option<&AccountId> {
         use Operation::*;
         match self {
-            Payment {
+            Transfer {
                 recipient: Address::FastPay(id),
                 ..
             } => Some(id),
             OpenAccount { new_id, .. } => Some(new_id),
-            Operation::CloseAccount | Payment { .. } | ChangeOwner { .. } => None,
+            Operation::CloseAccount | Transfer { .. } | ChangeOwner { .. } => None,
         }
     }
 }
@@ -192,14 +192,14 @@ impl Request {
 impl Request {
     pub(crate) fn amount(&self) -> Option<Amount> {
         match &self.operation {
-            Operation::Payment { amount, .. } => Some(*amount),
+            Operation::Transfer { amount, .. } => Some(*amount),
             _ => None,
         }
     }
 
     pub(crate) fn amount_mut(&mut self) -> Option<&mut Amount> {
         match &mut self.operation {
-            Operation::Payment { amount, .. } => Some(amount),
+            Operation::Transfer { amount, .. } => Some(amount),
             _ => None,
         }
     }

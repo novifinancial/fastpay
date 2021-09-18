@@ -148,7 +148,7 @@ impl AccountsConfig {
 
     pub fn update_for_received_request(&mut self, certificate: CertifiedRequest) {
         let request = &certificate.value;
-        if let Operation::Payment {
+        if let Operation::Transfer {
             recipient: Address::FastPay(recipient),
             amount,
             ..

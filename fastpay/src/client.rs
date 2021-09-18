@@ -99,7 +99,7 @@ fn make_benchmark_request_orders(
     for account in accounts_config.accounts_mut() {
         let request = Request {
             account_id: account.account_id.clone(),
-            operation: Operation::Payment {
+            operation: Operation::Transfer {
                 recipient: Address::FastPay(next_recipient),
                 amount: Amount::from(1),
                 user_data: UserData::default(),
@@ -279,7 +279,7 @@ fn deserialize_response(response: &[u8]) -> Option<AccountInfoResponse> {
 #[derive(StructOpt)]
 #[structopt(
     name = "FastPay Client",
-    about = "A Byzantine fault tolerant payments sidechain with low-latency finality and high throughput"
+    about = "A Byzantine-fault tolerant sidechain with low-latency finality and high throughput"
 )]
 struct ClientOpt {
     /// Sets the file storing the state of our user accounts (an empty one will be created if missing)
