@@ -104,11 +104,7 @@ impl Authority for AuthorityState {
         match self.accounts.get_mut(&account_id) {
             None => fp_bail!(FastPayError::UnknownSenderAccount(account_id)),
             Some(account) => {
-                fp_ensure!(
-                    account.owner == Some(order.owner),
-                    FastPayError::InvalidOwner
-                );
-                order.check_signature()?;
+                order.check(&account.owner)?;
                 let request = order.request;
                 fp_ensure!(
                     request.sequence_number <= SequenceNumber::max(),
