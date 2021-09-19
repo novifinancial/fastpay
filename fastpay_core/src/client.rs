@@ -534,6 +534,7 @@ where
                 }
                 Operation::OpenAccount { .. }
                 | Operation::CloseAccount
+                | Operation::Spend { .. }
                 | Operation::ChangeOwner { .. } => (),
             }
             if request.sequence_number >= new_next_sequence_number {
@@ -567,6 +568,7 @@ where
                 }
                 Operation::OpenAccount { .. }
                 | Operation::CloseAccount
+                | Operation::Spend { .. }
                 | Operation::ChangeOwner { .. } => (),
             }
         }
@@ -690,6 +692,7 @@ where
                 }
                 Operation::OpenAccount { .. }
                 | Operation::CloseAccount
+                | Operation::Spend { .. }
                 | Operation::ChangeOwner { .. } => {
                     // TODO: decide what to do
                 }
@@ -713,6 +716,7 @@ where
                     }
                     Operation::OpenAccount { .. }
                     | Operation::CloseAccount
+                    | Operation::Spend { .. }
                     | Operation::ChangeOwner { .. } => (),
                 }
                 entry.insert(certificate);

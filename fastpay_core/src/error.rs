@@ -102,6 +102,8 @@ pub enum FastPayError {
     UnexpectedMessage,
     #[fail(display = "InvalidConfirmationOrder.")]
     InvalidConfirmationOrder,
+    #[fail(display = "InvalidCoinCreationOrder.")]
+    InvalidCoinCreationOrder,
     #[fail(display = "Network error while querying service: {:?}.", error)]
     ClientIoError { error: String },
 }
