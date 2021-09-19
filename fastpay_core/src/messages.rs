@@ -124,7 +124,7 @@ pub struct AccountInfoResponse {
     pub owner: Option<AccountOwner>,
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
-    pub pending_confirmation: Option<Vote>,
+    pub pending: Option<Vote>,
     pub queried_certificate: Option<Certificate>,
     pub queried_received_requests: Vec<Certificate>,
 }

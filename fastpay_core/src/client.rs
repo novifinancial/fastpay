@@ -416,15 +416,15 @@ where
                         let result = client.handle_request_order(order).await;
                         match result {
                             Ok(AccountInfoResponse {
-                                pending_confirmation: Some(signed_order),
+                                pending: Some(vote),
                                 ..
                             }) => {
                                 fp_ensure!(
-                                    signed_order.authority == name,
+                                    vote.authority == name,
                                     FastPayError::ErrorWhileProcessingRequestOrder
                                 );
-                                signed_order.check(committee)?;
-                                return Ok(Some(signed_order));
+                                vote.check(committee)?;
+                                return Ok(Some(vote));
                             }
                             Err(err) => return Err(err),
                             _ => return Err(FastPayError::ErrorWhileProcessingRequestOrder),
@@ -443,9 +443,7 @@ where
                 signatures: votes
                     .into_iter()
                     .filter_map(|vote| match vote {
-                        Some(signed_order) => {
-                            Some((signed_order.authority, signed_order.signature))
-                        }
+                        Some(vote) => Some((vote.authority, vote.signature)),
                         None => None,
                     })
                     .collect(),

@@ -52,9 +52,9 @@ pub enum FastPayError {
     InvalidNewAccountId(AccountId),
     #[fail(
         display = "Cannot initiate transfer while a transfer order is still pending confirmation: {:?}",
-        pending_confirmation
+        pending
     )]
-    PreviousRequestMustBeConfirmedFirst { pending_confirmation: Value },
+    PreviousRequestMustBeConfirmedFirst { pending: Value },
     #[fail(display = "Request order was processed but no signature was produced by authority")]
     ErrorWhileProcessingRequestOrder,
     #[fail(

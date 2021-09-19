@@ -24,7 +24,7 @@ fn test_handle_request_order_bad_signature() {
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
@@ -46,7 +46,7 @@ fn test_handle_request_order_zero_amount() {
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
@@ -70,7 +70,7 @@ fn test_handle_request_order_unknown_sender() {
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
@@ -102,7 +102,7 @@ fn test_handle_request_order_bad_sequence_number() {
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
@@ -125,7 +125,7 @@ fn test_handle_request_order_exceed_balance() {
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
@@ -141,17 +141,14 @@ fn test_handle_request_order_ok() {
         init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
     let account_info = state.handle_request_order(request_order).unwrap();
-    let pending_confirmation = state
+    let pending = state
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .clone()
         .unwrap();
-    assert_eq!(
-        account_info.pending_confirmation.unwrap(),
-        pending_confirmation
-    );
+    assert_eq!(account_info.pending.unwrap(), pending);
 }
 
 #[test]
@@ -165,9 +162,9 @@ fn test_handle_request_order_double_spend() {
     let request_order =
         init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
-    let signed_order = state.handle_request_order(request_order.clone()).unwrap();
-    let double_spend_signed_order = state.handle_request_order(request_order).unwrap();
-    assert_eq!(signed_order, double_spend_signed_order);
+    let vote = state.handle_request_order(request_order.clone()).unwrap();
+    let double_spend_vote = state.handle_request_order(request_order).unwrap();
+    assert_eq!(vote, double_spend_vote);
 }
 
 #[test]
@@ -357,7 +354,7 @@ fn test_handle_confirmation_order_ok() {
     assert_eq!(dbg_account(1), info.account_id);
     assert_eq!(remaining_balance, info.balance);
     assert_eq!(next_sequence_number, info.next_sequence_number);
-    assert_eq!(None, info.pending_confirmation);
+    assert_eq!(None, info.pending);
     assert_eq!(
         state.accounts.get(&dbg_account(1)).unwrap().confirmed_log,
         vec![certificate.clone()]
