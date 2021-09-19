@@ -45,6 +45,10 @@ pub enum Operation {
     ChangeOwner {
         new_owner: AccountOwner,
     },
+    Spend {
+        account_balance: Amount,
+        contract_hash: HashValue,
+    },
 }
 
 impl Operation {
@@ -56,7 +60,10 @@ impl Operation {
                 ..
             } => Some(id),
             OpenAccount { new_id, .. } => Some(new_id),
-            Operation::CloseAccount | Transfer { .. } | ChangeOwner { .. } => None,
+            Operation::Spend { .. }
+            | Operation::CloseAccount
+            | Transfer { .. }
+            | ChangeOwner { .. } => None,
         }
     }
 }
@@ -68,10 +75,19 @@ pub struct Request {
     pub sequence_number: SequenceNumber,
 }
 
+// TODO: This could be an enum to allow several types of coins.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct Coin {
+    pub account_id: AccountId,
+    pub amount: Amount,
+}
+
+// TODO: decide if we split Vote & Certificate in one type per kind of value.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Value {
     Lock(Request),
     Confirm(Request),
+    Coin(Coin),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -80,6 +96,29 @@ pub struct RequestOrder {
     pub request: Request,
     pub owner: AccountOwner,
     pub signature: Signature,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationSource {
+    pub account_id: AccountId,
+    pub amount: Amount,
+    pub coins: Vec<Certificate>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationContract {
+    pub seed: u128, // make sure hash(contract) cannot be guessed
+    pub sources: Vec<CoinCreationSource>,
+    pub targets: Vec<Coin>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationOrder {
+    pub contract: CoinCreationContract,
+    pub locks: Vec<Certificate>, // Spend operation with amounts and hashes matching the sources.
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -138,8 +177,9 @@ pub enum ConfirmationOutcome {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct CrossShardRequest {
-    pub certificate: Certificate,
+pub enum CrossShardRequest {
+    UpdateRecipient { certificate: Certificate },
+    DestroyAccount { account_id: AccountId },
 }
 
 impl Value {
@@ -160,7 +200,7 @@ impl Value {
     pub fn confirm_request(&self) -> Option<&Request> {
         match self {
             Value::Confirm(r) => Some(r),
-            Value::Lock(_) => None,
+            Value::Coin(_) | Value::Lock(_) => None,
         }
     }
 
@@ -168,14 +208,14 @@ impl Value {
     pub fn confirm_request_mut(&mut self) -> Option<&mut Request> {
         match self {
             Value::Confirm(r) => Some(r),
-            Value::Lock(_) => None,
+            Value::Coin(_) | Value::Lock(_) => None,
         }
     }
 
     pub fn confirm_key(&self) -> Option<(AccountId, SequenceNumber)> {
         match self {
             Value::Confirm(r) => Some((r.account_id.clone(), r.sequence_number)),
-            Value::Lock(_) => None,
+            Value::Coin(_) | Value::Lock(_) => None,
         }
     }
 }
@@ -330,3 +370,4 @@ impl ConfirmationOrder {
 
 impl BcsSignable for Request {}
 impl BcsSignable for Value {}
+impl BcsSignable for CoinCreationContract {}

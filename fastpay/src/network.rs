@@ -135,7 +135,7 @@ impl MessageHandler for RunningServerState {
                 Err(_) => Err(FastPayError::InvalidDecoding),
                 Ok(result) => {
                     match result {
-                        SerializedMessage::Order(message) => self
+                        SerializedMessage::RequestOrder(message) => self
                             .server
                             .state
                             .handle_request_order(*message)
@@ -150,10 +150,23 @@ impl MessageHandler for RunningServerState {
                                 .handle_confirmation_order(confirmation_order)
                             {
                                 Ok((info, continuation)) => {
+                                    // Cross-shard request
                                     self.handle_continuation(continuation).await;
-
                                     // Response
                                     Ok(Some(serialize_info_response(&info)))
+                                }
+                                Err(error) => Err(error),
+                            }
+                        }
+                        SerializedMessage::CoinCreationOrder(message) => {
+                            match self.server.state.handle_coin_creation_order(*message) {
+                                Ok((votes, continuations)) => {
+                                    // Cross-shard requests
+                                    for continuation in continuations {
+                                        self.handle_continuation(continuation).await;
+                                    }
+                                    // Response
+                                    Ok(Some(serialize_votes(&votes)))
                                 }
                                 Err(error) => Err(error),
                             }
@@ -164,11 +177,7 @@ impl MessageHandler for RunningServerState {
                             .handle_account_info_query(*message)
                             .map(|info| Some(serialize_info_response(&info))),
                         SerializedMessage::CrossShardRequest(request) => {
-                            match self
-                                .server
-                                .state
-                                .update_recipient_account(request.certificate)
-                            {
+                            match self.server.state.handle_cross_shard_request(*request) {
                                 Ok(()) => (),
                                 Err(error) => {
                                     error!("Failed to handle cross-shard request: {}", error);
@@ -177,7 +186,12 @@ impl MessageHandler for RunningServerState {
                             // No user to respond to.
                             Ok(None)
                         }
-                        _ => Err(FastPayError::UnexpectedMessage),
+                        SerializedMessage::Vote(_)
+                        | SerializedMessage::Votes(_)
+                        | SerializedMessage::Error(_)
+                        | SerializedMessage::InfoResponse(_) => {
+                            Err(FastPayError::UnexpectedMessage)
+                        }
                     }
                 }
             };

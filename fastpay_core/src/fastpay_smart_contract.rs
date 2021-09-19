@@ -100,6 +100,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
             Operation::Transfer { .. }
             | Operation::OpenAccount { .. }
             | Operation::CloseAccount
+            | Operation::Spend { .. }
             | Operation::ChangeOwner { .. } => {
                 failure::bail!("Invalid redeem transaction");
             }

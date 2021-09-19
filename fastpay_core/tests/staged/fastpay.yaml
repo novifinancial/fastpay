@@ -55,6 +55,37 @@ Certificate:
           TUPLE:
             - TYPENAME: PublicKeyBytes
             - TYPENAME: Signature
+Coin:
+  STRUCT:
+    - account_id:
+        TYPENAME: AccountId
+    - amount:
+        TYPENAME: Amount
+CoinCreationContract:
+  STRUCT:
+    - seed: U128
+    - sources:
+        SEQ:
+          TYPENAME: CoinCreationSource
+    - targets:
+        SEQ:
+          TYPENAME: Coin
+CoinCreationOrder:
+  STRUCT:
+    - contract:
+        TYPENAME: CoinCreationContract
+    - locks:
+        SEQ:
+          TYPENAME: Certificate
+CoinCreationSource:
+  STRUCT:
+    - account_id:
+        TYPENAME: AccountId
+    - amount:
+        TYPENAME: Amount
+    - coins:
+        SEQ:
+          TYPENAME: Certificate
 ConfirmationOutcome:
   ENUM:
     0:
@@ -64,9 +95,17 @@ ConfirmationOutcome:
     2:
       Cancel: UNIT
 CrossShardRequest:
-  STRUCT:
-    - certificate:
-        TYPENAME: Certificate
+  ENUM:
+    0:
+      UpdateRecipient:
+        STRUCT:
+          - certificate:
+              TYPENAME: Certificate
+    1:
+      DestroyAccount:
+        STRUCT:
+          - account_id:
+              TYPENAME: AccountId
 FastPayError:
   ENUM:
     0:
@@ -143,9 +182,16 @@ FastPayError:
     28:
       InvalidConfirmationOrder: UNIT
     29:
+      InvalidCoinCreationOrder: UNIT
+    30:
       ClientIoError:
         STRUCT:
           - error: STR
+HashValue:
+  NEWTYPESTRUCT:
+    TUPLEARRAY:
+      CONTENT: U8
+      SIZE: 64
 Operation:
   ENUM:
     0:
@@ -171,6 +217,13 @@ Operation:
         STRUCT:
           - new_owner:
               TYPENAME: PublicKeyBytes
+    4:
+      Spend:
+        STRUCT:
+          - account_balance:
+              TYPENAME: Amount
+          - contract_hash:
+              TYPENAME: HashValue
 PublicKeyBytes:
   NEWTYPESTRUCT:
     TUPLEARRAY:
@@ -197,7 +250,7 @@ SequenceNumber:
 SerializedMessage:
   ENUM:
     0:
-      Order:
+      RequestOrder:
         NEWTYPE:
           TYPENAME: RequestOrder
     1:
@@ -221,6 +274,15 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: AccountInfoResponse
     6:
+      CoinCreationOrder:
+        NEWTYPE:
+          TYPENAME: CoinCreationOrder
+    7:
+      Votes:
+        NEWTYPE:
+          SEQ:
+            TYPENAME: Vote
+    8:
       CrossShardRequest:
         NEWTYPE:
           TYPENAME: CrossShardRequest
@@ -245,6 +307,10 @@ Value:
       Confirm:
         NEWTYPE:
           TYPENAME: Request
+    2:
+      Coin:
+        NEWTYPE:
+          TYPENAME: Coin
 Vote:
   STRUCT:
     - value:

@@ -70,7 +70,7 @@ fn test_order() {
     let buf = serialize_request_order(&request_order);
     let result = deserialize_message(buf.as_slice());
     assert!(result.is_ok());
-    if let SerializedMessage::Order(o) = result.unwrap() {
+    if let SerializedMessage::RequestOrder(o) = result.unwrap() {
         assert!(*o == request_order);
     } else {
         panic!()
@@ -91,7 +91,7 @@ fn test_order() {
     let buf = serialize_request_order(&request_order2);
     let result = deserialize_message(buf.as_slice());
     assert!(result.is_ok());
-    if let SerializedMessage::Order(o) = result.unwrap() {
+    if let SerializedMessage::RequestOrder(o) = result.unwrap() {
         assert!(*o == request_order2);
     } else {
         panic!()
@@ -257,7 +257,7 @@ fn test_time_order() {
     let now = Instant::now();
     let owner = Some(sender_key.public());
     for _ in 0..100 {
-        if let SerializedMessage::Order(order) = deserialize_message(&mut buf2).unwrap() {
+        if let SerializedMessage::RequestOrder(order) = deserialize_message(&mut buf2).unwrap() {
             order.check(&owner).unwrap();
         }
     }
