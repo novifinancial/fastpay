@@ -22,10 +22,10 @@ pub struct AccountState {
     pub pending: Option<Vote>,
     /// All confirmed certificates for this sender.
     pub confirmed_log: Vec<Certificate>,
-    /// All executed Primary synchronization orders for this recipient.
-    pub synchronization_log: Vec<PrimarySynchronizationOrder>,
     /// All confirmed certificates as a receiver.
     pub received_log: Vec<Certificate>,
+    /// All executed Primary synchronization orders for this recipient.
+    pub synchronization_log: Vec<PrimarySynchronizationOrder>,
 }
 
 pub struct AuthorityState {
