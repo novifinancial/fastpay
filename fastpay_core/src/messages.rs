@@ -68,6 +68,12 @@ pub struct Request {
     pub sequence_number: SequenceNumber,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub enum Value {
+    Lock(Request),
+    Confirm(Request),
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct RequestOrder {
@@ -78,29 +84,29 @@ pub struct RequestOrder {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct SignedRequest {
-    pub value: Request,
+pub struct Vote {
+    pub value: Value,
     pub authority: AuthorityName,
     pub signature: Signature,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct CertifiedRequest {
-    pub value: Request,
+pub struct Certificate {
+    pub value: Value,
     pub signatures: Vec<(AuthorityName, Signature)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct RedeemTransaction {
-    pub request_certificate: CertifiedRequest,
+    pub certificate: Certificate,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct ConfirmationOrder {
-    pub request_certificate: CertifiedRequest,
+    pub certificate: Certificate,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -118,9 +124,9 @@ pub struct AccountInfoResponse {
     pub owner: Option<AccountOwner>,
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
-    pub pending_confirmation: Option<SignedRequest>,
-    pub queried_certificate: Option<CertifiedRequest>,
-    pub queried_received_requests: Vec<CertifiedRequest>,
+    pub pending_confirmation: Option<Vote>,
+    pub queried_certificate: Option<Certificate>,
+    pub queried_received_requests: Vec<Certificate>,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -133,12 +139,44 @@ pub enum ConfirmationOutcome {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CrossShardRequest {
-    pub certificate: CertifiedRequest,
+    pub certificate: Certificate,
 }
 
-impl Request {
-    pub fn key(&self) -> (AccountId, SequenceNumber) {
-        (self.account_id.clone(), self.sequence_number)
+impl Value {
+    pub fn confirm_account_id(&self) -> Option<&AccountId> {
+        match self {
+            Value::Confirm(r) => Some(&r.account_id),
+            _ => None,
+        }
+    }
+
+    pub fn confirm_sequence_number(&self) -> Option<SequenceNumber> {
+        match self {
+            Value::Confirm(r) => Some(r.sequence_number),
+            _ => None,
+        }
+    }
+
+    pub fn confirm_request(&self) -> Option<&Request> {
+        match self {
+            Value::Confirm(r) => Some(r),
+            Value::Lock(_) => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn confirm_request_mut(&mut self) -> Option<&mut Request> {
+        match self {
+            Value::Confirm(r) => Some(r),
+            Value::Lock(_) => None,
+        }
+    }
+
+    pub fn confirm_key(&self) -> Option<(AccountId, SequenceNumber)> {
+        match self {
+            Value::Confirm(r) => Some((r.account_id.clone(), r.sequence_number)),
+            Value::Lock(_) => None,
+        }
     }
 }
 
@@ -180,9 +218,9 @@ impl RequestOrder {
     }
 }
 
-impl SignedRequest {
+impl Vote {
     /// Use signing key to create a signed object.
-    pub fn new(value: Request, key_pair: &KeyPair) -> Self {
+    pub fn new(value: Value, key_pair: &KeyPair) -> Self {
         let signature = Signature::new(&value, key_pair);
         Self {
             value,
@@ -204,17 +242,17 @@ pub struct SignatureAggregator<'a> {
     committee: &'a Committee,
     weight: usize,
     used_authorities: HashSet<AuthorityName>,
-    partial: CertifiedRequest,
+    partial: Certificate,
 }
 
 impl<'a> SignatureAggregator<'a> {
     /// Start aggregating signatures for the given value into a certificate.
-    pub fn new(value: Request, committee: &'a Committee) -> Self {
+    pub fn new(value: Value, committee: &'a Committee) -> Self {
         Self {
             committee,
             weight: 0,
             used_authorities: HashSet::new(),
-            partial: CertifiedRequest {
+            partial: Certificate {
                 value,
                 signatures: Vec::new(),
             },
@@ -228,7 +266,7 @@ impl<'a> SignatureAggregator<'a> {
         &mut self,
         authority: AuthorityName,
         signature: Signature,
-    ) -> Result<Option<CertifiedRequest>, FastPayError> {
+    ) -> Result<Option<Certificate>, FastPayError> {
         signature.check(&self.partial.value, authority)?;
         // Check that each authority only appears once.
         fp_ensure!(
@@ -251,7 +289,7 @@ impl<'a> SignatureAggregator<'a> {
     }
 }
 
-impl CertifiedRequest {
+impl Certificate {
     /// Verify the certificate.
     pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
         // Check the quorum.
@@ -279,19 +317,16 @@ impl CertifiedRequest {
 }
 
 impl RedeemTransaction {
-    pub fn new(request_certificate: CertifiedRequest) -> Self {
-        Self {
-            request_certificate,
-        }
+    pub fn new(certificate: Certificate) -> Self {
+        Self { certificate }
     }
 }
 
 impl ConfirmationOrder {
-    pub fn new(request_certificate: CertifiedRequest) -> Self {
-        Self {
-            request_certificate,
-        }
+    pub fn new(certificate: Certificate) -> Self {
+        Self { certificate }
     }
 }
 
 impl BcsSignable for Request {}
+impl BcsSignable for Value {}

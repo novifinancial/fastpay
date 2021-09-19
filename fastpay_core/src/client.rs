@@ -56,10 +56,10 @@ pub struct ClientState<AuthorityClient> {
     // The remaining fields are used to minimize networking, and may not always be persisted locally.
     /// Request certificates that we have created ("sent").
     /// Normally, `sent_certificates` should contain one certificate for each index in `0..next_sequence_number`.
-    sent_certificates: Vec<CertifiedRequest>,
+    sent_certificates: Vec<Certificate>,
     /// Known received certificates, indexed by account_id and sequence number.
     /// TODO: API to search and download yet unknown `received_certificates`.
-    received_certificates: BTreeMap<(AccountId, SequenceNumber), CertifiedRequest>,
+    received_certificates: BTreeMap<(AccountId, SequenceNumber), Certificate>,
     /// The known spendable balance (including a possible initial funding, excluding unknown sent
     /// or received certificates).
     balance: Balance,
@@ -73,7 +73,7 @@ pub trait Client {
         amount: Amount,
         recipient: AccountId,
         user_data: UserData,
-    ) -> AsyncResult<CertifiedRequest, failure::Error>;
+    ) -> AsyncResult<Certificate, failure::Error>;
 
     /// Send money to a Primary account.
     fn transfer_to_primary(
@@ -81,13 +81,11 @@ pub trait Client {
         amount: Amount,
         recipient: PrimaryAddress,
         user_data: UserData,
-    ) -> AsyncResult<CertifiedRequest, failure::Error>;
+    ) -> AsyncResult<Certificate, failure::Error>;
 
     /// Receive money from FastPay.
-    fn receive_from_fastpay(
-        &mut self,
-        certificate: CertifiedRequest,
-    ) -> AsyncResult<(), failure::Error>;
+    fn receive_from_fastpay(&mut self, certificate: Certificate)
+        -> AsyncResult<(), failure::Error>;
 
     /// Send money to a FastPay account.
     /// Do not check balance. (This may block the client)
@@ -97,7 +95,7 @@ pub trait Client {
         amount: Amount,
         recipient: AccountId,
         user_data: UserData,
-    ) -> AsyncResult<CertifiedRequest, failure::Error>;
+    ) -> AsyncResult<Certificate, failure::Error>;
 
     /// Find how much money we can spend.
     /// TODO: Currently, this value only reflects received transfers that were
@@ -113,8 +111,8 @@ impl<A> ClientState<A> {
         committee: Committee,
         authority_clients: HashMap<AuthorityName, A>,
         next_sequence_number: SequenceNumber,
-        sent_certificates: Vec<CertifiedRequest>,
-        received_certificates: Vec<CertifiedRequest>,
+        sent_certificates: Vec<Certificate>,
+        received_certificates: Vec<Certificate>,
         balance: Balance,
     ) -> Self {
         Self {
@@ -128,7 +126,7 @@ impl<A> ClientState<A> {
             sent_certificates,
             received_certificates: received_certificates
                 .into_iter()
-                .map(|cert| (cert.value.key(), cert))
+                .filter_map(|cert| Some((cert.value.confirm_key()?, cert)))
                 .collect(),
             balance,
         }
@@ -150,11 +148,11 @@ impl<A> ClientState<A> {
         &self.pending_request
     }
 
-    pub fn sent_certificates(&self) -> &Vec<CertifiedRequest> {
+    pub fn sent_certificates(&self) -> &Vec<Certificate> {
         &self.sent_certificates
     }
 
-    pub fn received_certificates(&self) -> impl Iterator<Item = &CertifiedRequest> {
+    pub fn received_certificates(&self) -> impl Iterator<Item = &Certificate> {
         self.received_certificates.values()
     }
 }
@@ -181,13 +179,10 @@ where
     A: AuthorityClient + Send + Sync + 'static + Clone,
 {
     type Key = SequenceNumber;
-    type Value = Result<CertifiedRequest, FastPayError>;
+    type Value = Result<Certificate, FastPayError>;
 
     /// Try to find a certificate for the given account_id and sequence number.
-    fn query(
-        &mut self,
-        sequence_number: SequenceNumber,
-    ) -> AsyncResult<CertifiedRequest, FastPayError> {
+    fn query(&mut self, sequence_number: SequenceNumber) -> AsyncResult<Certificate, FastPayError> {
         Box::pin(async move {
             let query = AccountInfoQuery {
                 account_id: self.account_id.clone(),
@@ -204,11 +199,12 @@ where
                 }) = &result
                 {
                     if certificate.check(&self.committee).is_ok() {
-                        let request = &certificate.value;
-                        if request.account_id == self.account_id
-                            && request.sequence_number == sequence_number
-                        {
-                            return Ok(certificate.clone());
+                        if let Value::Confirm(request) = &certificate.value {
+                            if request.account_id == self.account_id
+                                && request.sequence_number == sequence_number
+                            {
+                                return Ok(certificate.clone());
+                            }
                         }
                     }
                 }
@@ -234,7 +230,7 @@ where
         &mut self,
         account_id: AccountId,
         sequence_number: SequenceNumber,
-    ) -> Result<CertifiedRequest, FastPayError> {
+    ) -> Result<Certificate, FastPayError> {
         CertificateRequester::new(
             self.committee.clone(),
             self.authority_clients.values().cloned().collect(),
@@ -355,9 +351,9 @@ where
     async fn communicate_requests(
         &mut self,
         account_id: AccountId,
-        known_certificates: Vec<CertifiedRequest>,
+        known_certificates: Vec<Certificate>,
         action: CommunicateAction,
-    ) -> Result<Vec<CertifiedRequest>, failure::Error> {
+    ) -> Result<Vec<Certificate>, failure::Error> {
         let target_sequence_number = match &action {
             CommunicateAction::SendOrder(order) => order.request.sequence_number,
             CommunicateAction::SynchronizeNextSequenceNumber(seq) => *seq,
@@ -370,8 +366,9 @@ where
         let (task, mut handle) = Downloader::start(
             requester,
             known_certificates.into_iter().filter_map(|cert| {
-                if cert.value.account_id == account_id.clone() {
-                    Some((cert.value.sequence_number, Ok(cert)))
+                let request = cert.value.confirm_request()?;
+                if request.account_id == account_id {
+                    Some((request.sequence_number, Ok(cert)))
                 } else {
                     None
                 }
@@ -441,8 +438,8 @@ where
         handle.stop().await?;
         let mut certificates: Vec<_> = task.await.unwrap().filter_map(Result::ok).collect();
         if let CommunicateAction::SendOrder(order) = action {
-            let certificate = CertifiedRequest {
-                value: order.request,
+            let certificate = Certificate {
+                value: Value::Confirm(order.request),
                 signatures: votes
                     .into_iter()
                     .filter_map(|vote| match vote {
@@ -463,7 +460,7 @@ where
 
     /// Make sure we have all our certificates with sequence number
     /// in the range 0..self.next_sequence_number
-    async fn download_sent_certificates(&self) -> Result<Vec<CertifiedRequest>, FastPayError> {
+    async fn download_sent_certificates(&self) -> Result<Vec<Certificate>, FastPayError> {
         let mut requester = CertificateRequester::new(
             self.committee.clone(),
             self.authority_clients.values().cloned().collect(),
@@ -472,7 +469,7 @@ where
         let known_sequence_numbers: BTreeSet<_> = self
             .sent_certificates
             .iter()
-            .map(|cert| cert.value.sequence_number)
+            .filter_map(|cert| cert.value.confirm_sequence_number())
             .collect();
         let mut sent_certificates = self.sent_certificates.clone();
         let mut number = SequenceNumber::from(0);
@@ -483,7 +480,7 @@ where
             }
             number = number.increment().unwrap_or_else(|_| SequenceNumber::max());
         }
-        sent_certificates.sort_by_key(|cert| cert.value.sequence_number);
+        sent_certificates.sort_by_key(|cert| cert.value.confirm_sequence_number().unwrap());
         Ok(sent_certificates)
     }
 
@@ -493,7 +490,7 @@ where
         amount: Amount,
         recipient: Address,
         user_data: UserData,
-    ) -> Result<CertifiedRequest, failure::Error> {
+    ) -> Result<Certificate, failure::Error> {
         // Trying to overspend may block the account. To prevent this, we compare with
         // the balance as we know it.
         let safe_amount = self.get_spendable_amount().await?;
@@ -524,12 +521,16 @@ where
     /// We assume certificates to be valid and sent by us, and their sequence numbers to be unique.
     fn update_sent_certificates(
         &mut self,
-        sent_certificates: Vec<CertifiedRequest>,
+        sent_certificates: Vec<Certificate>,
     ) -> Result<(), FastPayError> {
         let mut new_balance = self.balance;
         let mut new_next_sequence_number = self.next_sequence_number;
         for new_cert in &sent_certificates {
-            match &new_cert.value.operation {
+            let request = match &new_cert.value {
+                Value::Confirm(r) => r,
+                _ => continue,
+            };
+            match &request.operation {
                 Operation::Transfer { amount, .. } => {
                     new_balance = new_balance.try_sub((*amount).into())?;
                 }
@@ -537,12 +538,12 @@ where
                 | Operation::CloseAccount
                 | Operation::ChangeOwner { .. } => (),
             }
-            if new_cert.value.sequence_number >= new_next_sequence_number {
+            if request.sequence_number >= new_next_sequence_number {
                 assert_eq!(
-                    new_cert.value.sequence_number, new_next_sequence_number,
+                    request.sequence_number, new_next_sequence_number,
                     "New certificates should be given in order"
                 );
-                if let Operation::ChangeOwner { new_owner } = &new_cert.value.operation {
+                if let Operation::ChangeOwner { new_owner } = &request.operation {
                     // TODO: add client support for initiating key rotations
                     // TODO: support handing over the account to someone else.
                     // TODO: crash resistance + key storage
@@ -551,15 +552,18 @@ where
                     assert_eq!(new_owner, &key_pair.public(), "Idem");
                     self.key_pair = key_pair;
                 }
-                new_next_sequence_number = new_cert
-                    .value
+                new_next_sequence_number = request
                     .sequence_number
                     .increment()
                     .unwrap_or_else(|_| SequenceNumber::max());
             }
         }
         for old_cert in &self.sent_certificates {
-            match &old_cert.value.operation {
+            let request = match &old_cert.value {
+                Value::Confirm(r) => r,
+                _ => continue,
+            };
+            match &request.operation {
                 Operation::Transfer { amount, .. } => {
                     new_balance = new_balance.try_add((*amount).into())?;
                 }
@@ -585,7 +589,7 @@ where
         &mut self,
         order: RequestOrder,
         with_confirmation: bool,
-    ) -> Result<CertifiedRequest, failure::Error> {
+    ) -> Result<Certificate, failure::Error> {
         ensure!(
             self.pending_request.is_none()
                 || self.pending_request.as_ref().unwrap().request == order.request,
@@ -603,7 +607,10 @@ where
                 CommunicateAction::SendOrder(order.clone()),
             )
             .await?;
-        assert_eq!(new_sent_certificates.last().unwrap().value, order.request);
+        assert_eq!(
+            new_sent_certificates.last().unwrap().value,
+            Value::Confirm(order.request)
+        );
         // Clear `pending_request` and update `sent_certificates`,
         // `balance`, and `next_sequence_number`. (Note that if we were using persistent
         // storage, we should ensure update atomicity in the eventuality of a crash.)
@@ -631,7 +638,7 @@ where
         amount: Amount,
         recipient: AccountId,
         user_data: UserData,
-    ) -> AsyncResult<CertifiedRequest, failure::Error> {
+    ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(self.transfer(amount, Address::FastPay(recipient), user_data))
     }
 
@@ -640,7 +647,7 @@ where
         amount: Amount,
         recipient: PrimaryAddress,
         user_data: UserData,
-    ) -> AsyncResult<CertifiedRequest, failure::Error> {
+    ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(self.transfer(amount, Address::Primary(recipient), user_data))
     }
 
@@ -667,11 +674,14 @@ where
 
     fn receive_from_fastpay(
         &mut self,
-        certificate: CertifiedRequest,
+        certificate: Certificate,
     ) -> AsyncResult<(), failure::Error> {
         Box::pin(async move {
             certificate.check(&self.committee)?;
-            let request = &certificate.value;
+            let request = match &certificate.value {
+                Value::Confirm(r) => r,
+                _ => return Ok(()),
+            };
             let account_id = &request.account_id;
             match &request.operation {
                 Operation::Transfer { recipient, .. } => {
@@ -690,13 +700,14 @@ where
                 account_id.clone(),
                 vec![certificate.clone()],
                 CommunicateAction::SynchronizeNextSequenceNumber(
-                    certificate.value.sequence_number.increment()?,
+                    request.sequence_number.increment()?,
                 ),
             )
             .await?;
             // Everything worked: update the local balance.
-            let request = &certificate.value;
-            if let btree_map::Entry::Vacant(entry) = self.received_certificates.entry(request.key())
+            if let btree_map::Entry::Vacant(entry) = self
+                .received_certificates
+                .entry(certificate.value.confirm_key().unwrap())
             {
                 match &request.operation {
                     Operation::Transfer { amount, .. } => {
@@ -717,7 +728,7 @@ where
         amount: Amount,
         recipient: AccountId,
         user_data: UserData,
-    ) -> AsyncResult<CertifiedRequest, failure::Error> {
+    ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
             let request = Request {
                 account_id: self.account_id.clone(),

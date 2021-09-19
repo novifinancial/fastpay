@@ -54,7 +54,7 @@ pub enum FastPayError {
         display = "Cannot initiate transfer while a transfer order is still pending confirmation: {:?}",
         pending_confirmation
     )]
-    PreviousRequestMustBeConfirmedFirst { pending_confirmation: Request },
+    PreviousRequestMustBeConfirmedFirst { pending_confirmation: Value },
     #[fail(display = "Request order was processed but no signature was produced by authority")]
     ErrorWhileProcessingRequestOrder,
     #[fail(
@@ -100,6 +100,8 @@ pub enum FastPayError {
     InvalidDecoding,
     #[fail(display = "Unexpected message.")]
     UnexpectedMessage,
+    #[fail(display = "InvalidConfirmationOrder.")]
+    InvalidConfirmationOrder,
     #[fail(display = "Network error while querying service: {:?}.", error)]
     ClientIoError { error: String },
 }

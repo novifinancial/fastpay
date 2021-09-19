@@ -15,6 +15,7 @@ fn get_registry() -> Result<Registry> {
     // 2. Trace the main entry point(s) + every enum separately.
     tracer.trace_type::<messages::Address>(&samples)?;
     tracer.trace_type::<messages::Operation>(&samples)?;
+    tracer.trace_type::<messages::Value>(&samples)?;
     tracer.trace_type::<messages::CrossShardRequest>(&samples)?;
     tracer.trace_type::<messages::ConfirmationOutcome>(&samples)?;
     tracer.trace_type::<error::FastPayError>(&samples)?;

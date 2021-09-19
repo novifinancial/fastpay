@@ -110,7 +110,7 @@ fn test_vote() {
         sequence_number: SequenceNumber::new(),
     };
     let key = get_key_pair();
-    let vote = SignedRequest::new(request, &key);
+    let vote = Vote::new(Value::Confirm(request), &key);
 
     let buf = serialize_vote(&vote);
     let result = deserialize_message(buf.as_slice());
@@ -133,8 +133,8 @@ fn test_cert() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let mut cert = CertifiedRequest {
-        value: request,
+    let mut cert = Certificate {
+        value: Value::Confirm(request),
         signatures: Vec::new(),
     };
 
@@ -148,7 +148,7 @@ fn test_cert() {
     let buf = serialize_cert(&cert);
     let result = deserialize_message(buf.as_slice());
     assert!(result.is_ok());
-    if let SerializedMessage::Confirmation(o) = result.unwrap() {
+    if let SerializedMessage::Certificate(o) = result.unwrap() {
         assert!(*o == cert);
     } else {
         panic!()
@@ -168,10 +168,11 @@ fn test_info_response() {
         sequence_number: SequenceNumber::new(),
     };
     let auth_key = get_key_pair();
-    let vote = SignedRequest::new(request.clone(), &auth_key);
+    let value = Value::Confirm(request);
+    let vote = Vote::new(value.clone(), &auth_key);
 
-    let mut cert = CertifiedRequest {
-        value: request,
+    let mut cert = Certificate {
+        value,
         signatures: Vec::new(),
     };
 
@@ -278,13 +279,14 @@ fn test_time_vote() {
         },
         sequence_number: SequenceNumber::new(),
     };
+    let value = Value::Confirm(request);
 
     let key = get_key_pair();
 
     let mut buf = Vec::new();
     let now = Instant::now();
     for _ in 0..100 {
-        let vote = SignedRequest::new(request.clone(), &key);
+        let vote = Vote::new(value.clone(), &key);
         serialize_vote_into(&mut buf, &vote).unwrap();
     }
     println!("Write Vote: {} microsec", now.elapsed().as_micros() / 100);
@@ -315,8 +317,9 @@ fn test_time_cert() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let mut cert = CertifiedRequest {
-        value: request,
+    let value = Value::Confirm(request);
+    let mut cert = Certificate {
+        value,
         signatures: Vec::new(),
     };
 
@@ -337,7 +340,7 @@ fn test_time_cert() {
     let now = Instant::now();
     let mut buf2 = buf.as_slice();
     for _ in 0..count {
-        if let SerializedMessage::Confirmation(cert) = deserialize_message(&mut buf2).unwrap() {
+        if let SerializedMessage::Certificate(cert) = deserialize_message(&mut buf2).unwrap() {
             Signature::verify_batch(&cert.value, &cert.signatures).unwrap();
         }
     }

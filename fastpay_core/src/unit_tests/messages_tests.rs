@@ -26,14 +26,15 @@ fn test_signed_values() {
         },
         sequence_number: SequenceNumber::new(),
     };
+    let value = Value::Confirm(request);
 
-    let v = SignedRequest::new(request.clone(), &key1);
+    let v = Vote::new(value.clone(), &key1);
     assert!(v.check(&committee).is_ok());
 
-    let v = SignedRequest::new(request.clone(), &key2);
+    let v = Vote::new(value.clone(), &key2);
     assert!(v.check(&committee).is_err());
 
-    let v = SignedRequest::new(request, &key3);
+    let v = Vote::new(value, &key3);
     assert!(v.check(&committee).is_err());
 }
 
@@ -59,12 +60,13 @@ fn test_certificates() {
         },
         sequence_number: SequenceNumber::new(),
     };
+    let value = Value::Confirm(request);
 
-    let v1 = SignedRequest::new(request.clone(), &key1);
-    let v2 = SignedRequest::new(request.clone(), &key2);
-    let v3 = SignedRequest::new(request.clone(), &key3);
+    let v1 = Vote::new(value.clone(), &key1);
+    let v2 = Vote::new(value.clone(), &key2);
+    let v3 = Vote::new(value.clone(), &key3);
 
-    let mut builder = SignatureAggregator::new(request.clone(), &committee);
+    let mut builder = SignatureAggregator::new(value.clone(), &committee);
     assert!(builder
         .append(v1.authority, v1.signature)
         .unwrap()
@@ -74,7 +76,7 @@ fn test_certificates() {
     c.signatures.pop();
     assert!(c.check(&committee).is_err());
 
-    let mut builder = SignatureAggregator::new(request, &committee);
+    let mut builder = SignatureAggregator::new(value, &committee);
     assert!(builder
         .append(v1.authority, v1.signature)
         .unwrap()

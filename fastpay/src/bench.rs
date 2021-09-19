@@ -159,8 +159,9 @@ impl ClientServerBenchmark {
             assert!(!bufx.is_empty());
 
             // Make certificate
-            let mut certificate = CertifiedRequest {
-                value: request,
+            let value = Value::Confirm(request);
+            let mut certificate = Certificate {
+                value,
                 signatures: Vec::new(),
             };
             for i in 0..committee.quorum_threshold() {
