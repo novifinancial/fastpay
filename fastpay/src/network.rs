@@ -140,9 +140,9 @@ impl MessageHandler for RunningServerState {
                             .state
                             .handle_request_order(*message)
                             .map(|info| Some(serialize_info_response(&info))),
-                        SerializedMessage::Confirmation(message) => {
+                        SerializedMessage::Certificate(message) => {
                             let confirmation_order = ConfirmationOrder {
-                                request_certificate: *message,
+                                certificate: *message,
                             };
                             match self
                                 .server
@@ -321,9 +321,13 @@ impl AuthorityClient for Client {
         Box::pin(async move {
             let shard = AuthorityState::get_shard(
                 self.num_shards,
-                &order.request_certificate.value.account_id,
+                order
+                    .certificate
+                    .value
+                    .confirm_account_id()
+                    .ok_or(FastPayError::InvalidConfirmationOrder)?,
             );
-            self.send_recv_bytes(shard, serialize_cert(&order.request_certificate))
+            self.send_recv_bytes(shard, serialize_cert(&order.certificate))
                 .await
         })
     }

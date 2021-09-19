@@ -69,8 +69,11 @@ impl FastPaySmartContract for FastPaySmartContractState {
         &mut self,
         transaction: RedeemTransaction,
     ) -> Result<(), failure::Error> {
-        transaction.request_certificate.check(&self.committee)?;
-        let request = transaction.request_certificate.value;
+        transaction.certificate.check(&self.committee)?;
+        let request = match &transaction.certificate.value {
+            Value::Confirm(r) => r,
+            _ => failure::bail!("Invalid redeem transaction"),
+        };
         match &request.operation {
             Operation::Transfer {
                 amount,

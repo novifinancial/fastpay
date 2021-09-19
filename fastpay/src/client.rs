@@ -141,8 +141,8 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
     );
     let mut serialized_certificates = Vec::new();
     for order in orders {
-        let mut certificate = CertifiedRequest {
-            value: order.request.clone(),
+        let mut certificate = Certificate {
+            value: Value::Confirm(order.request.clone()),
             signatures: Vec::new(),
         };
         for i in 0..committee.quorum_threshold() {
@@ -159,7 +159,7 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
 /// Try to aggregate votes into certificates.
 fn make_benchmark_certificates_from_votes(
     committee_config: &CommitteeConfig,
-    votes: Vec<SignedRequest>,
+    votes: Vec<Vote>,
 ) -> Vec<(AccountId, Bytes)> {
     let committee = Committee::new(committee_config.voting_rights());
     let mut aggregators = HashMap::new();
@@ -167,7 +167,11 @@ fn make_benchmark_certificates_from_votes(
     let mut done_senders = HashSet::new();
     for vote in votes {
         // We aggregate votes indexed by sender.
-        let account_id = vote.value.account_id.clone();
+        let account_id = vote
+            .value
+            .confirm_account_id()
+            .expect("this should be a commit")
+            .clone();
         if done_senders.contains(&account_id) {
             continue;
         }
@@ -249,7 +253,7 @@ fn mass_update_recipients(
     certificates: Vec<(AccountId, Bytes)>,
 ) {
     for (_sender, buf) in certificates {
-        if let Ok(SerializedMessage::Confirmation(certificate)) = deserialize_message(&buf[..]) {
+        if let Ok(SerializedMessage::Certificate(certificate)) = deserialize_message(&buf[..]) {
             accounts_config.update_for_received_request(*certificate);
         }
     }

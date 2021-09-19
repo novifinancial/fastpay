@@ -25,13 +25,13 @@ AccountInfoResponse:
         TYPENAME: SequenceNumber
     - pending_confirmation:
         OPTION:
-          TYPENAME: SignedRequest
+          TYPENAME: Vote
     - queried_certificate:
         OPTION:
-          TYPENAME: CertifiedRequest
+          TYPENAME: Certificate
     - queried_received_requests:
         SEQ:
-          TYPENAME: CertifiedRequest
+          TYPENAME: Certificate
 Address:
   ENUM:
     0:
@@ -46,10 +46,10 @@ Amount:
   NEWTYPESTRUCT: U64
 Balance:
   NEWTYPESTRUCT: I128
-CertifiedRequest:
+Certificate:
   STRUCT:
     - value:
-        TYPENAME: Request
+        TYPENAME: Value
     - signatures:
         SEQ:
           TUPLE:
@@ -66,7 +66,7 @@ ConfirmationOutcome:
 CrossShardRequest:
   STRUCT:
     - certificate:
-        TYPENAME: CertifiedRequest
+        TYPENAME: Certificate
 FastPayError:
   ENUM:
     0:
@@ -98,7 +98,7 @@ FastPayError:
       PreviousRequestMustBeConfirmedFirst:
         STRUCT:
           - pending_confirmation:
-              TYPENAME: Request
+              TYPENAME: Value
     10:
       ErrorWhileProcessingRequestOrder: UNIT
     11:
@@ -141,6 +141,8 @@ FastPayError:
     27:
       UnexpectedMessage: UNIT
     28:
+      InvalidConfirmationOrder: UNIT
+    29:
       ClientIoError:
         STRUCT:
           - error: STR
@@ -201,11 +203,11 @@ SerializedMessage:
     1:
       Vote:
         NEWTYPE:
-          TYPENAME: SignedRequest
+          TYPENAME: Vote
     2:
-      Confirmation:
+      Certificate:
         NEWTYPE:
-          TYPENAME: CertifiedRequest
+          TYPENAME: Certificate
     3:
       Error:
         NEWTYPE:
@@ -227,18 +229,28 @@ Signature:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 64
-SignedRequest:
-  STRUCT:
-    - value:
-        TYPENAME: Request
-    - authority:
-        TYPENAME: PublicKeyBytes
-    - signature:
-        TYPENAME: Signature
 UserData:
   NEWTYPESTRUCT:
     OPTION:
       TUPLEARRAY:
         CONTENT: U8
         SIZE: 32
+Value:
+  ENUM:
+    0:
+      Lock:
+        NEWTYPE:
+          TYPENAME: Request
+    1:
+      Confirm:
+        NEWTYPE:
+          TYPENAME: Request
+Vote:
+  STRUCT:
+    - value:
+        TYPENAME: Value
+    - authority:
+        TYPENAME: PublicKeyBytes
+    - signature:
+        TYPENAME: Signature
 

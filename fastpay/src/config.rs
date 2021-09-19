@@ -5,7 +5,7 @@ use crate::transport::NetworkProtocol;
 use fastpay_core::{
     base_types::*,
     client::ClientState,
-    messages::{Address, CertifiedRequest, Operation},
+    messages::{Address, Certificate, Operation, Value},
 };
 
 use serde::{Deserialize, Serialize};
@@ -92,8 +92,8 @@ pub struct UserAccount {
     pub key_pair: KeyPair,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
-    pub sent_certificates: Vec<CertifiedRequest>,
-    pub received_certificates: Vec<CertifiedRequest>,
+    pub sent_certificates: Vec<Certificate>,
+    pub received_certificates: Vec<Certificate>,
 }
 
 impl UserAccount {
@@ -146,8 +146,11 @@ impl AccountsConfig {
         account.received_certificates = state.received_certificates().cloned().collect();
     }
 
-    pub fn update_for_received_request(&mut self, certificate: CertifiedRequest) {
-        let request = &certificate.value;
+    pub fn update_for_received_request(&mut self, certificate: Certificate) {
+        let request = match &certificate.value {
+            Value::Confirm(r) => r,
+            Value::Lock(_) => return,
+        };
         if let Operation::Transfer {
             recipient: Address::FastPay(recipient),
             amount,
@@ -157,7 +160,9 @@ impl AccountsConfig {
             if let Some(config) = self.accounts.get_mut(recipient) {
                 if let Err(position) = config
                     .received_certificates
-                    .binary_search_by_key(&certificate.value.key(), |order| order.value.key())
+                    .binary_search_by_key(&certificate.value.confirm_key(), |order| {
+                        order.value.confirm_key()
+                    })
                 {
                     config.balance = config.balance.try_add((*amount).into()).unwrap();
                     config.received_certificates.insert(position, certificate)

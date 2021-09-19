@@ -19,13 +19,13 @@ pub struct AccountState {
     /// Sequence number tracking requests.
     pub next_sequence_number: SequenceNumber,
     /// Whether we have signed a transfer for this sequence number already.
-    pub pending_confirmation: Option<SignedRequest>,
+    pub pending_confirmation: Option<Vote>,
     /// All confirmed certificates for this sender.
-    pub confirmed_log: Vec<CertifiedRequest>,
+    pub confirmed_log: Vec<Certificate>,
     /// All executed Primary synchronization orders for this recipient.
     pub synchronization_log: Vec<PrimarySynchronizationOrder>,
     /// All confirmed certificates as a receiver.
-    pub received_log: Vec<CertifiedRequest>,
+    pub received_log: Vec<Certificate>,
 }
 
 pub struct AuthorityState {
@@ -84,10 +84,7 @@ pub trait Authority {
 
     /// (Trusted) Try to update the recipient account in a confirmation order.
     /// Returns the next action to execute.
-    fn update_recipient_account(
-        &mut self,
-        certificate: CertifiedRequest,
-    ) -> Result<(), FastPayError>;
+    fn update_recipient_account(&mut self, certificate: Certificate) -> Result<(), FastPayError>;
 }
 
 impl Authority for AuthorityState {
@@ -113,7 +110,7 @@ impl Authority for AuthorityState {
                 );
                 if let Some(pending_confirmation) = &account.pending_confirmation {
                     fp_ensure!(
-                        pending_confirmation.value == request,
+                        matches!(&pending_confirmation.value, Value::Confirm(r) if r == &request),
                         FastPayError::PreviousRequestMustBeConfirmedFirst {
                             pending_confirmation: pending_confirmation.value.clone()
                         }
@@ -147,8 +144,8 @@ impl Authority for AuthorityState {
                     }
                     Operation::CloseAccount | Operation::ChangeOwner { .. } => (), // Nothing to check.
                 }
-                let signed_request = SignedRequest::new(request, &self.key_pair);
-                account.pending_confirmation = Some(signed_request);
+                let vote = Vote::new(Value::Confirm(request), &self.key_pair);
+                account.pending_confirmation = Some(vote);
                 Ok(account.make_account_info(account_id))
             }
         }
@@ -159,14 +156,14 @@ impl Authority for AuthorityState {
         &mut self,
         confirmation_order: ConfirmationOrder,
     ) -> Result<(AccountInfoResponse, CrossShardContinuation), FastPayError> {
-        let certificate = confirmation_order.request_certificate;
+        let certificate = confirmation_order.certificate;
+        let request = certificate
+            .value
+            .confirm_request()
+            .ok_or(FastPayError::InvalidConfirmationOrder)?;
         // Check the certificate and retrieve the request data.
-        fp_ensure!(
-            self.in_shard(&certificate.value.account_id),
-            FastPayError::WrongShard
-        );
+        fp_ensure!(self.in_shard(&request.account_id), FastPayError::WrongShard);
         certificate.check(&self.committee)?;
-        let request = certificate.value.clone();
         let sender = request.account_id.clone();
 
         let mut sender_account = self
@@ -230,11 +227,11 @@ impl Authority for AuthorityState {
         Ok((info, CrossShardContinuation::Done))
     }
 
-    fn update_recipient_account(
-        &mut self,
-        certificate: CertifiedRequest,
-    ) -> Result<(), FastPayError> {
-        let request = &certificate.value;
+    fn update_recipient_account(&mut self, certificate: Certificate) -> Result<(), FastPayError> {
+        let request = certificate
+            .value
+            .confirm_request()
+            .ok_or(FastPayError::InvalidCrossShardRequest)?;
         // Execute the recipient's side of the operation.
         match &request.operation {
             Operation::Transfer {
@@ -346,7 +343,7 @@ impl AccountState {
     pub fn new_with_balance(
         owner: AccountOwner,
         balance: Balance,
-        received_log: Vec<CertifiedRequest>,
+        received_log: Vec<Certificate>,
     ) -> Self {
         Self {
             owner: Some(owner),
