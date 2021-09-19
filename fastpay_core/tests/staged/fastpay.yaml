@@ -23,7 +23,7 @@ AccountInfoResponse:
         TYPENAME: Balance
     - next_sequence_number:
         TYPENAME: SequenceNumber
-    - pending_confirmation:
+    - pending:
         OPTION:
           TYPENAME: Vote
     - queried_certificate:
@@ -97,7 +97,7 @@ FastPayError:
     9:
       PreviousRequestMustBeConfirmedFirst:
         STRUCT:
-          - pending_confirmation:
+          - pending:
               TYPENAME: Value
     10:
       ErrorWhileProcessingRequestOrder: UNIT

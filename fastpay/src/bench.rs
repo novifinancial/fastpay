@@ -135,7 +135,7 @@ impl ClientServerBenchmark {
                 owner: Some(owner),
                 balance: Balance::from(Amount::from(100)),
                 next_sequence_number: SequenceNumber::from(0),
-                pending_confirmation: None,
+                pending: None,
                 confirmed_log: Vec::new(),
                 synchronization_log: Vec::new(),
                 received_log: Vec::new(),

@@ -18,8 +18,8 @@ pub struct AccountState {
     pub balance: Balance,
     /// Sequence number tracking requests.
     pub next_sequence_number: SequenceNumber,
-    /// Whether we have signed a transfer for this sequence number already.
-    pub pending_confirmation: Option<Vote>,
+    /// Whether we have signed a request for this sequence number already.
+    pub pending: Option<Vote>,
     /// All confirmed certificates for this sender.
     pub confirmed_log: Vec<Certificate>,
     /// All executed Primary synchronization orders for this recipient.
@@ -108,11 +108,11 @@ impl Authority for AuthorityState {
                     request.sequence_number <= SequenceNumber::max(),
                     FastPayError::InvalidSequenceNumber
                 );
-                if let Some(pending_confirmation) = &account.pending_confirmation {
+                if let Some(pending) = &account.pending {
                     fp_ensure!(
-                        matches!(&pending_confirmation.value, Value::Confirm(r) if r == &request),
+                        matches!(&pending.value, Value::Confirm(r) if r == &request),
                         FastPayError::PreviousRequestMustBeConfirmedFirst {
-                            pending_confirmation: pending_confirmation.value.clone()
+                            pending: pending.value.clone()
                         }
                     );
                     // This exact request was already signed. Return the previous value.
@@ -145,7 +145,7 @@ impl Authority for AuthorityState {
                     Operation::CloseAccount | Operation::ChangeOwner { .. } => (), // Nothing to check.
                 }
                 let vote = Vote::new(Value::Confirm(request), &self.key_pair);
-                account.pending_confirmation = Some(vote);
+                account.pending = Some(vote);
                 Ok(account.make_account_info(account_id))
             }
         }
@@ -187,7 +187,7 @@ impl Authority for AuthorityState {
 
         // Advance to next sequence number.
         sender_account.next_sequence_number = sender_account.next_sequence_number.increment()?;
-        sender_account.pending_confirmation = None;
+        sender_account.pending = None;
         sender_account.confirmed_log.push(certificate.clone());
 
         // Execute the sender's side of the operation.
@@ -318,7 +318,7 @@ impl Default for AccountState {
             owner: None,
             balance: Balance::zero(),
             next_sequence_number: SequenceNumber::new(),
-            pending_confirmation: None,
+            pending: None,
             confirmed_log: Vec::new(),
             synchronization_log: Vec::new(),
             received_log: Vec::new(),
@@ -333,7 +333,7 @@ impl AccountState {
             owner: self.owner,
             balance: self.balance,
             next_sequence_number: self.next_sequence_number,
-            pending_confirmation: self.pending_confirmation.clone(),
+            pending: self.pending.clone(),
             queried_certificate: None,
             queried_received_requests: Vec::new(),
         }
@@ -349,7 +349,7 @@ impl AccountState {
             owner: Some(owner),
             balance,
             next_sequence_number: SequenceNumber::new(),
-            pending_confirmation: None,
+            pending: None,
             confirmed_log: Vec::new(),
             synchronization_log: Vec::new(),
             received_log,

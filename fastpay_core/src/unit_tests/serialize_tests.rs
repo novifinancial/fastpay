@@ -188,7 +188,7 @@ fn test_info_response() {
         owner: Some(sender_key.public()),
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
-        pending_confirmation: None,
+        pending: None,
         queried_certificate: None,
         queried_received_requests: Vec::new(),
     };
@@ -197,7 +197,7 @@ fn test_info_response() {
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
-        pending_confirmation: Some(vote.clone()),
+        pending: Some(vote.clone()),
         queried_certificate: None,
         queried_received_requests: Vec::new(),
     };
@@ -206,7 +206,7 @@ fn test_info_response() {
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
-        pending_confirmation: None,
+        pending: None,
         queried_certificate: Some(cert.clone()),
         queried_received_requests: Vec::new(),
     };
@@ -215,7 +215,7 @@ fn test_info_response() {
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
-        pending_confirmation: Some(vote),
+        pending: Some(vote),
         queried_certificate: Some(cert),
         queried_received_requests: Vec::new(),
     };
