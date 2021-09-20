@@ -49,6 +49,10 @@ pub enum Operation {
         account_balance: Amount,
         contract_hash: HashValue,
     },
+    SpendAndTransfer {
+        recipient: Address,
+        amount: Amount,
+    },
 }
 
 impl Operation {
@@ -58,9 +62,15 @@ impl Operation {
             Transfer {
                 recipient: Address::FastPay(id),
                 ..
-            } => Some(id),
-            OpenAccount { new_id, .. } => Some(new_id),
+            }
+            | Operation::SpendAndTransfer {
+                recipient: Address::FastPay(id),
+                ..
+            }
+            | OpenAccount { new_id: id, .. } => Some(id),
+
             Operation::Spend { .. }
+            | Operation::SpendAndTransfer { .. }
             | Operation::CloseAccount
             | Transfer { .. }
             | ChangeOwner { .. } => None,
@@ -96,6 +106,7 @@ pub struct RequestOrder {
     pub request: Request,
     pub owner: AccountOwner,
     pub signature: Signature,
+    pub assets: Vec<Certificate>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -240,12 +251,13 @@ impl Request {
 }
 
 impl RequestOrder {
-    pub fn new(request: Request, secret: &KeyPair) -> Self {
+    pub fn new(request: Request, secret: &KeyPair, assets: Vec<Certificate>) -> Self {
         let signature = Signature::new(&request, secret);
         Self {
             request,
             owner: secret.public(),
             signature,
+            assets,
         }
     }
 

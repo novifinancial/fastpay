@@ -1,7 +1,7 @@
 // Copyright (c) Facebook Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{base_types::*, messages::*};
+use crate::{base_types::*, messages::Value};
 use failure::Fail;
 use serde::{Deserialize, Serialize};
 
@@ -100,10 +100,12 @@ pub enum FastPayError {
     InvalidDecoding,
     #[fail(display = "Unexpected message.")]
     UnexpectedMessage,
-    #[fail(display = "InvalidConfirmationOrder.")]
+    #[fail(display = "Invalid confirmation order.")]
     InvalidConfirmationOrder,
-    #[fail(display = "InvalidCoinCreationOrder.")]
+    #[fail(display = "Invalid coin creation order.")]
     InvalidCoinCreationOrder,
+    #[fail(display = "Invalid coin.")]
+    InvalidCoin,
     #[fail(display = "Network error while querying service: {:?}.", error)]
     ClientIoError { error: String },
 }

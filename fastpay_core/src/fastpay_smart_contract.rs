@@ -74,37 +74,41 @@ impl FastPaySmartContract for FastPaySmartContractState {
             Value::Confirm(r) => r,
             _ => failure::bail!("Invalid redeem transaction"),
         };
-        match &request.operation {
+        let account = self
+            .accounts
+            .entry(request.account_id.clone())
+            .or_insert_with(AccountState::new);
+        ensure!(
+            account.last_redeemed < Some(request.sequence_number),
+            "Request certificates to Primary must have increasing sequence numbers.",
+        );
+        account.last_redeemed = Some(request.sequence_number);
+        let amount = match &request.operation {
             Operation::Transfer {
                 amount,
                 recipient: Address::Primary(_),
                 ..
-            } => {
-                ensure!(
-                    self.total_balance >= *amount,
-                    "The balance on the blockchain cannot be negative",
-                );
-                let account = self
-                    .accounts
-                    .entry(request.account_id.clone())
-                    .or_insert_with(AccountState::new);
-                ensure!(
-                    account.last_redeemed < Some(request.sequence_number),
-                    "Request certificates to Primary must have increasing sequence numbers.",
-                );
-                account.last_redeemed = Some(request.sequence_number);
-                self.total_balance = self.total_balance.try_sub(*amount)?;
-                // Request Primary coins to recipient
-                Ok(())
             }
+            | Operation::SpendAndTransfer {
+                recipient: Address::Primary(_),
+                amount,
+            } => *amount,
             Operation::Transfer { .. }
+            | Operation::SpendAndTransfer { .. }
             | Operation::OpenAccount { .. }
             | Operation::CloseAccount
             | Operation::Spend { .. }
             | Operation::ChangeOwner { .. } => {
                 failure::bail!("Invalid redeem transaction");
             }
-        }
+        };
+        ensure!(
+            self.total_balance >= amount,
+            "The balance on the blockchain cannot be negative",
+        );
+        self.total_balance = self.total_balance.try_sub(amount)?;
+        // Transfer Primary coins to recipient
+        Ok(())
     }
 }
 
