@@ -172,12 +172,14 @@ FastPayError:
     27:
       UnexpectedMessage: UNIT
     28:
-      InvalidConfirmationOrder: UNIT
+      InvalidRequestOrder: UNIT
     29:
-      InvalidCoinCreationOrder: UNIT
+      InvalidConfirmationOrder: UNIT
     30:
-      InvalidCoin: UNIT
+      InvalidCoinCreationOrder: UNIT
     31:
+      InvalidCoin: UNIT
+    32:
       ClientIoError:
         STRUCT:
           - error: STR
@@ -242,8 +244,8 @@ Request:
         TYPENAME: SequenceNumber
 RequestOrder:
   STRUCT:
-    - request:
-        TYPENAME: Request
+    - value:
+        TYPENAME: RequestValue
     - owner:
         TYPENAME: PublicKeyBytes
     - signature:
@@ -251,6 +253,13 @@ RequestOrder:
     - assets:
         SEQ:
           TYPENAME: Certificate
+RequestValue:
+  STRUCT:
+    - request:
+        TYPENAME: Request
+    - limited_to:
+        OPTION:
+          TYPENAME: PublicKeyBytes
 SequenceNumber:
   NEWTYPESTRUCT: U64
 SerializedMessage:

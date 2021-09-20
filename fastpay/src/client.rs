@@ -108,7 +108,7 @@ fn make_benchmark_request_orders(
         };
         debug!("Preparing request order: {:?}", request);
         account.next_sequence_number = account.next_sequence_number.increment().unwrap();
-        let order = RequestOrder::new(request.clone(), &account.key_pair, Vec::new());
+        let order = RequestOrder::new(request.clone().into(), &account.key_pair, Vec::new());
         orders.push(order.clone());
         let serialized_order = serialize_request_order(&order);
         serialized_orders.push((account.account_id.clone(), serialized_order.into()));
@@ -142,7 +142,7 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
     let mut serialized_certificates = Vec::new();
     for order in orders {
         let mut certificate = Certificate {
-            value: Value::Confirm(order.request.clone()),
+            value: Value::Confirm(order.value.request.clone()),
             signatures: Vec::new(),
         };
         for i in 0..committee.quorum_threshold() {
@@ -151,7 +151,10 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
             certificate.signatures.push((*pubx, sig));
         }
         let serialized_certificate = serialize_cert(&certificate);
-        serialized_certificates.push((order.request.account_id, serialized_certificate.into()));
+        serialized_certificates.push((
+            order.value.request.account_id,
+            serialized_certificate.into(),
+        ));
     }
     serialized_certificates
 }

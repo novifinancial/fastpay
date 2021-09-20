@@ -355,7 +355,7 @@ where
         action: CommunicateAction,
     ) -> Result<Vec<Certificate>, failure::Error> {
         let target_sequence_number = match &action {
-            CommunicateAction::SendOrder(order) => order.request.sequence_number,
+            CommunicateAction::SendOrder(order) => order.value.request.sequence_number,
             CommunicateAction::SynchronizeNextSequenceNumber(seq) => *seq,
         };
         let requester = CertificateRequester::new(
@@ -439,7 +439,7 @@ where
         let mut certificates: Vec<_> = task.await.unwrap().filter_map(Result::ok).collect();
         if let CommunicateAction::SendOrder(order) = action {
             let certificate = Certificate {
-                value: Value::Confirm(order.request),
+                value: Value::Confirm(order.value.request),
                 signatures: votes
                     .into_iter()
                     .filter_map(|vote| match vote {
@@ -507,7 +507,7 @@ where
             },
             sequence_number: self.next_sequence_number,
         };
-        let order = RequestOrder::new(request, &self.key_pair, Vec::new());
+        let order = RequestOrder::new(request.into(), &self.key_pair, Vec::new());
         let certificate = self
             .execute_request(order, /* with_confirmation */ true)
             .await?;
@@ -594,11 +594,11 @@ where
     ) -> Result<Certificate, failure::Error> {
         ensure!(
             self.pending_request.is_none()
-                || self.pending_request.as_ref().unwrap().request == order.request,
+                || self.pending_request.as_ref().unwrap().value.request == order.value.request,
             "Client state has a different pending request",
         );
         ensure!(
-            order.request.sequence_number == self.next_sequence_number,
+            order.value.request.sequence_number == self.next_sequence_number,
             "Unexpected sequence number"
         );
         self.pending_request = Some(order.clone());
@@ -611,7 +611,7 @@ where
             .await?;
         assert_eq!(
             new_sent_certificates.last().unwrap().value,
-            Value::Confirm(order.request)
+            Value::Confirm(order.value.request)
         );
         // Clear `pending_request` and update `sent_certificates`,
         // `balance`, and `next_sequence_number`. (Note that if we were using persistent
@@ -745,7 +745,7 @@ where
                 },
                 sequence_number: self.next_sequence_number,
             };
-            let order = RequestOrder::new(request, &self.key_pair, Vec::new());
+            let order = RequestOrder::new(request.into(), &self.key_pair, Vec::new());
             let new_certificate = self
                 .execute_request(order, /* with_confirmation */ false)
                 .await?;
