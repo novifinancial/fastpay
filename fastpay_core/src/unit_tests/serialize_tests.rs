@@ -65,7 +65,7 @@ fn test_order() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let request_order = RequestOrder::new(request, &sender_key, Vec::new());
+    let request_order = RequestOrder::new(request.into(), &sender_key, Vec::new());
 
     let buf = serialize_request_order(&request_order);
     let result = deserialize_message(buf.as_slice());
@@ -86,7 +86,7 @@ fn test_order() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let request_order2 = RequestOrder::new(request2, &sender_key, Vec::new());
+    let request_order2 = RequestOrder::new(request2.into(), &sender_key, Vec::new());
 
     let buf = serialize_request_order(&request_order2);
     let result = deserialize_message(buf.as_slice());
@@ -248,7 +248,7 @@ fn test_time_order() {
     let mut buf = Vec::new();
     let now = Instant::now();
     for _ in 0..100 {
-        let request_order = RequestOrder::new(request.clone(), &sender_key, Vec::new());
+        let request_order = RequestOrder::new(request.clone().into(), &sender_key, Vec::new());
         serialize_request_order_into(&mut buf, &request_order).unwrap();
     }
     println!("Write Order: {} microsec", now.elapsed().as_micros() / 100);

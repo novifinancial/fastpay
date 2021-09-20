@@ -321,7 +321,7 @@ impl AuthorityClient for Client {
         order: RequestOrder,
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         Box::pin(async move {
-            let shard = AuthorityState::get_shard(self.num_shards, &order.request.account_id);
+            let shard = AuthorityState::get_shard(self.num_shards, &order.value.request.account_id);
             self.send_recv_bytes(shard, serialize_request_order(&order))
                 .await
         })

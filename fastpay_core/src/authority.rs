@@ -155,16 +155,20 @@ impl Authority for AuthorityState {
         order: RequestOrder,
     ) -> Result<AccountInfoResponse, FastPayError> {
         fp_ensure!(
-            self.in_shard(&order.request.account_id),
+            self.in_shard(&order.value.request.account_id),
             FastPayError::WrongShard
         );
-        let account_id = order.request.account_id.clone();
+        // Verify that is the order was meant for this authority.
+        if let Some(authority) = &order.value.limited_to {
+            fp_ensure!(self.name == *authority, FastPayError::InvalidRequestOrder);
+        }
+        let account_id = order.value.request.account_id.clone();
         match self.accounts.get_mut(&account_id) {
             None => fp_bail!(FastPayError::UnknownSenderAccount(account_id)),
             Some(account) => {
                 // Check authentication of the request.
                 order.check(&account.owner)?;
-                let request = order.request;
+                let request = order.value.request;
                 fp_ensure!(
                     request.sequence_number <= SequenceNumber::max(),
                     FastPayError::InvalidSequenceNumber

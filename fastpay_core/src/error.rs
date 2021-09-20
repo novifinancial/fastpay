@@ -100,6 +100,8 @@ pub enum FastPayError {
     InvalidDecoding,
     #[fail(display = "Unexpected message.")]
     UnexpectedMessage,
+    #[fail(display = "Invalid request order.")]
+    InvalidRequestOrder,
     #[fail(display = "Invalid confirmation order.")]
     InvalidConfirmationOrder,
     #[fail(display = "Invalid coin creation order.")]

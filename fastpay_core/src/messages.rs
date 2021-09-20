@@ -1,7 +1,7 @@
 // Copyright (c) Facebook Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{base_types::*, committee::Committee, error::*};
+use super::{base_types::*, committee::Committee, error::FastPayError};
 
 #[cfg(test)]
 #[path = "unit_tests/messages_tests.rs"]
@@ -66,11 +66,18 @@ pub struct Request {
     pub sequence_number: SequenceNumber,
 }
 
+/// The content of a request to be signed in a RequestOrder.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct RequestValue {
+    pub request: Request,
+    pub limited_to: Option<AuthorityName>,
+}
+
 /// An authenticated request plus additional certified assets.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct RequestOrder {
-    pub request: Request,
+    pub value: RequestValue,
     pub owner: AccountOwner,
     pub signature: Signature,
     pub assets: Vec<Certificate>,
@@ -259,11 +266,20 @@ impl Request {
     }
 }
 
-impl RequestOrder {
-    pub fn new(request: Request, secret: &KeyPair, assets: Vec<Certificate>) -> Self {
-        let signature = Signature::new(&request, secret);
+impl From<Request> for RequestValue {
+    fn from(request: Request) -> Self {
         Self {
             request,
+            limited_to: None,
+        }
+    }
+}
+
+impl RequestOrder {
+    pub fn new(value: RequestValue, secret: &KeyPair, assets: Vec<Certificate>) -> Self {
+        let signature = Signature::new(&value, secret);
+        Self {
+            value,
             owner: secret.public(),
             signature,
             assets,
@@ -275,7 +291,7 @@ impl RequestOrder {
             authentication_method == &Some(self.owner),
             FastPayError::InvalidOwner
         );
-        self.signature.check(&self.request, self.owner)
+        self.signature.check(&self.value, self.owner)
     }
 }
 
@@ -383,6 +399,6 @@ impl ConfirmationOrder {
     }
 }
 
-impl BcsSignable for Request {}
+impl BcsSignable for RequestValue {}
 impl BcsSignable for Value {}
 impl BcsSignable for CoinCreationContract {}

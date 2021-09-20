@@ -15,8 +15,7 @@ fn test_handle_request_order_bad_signature() {
         init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
     let unknown_key_pair = get_key_pair();
     let mut bad_signature_request_order = request_order.clone();
-    bad_signature_request_order.signature =
-        Signature::new(&request_order.request, &unknown_key_pair);
+    bad_signature_request_order.signature = Signature::new(&request_order.value, &unknown_key_pair);
     assert!(state
         .handle_request_order(bad_signature_request_order)
         .is_err());
@@ -63,7 +62,7 @@ fn test_handle_request_order_unknown_sender() {
     let unknown_key = get_key_pair();
 
     let unknown_sender_request_order =
-        RequestOrder::new(request_order.request, &unknown_key, Vec::new());
+        RequestOrder::new(request_order.value, &unknown_key, Vec::new());
     assert!(state
         .handle_request_order(unknown_sender_request_order)
         .is_err());
@@ -514,7 +513,7 @@ fn init_request_order(
         },
         sequence_number: SequenceNumber::new(),
     };
-    RequestOrder::new(request, secret, Vec::new())
+    RequestOrder::new(request.into(), secret, Vec::new())
 }
 
 #[cfg(test)]
@@ -525,7 +524,9 @@ fn init_certificate(
     amount: Amount,
     state: &AuthorityState,
 ) -> Certificate {
-    let request = init_request_order(account_id, key_pair, recipient, amount).request;
+    let request = init_request_order(account_id, key_pair, recipient, amount)
+        .value
+        .request;
     let value = Value::Confirm(request);
     let vote = Vote::new(value.clone(), &state.key_pair);
     let mut builder = SignatureAggregator::new(value, &state.committee);
