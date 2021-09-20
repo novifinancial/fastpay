@@ -1,13 +1,23 @@
 // Copyright (c) Facebook Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+//! This module is sketching a FastPay smart contract on a primary chain.
+
 use super::{base_types::*, committee::Committee, messages::*};
 use failure::ensure;
 use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 #[path = "unit_tests/fastpay_smart_contract_tests.rs"]
 mod fastpay_smart_contract_tests;
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct FundingTransaction {
+    pub recipient: AccountId,
+    pub primary_coins: Amount,
+    // TODO: Authenticated by Primary sender.
+}
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 pub struct AccountState {
