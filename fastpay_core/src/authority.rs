@@ -114,6 +114,7 @@ impl AuthorityState {
             | Operation::SpendAndTransfer {
                 recipient: Address::FastPay(recipient),
                 amount,
+                ..
             } => {
                 fp_ensure!(self.in_shard(recipient), FastPayError::WrongShard);
                 let account = self.accounts.entry(recipient.clone()).or_default();
@@ -291,7 +292,7 @@ impl Authority for AuthorityState {
                     // Verify locked account.
                     fp_ensure!(
                         account_id == &source.account_id
-                            && account_balance == &source.amount
+                            && account_balance == &source.account_balance
                             && contract_hash == &hash,
                         FastPayError::InvalidCoinCreationOrder
                     );
