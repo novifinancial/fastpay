@@ -5,8 +5,8 @@
 
 use super::{base_types::*, committee::Committee, messages::*};
 use failure::ensure;
-use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[cfg(test)]
 #[path = "unit_tests/fastpay_smart_contract_tests.rs"]
@@ -17,6 +17,18 @@ pub struct FundingTransaction {
     pub recipient: AccountId,
     pub primary_coins: Amount,
     // TODO: Authenticated by Primary sender.
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct RedeemTransaction {
+    pub certificate: Certificate,
+}
+
+impl RedeemTransaction {
+    pub fn new(certificate: Certificate) -> Self {
+        Self { certificate }
+    }
 }
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
@@ -95,13 +107,14 @@ impl FastPaySmartContract for FastPaySmartContractState {
         account.last_redeemed = Some(request.sequence_number);
         let amount = match &request.operation {
             Operation::Transfer {
-                amount,
                 recipient: Address::Primary(_),
+                amount,
                 ..
             }
             | Operation::SpendAndTransfer {
                 recipient: Address::Primary(_),
                 amount,
+                ..
             } => *amount,
             Operation::Transfer { .. }
             | Operation::SpendAndTransfer { .. }

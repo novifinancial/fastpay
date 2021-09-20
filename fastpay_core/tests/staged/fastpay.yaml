@@ -81,19 +81,11 @@ CoinCreationSource:
   STRUCT:
     - account_id:
         TYPENAME: AccountId
-    - amount:
+    - account_balance:
         TYPENAME: Amount
     - coins:
         SEQ:
           TYPENAME: Certificate
-ConfirmationOutcome:
-  ENUM:
-    0:
-      Complete: UNIT
-    1:
-      Retry: UNIT
-    2:
-      Cancel: UNIT
 CrossShardRequest:
   ENUM:
     0:
@@ -233,6 +225,8 @@ Operation:
               TYPENAME: Address
           - amount:
               TYPENAME: Amount
+          - user_data:
+              TYPENAME: UserData
 PublicKeyBytes:
   NEWTYPESTRUCT:
     TUPLEARRAY:

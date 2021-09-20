@@ -10,6 +10,7 @@ mod messages_tests;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+/// A message sent from the smart contract on the primary chain.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct PrimarySynchronizationOrder {
     pub recipient: AccountId,
@@ -17,35 +18,165 @@ pub struct PrimarySynchronizationOrder {
     pub transaction_index: VersionNumber,
 }
 
+/// A recipient's address in FastPay or on the primary chain.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Address {
     Primary(PrimaryAddress),
     FastPay(AccountId),
 }
 
+/// An account operation in FastPay.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Operation {
+    /// Transfer `amount` units of value to the recipient.
     Transfer {
         recipient: Address,
         amount: Amount,
         user_data: UserData,
     },
+    /// Create (or activate) a new account by installing the given authentication key.
     OpenAccount {
         new_id: AccountId,
         new_owner: AccountOwner,
     },
+    /// Close the account.
     CloseAccount,
-    ChangeOwner {
-        new_owner: AccountOwner,
-    },
+    /// Change the authentication key of the account.
+    ChangeOwner { new_owner: AccountOwner },
+    /// Lock the account so that the balance and linked coins may be eventually transfered
+    /// to new coins (according to the "coin creation contract" behind `contract_hash`).
     Spend {
         account_balance: Amount,
         contract_hash: HashValue,
     },
+    /// Close the account (and spend a number of linked coins) to transfer the given total
+    /// amount to the recipient.
     SpendAndTransfer {
         recipient: Address,
         amount: Amount,
+        user_data: UserData,
     },
+}
+
+/// A request containing an account operation.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct Request {
+    pub account_id: AccountId,
+    pub operation: Operation,
+    pub sequence_number: SequenceNumber,
+}
+
+/// An authenticated request plus additional certified assets.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct RequestOrder {
+    pub request: Request,
+    pub owner: AccountOwner,
+    pub signature: Signature,
+    pub assets: Vec<Certificate>,
+}
+
+/// A transparent coin linked a given account.
+// TODO: This could be an enum to allow several types of coins.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct Coin {
+    pub account_id: AccountId,
+    pub amount: Amount,
+}
+
+/// A statement to be certified by the authorities.
+// TODO: decide if we split Vote & Certificate in one type per kind of value.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub enum Value {
+    Lock(Request),
+    Confirm(Request),
+    Coin(Coin),
+}
+
+/// The balance of an account plus linked coins to be used in a coin creation contract.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationSource {
+    pub account_id: AccountId,
+    pub account_balance: Amount,
+    pub coins: Vec<Certificate>,
+}
+
+/// Instructions to create a number of coins during a CoinCreationOrder.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationContract {
+    /// Diversification seed to ensure that hash(contract) cannot be guessed.
+    pub seed: u128,
+    /// The sources to be used for coin creation.
+    pub sources: Vec<CoinCreationSource>,
+    /// The coins to be created.
+    pub targets: Vec<Coin>,
+}
+
+/// Same as RequestOrder but meant to create coins.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationOrder {
+    /// Instructions to create the coins.
+    pub contract: CoinCreationContract,
+    /// Proof that the source accounts have been locked with a suitable "Spend" operation
+    /// and the account balances are correct.
+    pub locks: Vec<Certificate>,
+}
+
+/// A vote on a statement from an authority.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct Vote {
+    pub value: Value,
+    pub authority: AuthorityName,
+    pub signature: Signature,
+}
+
+/// A certified statement from the committee.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct Certificate {
+    pub value: Value,
+    pub signatures: Vec<(AuthorityName, Signature)>,
+}
+
+/// Order to process a confirmed request.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct ConfirmationOrder {
+    pub certificate: Certificate,
+}
+
+/// Message to obtain information on an account.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct AccountInfoQuery {
+    pub account_id: AccountId,
+    pub query_sequence_number: Option<SequenceNumber>,
+    pub query_received_requests_excluding_first_nth: Option<usize>,
+}
+
+/// The response to an `AccountInfoQuery`
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct AccountInfoResponse {
+    pub account_id: AccountId,
+    pub owner: Option<AccountOwner>,
+    pub balance: Balance,
+    pub next_sequence_number: SequenceNumber,
+    pub pending: Option<Vote>,
+    pub queried_certificate: Option<Certificate>,
+    pub queried_received_requests: Vec<Certificate>,
+}
+
+/// A (trusted) cross-shard request with an authority.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub enum CrossShardRequest {
+    UpdateRecipient { certificate: Certificate },
+    DestroyAccount { account_id: AccountId },
 }
 
 impl Operation {
@@ -69,121 +200,6 @@ impl Operation {
             | ChangeOwner { .. } => None,
         }
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Request {
-    pub account_id: AccountId,
-    pub operation: Operation,
-    pub sequence_number: SequenceNumber,
-}
-
-// TODO: This could be an enum to allow several types of coins.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Coin {
-    pub account_id: AccountId,
-    pub amount: Amount,
-}
-
-// TODO: decide if we split Vote & Certificate in one type per kind of value.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
-pub enum Value {
-    Lock(Request),
-    Confirm(Request),
-    Coin(Coin),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct RequestOrder {
-    pub request: Request,
-    pub owner: AccountOwner,
-    pub signature: Signature,
-    pub assets: Vec<Certificate>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct CoinCreationSource {
-    pub account_id: AccountId,
-    pub amount: Amount,
-    pub coins: Vec<Certificate>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct CoinCreationContract {
-    pub seed: u128, // make sure hash(contract) cannot be guessed
-    pub sources: Vec<CoinCreationSource>,
-    pub targets: Vec<Coin>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct CoinCreationOrder {
-    pub contract: CoinCreationContract,
-    pub locks: Vec<Certificate>, // Spend operation with amounts and hashes matching the sources.
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct Vote {
-    pub value: Value,
-    pub authority: AuthorityName,
-    pub signature: Signature,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct Certificate {
-    pub value: Value,
-    pub signatures: Vec<(AuthorityName, Signature)>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct RedeemTransaction {
-    pub certificate: Certificate,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct ConfirmationOrder {
-    pub certificate: Certificate,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct AccountInfoQuery {
-    pub account_id: AccountId,
-    pub query_sequence_number: Option<SequenceNumber>,
-    pub query_received_requests_excluding_first_nth: Option<usize>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct AccountInfoResponse {
-    pub account_id: AccountId,
-    pub owner: Option<AccountOwner>,
-    pub balance: Balance,
-    pub next_sequence_number: SequenceNumber,
-    pub pending: Option<Vote>,
-    pub queried_certificate: Option<Certificate>,
-    pub queried_received_requests: Vec<Certificate>,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub enum ConfirmationOutcome {
-    Complete,
-    Retry,
-    Cancel,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub enum CrossShardRequest {
-    UpdateRecipient { certificate: Certificate },
-    DestroyAccount { account_id: AccountId },
 }
 
 impl Value {
@@ -358,12 +374,6 @@ impl Certificate {
         );
         // All what is left is checking signatures!
         Signature::verify_batch(&self.value, &self.signatures)
-    }
-}
-
-impl RedeemTransaction {
-    pub fn new(certificate: Certificate) -> Self {
-        Self { certificate }
     }
 }
 
