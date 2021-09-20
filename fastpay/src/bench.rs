@@ -151,7 +151,7 @@ impl ClientServerBenchmark {
                 },
                 sequence_number: SequenceNumber::from(0),
             };
-            let order = RequestOrder::new(request.clone(), &key_pair);
+            let order = RequestOrder::new(request.clone(), &key_pair, Vec::new());
             let shard = AuthorityState::get_shard(self.num_shards, &id);
 
             // Serialize order

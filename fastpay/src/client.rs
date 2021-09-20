@@ -108,7 +108,7 @@ fn make_benchmark_request_orders(
         };
         debug!("Preparing request order: {:?}", request);
         account.next_sequence_number = account.next_sequence_number.increment().unwrap();
-        let order = RequestOrder::new(request.clone(), &account.key_pair);
+        let order = RequestOrder::new(request.clone(), &account.key_pair, Vec::new());
         orders.push(order.clone());
         let serialized_order = serialize_request_order(&order);
         serialized_orders.push((account.account_id.clone(), serialized_order.into()));

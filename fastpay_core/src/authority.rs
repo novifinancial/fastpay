@@ -110,6 +110,10 @@ impl AuthorityState {
                 recipient: Address::FastPay(recipient),
                 amount,
                 ..
+            }
+            | Operation::SpendAndTransfer {
+                recipient: Address::FastPay(recipient),
+                amount,
             } => {
                 fp_ensure!(self.in_shard(recipient), FastPayError::WrongShard);
                 let account = self.accounts.entry(recipient.clone()).or_default();
@@ -128,6 +132,10 @@ impl AuthorityState {
             }
             Operation::CloseAccount
             | Operation::Transfer {
+                recipient: Address::Primary(_),
+                ..
+            }
+            | Operation::SpendAndTransfer {
                 recipient: Address::Primary(_),
                 ..
             }
@@ -199,6 +207,27 @@ impl Authority for AuthorityState {
                             }
                         );
                         Value::Lock(request)
+                    }
+                    Operation::SpendAndTransfer { amount, .. } => {
+                        let mut amount = *amount;
+                        // Verify source coins.
+                        for coin in order.assets {
+                            coin.check(&self.committee)?;
+                            match &coin.value {
+                                Value::Coin(coin) if coin.account_id == account_id => {
+                                    amount = amount.try_sub(coin.amount)?;
+                                }
+                                _ => fp_bail!(FastPayError::InvalidCoin),
+                            }
+                        }
+                        // Verify balance.
+                        fp_ensure!(
+                            account.balance >= amount.into(),
+                            FastPayError::InsufficientFunding {
+                                current_balance: account.balance
+                            }
+                        );
+                        Value::Confirm(request)
                     }
                     Operation::OpenAccount { new_id, .. } => {
                         let expected_id = account_id.make_child(request.sequence_number);
@@ -278,14 +307,11 @@ impl Authority for AuthorityState {
                 match &coin.value {
                     Value::Coin(Coin { account_id, amount }) => {
                         // Verify locked account.
-                        fp_ensure!(
-                            account_id == &source.account_id,
-                            FastPayError::InvalidCoinCreationOrder
-                        );
+                        fp_ensure!(account_id == &source.account_id, FastPayError::InvalidCoin);
                         // Update source amount.
                         source_amount = source_amount.try_add(*amount)?;
                     }
-                    _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
+                    _ => fp_bail!(FastPayError::InvalidCoin),
                 }
             }
         }
@@ -365,7 +391,9 @@ impl Authority for AuthorityState {
                 sender_account.owner = Some(*new_owner);
                 sender_account.make_account_info(sender.clone())
             }
-            Operation::CloseAccount | Operation::Spend { .. } => {
+            Operation::CloseAccount
+            | Operation::Spend { .. }
+            | Operation::SpendAndTransfer { .. } => {
                 let mut info = sender_account.make_account_info(sender.clone());
                 self.accounts.remove(&sender);
                 info.owner = None; // Signal that the account was deleted.

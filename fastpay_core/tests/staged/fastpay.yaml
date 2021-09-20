@@ -184,6 +184,8 @@ FastPayError:
     29:
       InvalidCoinCreationOrder: UNIT
     30:
+      InvalidCoin: UNIT
+    31:
       ClientIoError:
         STRUCT:
           - error: STR
@@ -224,6 +226,13 @@ Operation:
               TYPENAME: Amount
           - contract_hash:
               TYPENAME: HashValue
+    5:
+      SpendAndTransfer:
+        STRUCT:
+          - recipient:
+              TYPENAME: Address
+          - amount:
+              TYPENAME: Amount
 PublicKeyBytes:
   NEWTYPESTRUCT:
     TUPLEARRAY:
@@ -245,6 +254,9 @@ RequestOrder:
         TYPENAME: PublicKeyBytes
     - signature:
         TYPENAME: Signature
+    - assets:
+        SEQ:
+          TYPENAME: Certificate
 SequenceNumber:
   NEWTYPESTRUCT: U64
 SerializedMessage:

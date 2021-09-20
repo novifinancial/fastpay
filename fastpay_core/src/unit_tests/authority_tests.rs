@@ -62,7 +62,8 @@ fn test_handle_request_order_unknown_sender() {
         init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
     let unknown_key = get_key_pair();
 
-    let unknown_sender_request_order = RequestOrder::new(request_order.request, &unknown_key);
+    let unknown_sender_request_order =
+        RequestOrder::new(request_order.request, &unknown_key, Vec::new());
     assert!(state
         .handle_request_order(unknown_sender_request_order)
         .is_err());
@@ -513,7 +514,7 @@ fn init_request_order(
         },
         sequence_number: SequenceNumber::new(),
     };
-    RequestOrder::new(request, secret)
+    RequestOrder::new(request, secret, Vec::new())
 }
 
 #[cfg(test)]

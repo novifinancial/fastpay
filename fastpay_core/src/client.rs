@@ -507,7 +507,7 @@ where
             },
             sequence_number: self.next_sequence_number,
         };
-        let order = RequestOrder::new(request, &self.key_pair);
+        let order = RequestOrder::new(request, &self.key_pair, Vec::new());
         let certificate = self
             .execute_request(order, /* with_confirmation */ true)
             .await?;
@@ -535,6 +535,7 @@ where
                 Operation::OpenAccount { .. }
                 | Operation::CloseAccount
                 | Operation::Spend { .. }
+                | Operation::SpendAndTransfer { .. }
                 | Operation::ChangeOwner { .. } => (),
             }
             if request.sequence_number >= new_next_sequence_number {
@@ -569,6 +570,7 @@ where
                 Operation::OpenAccount { .. }
                 | Operation::CloseAccount
                 | Operation::Spend { .. }
+                | Operation::SpendAndTransfer { .. }
                 | Operation::ChangeOwner { .. } => (),
             }
         }
@@ -693,6 +695,7 @@ where
                 Operation::OpenAccount { .. }
                 | Operation::CloseAccount
                 | Operation::Spend { .. }
+                | Operation::SpendAndTransfer { .. }
                 | Operation::ChangeOwner { .. } => {
                     // TODO: decide what to do
                 }
@@ -717,6 +720,7 @@ where
                     Operation::OpenAccount { .. }
                     | Operation::CloseAccount
                     | Operation::Spend { .. }
+                    | Operation::SpendAndTransfer { .. }
                     | Operation::ChangeOwner { .. } => (),
                 }
                 entry.insert(certificate);
@@ -741,7 +745,7 @@ where
                 },
                 sequence_number: self.next_sequence_number,
             };
-            let order = RequestOrder::new(request, &self.key_pair);
+            let order = RequestOrder::new(request, &self.key_pair, Vec::new());
             let new_certificate = self
                 .execute_request(order, /* with_confirmation */ false)
                 .await?;
