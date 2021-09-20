@@ -11,13 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct FundingTransaction {
-    pub recipient: AccountId,
-    pub primary_coins: Amount,
-    // TODO: Authenticated by Primary sender.
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct PrimarySynchronizationOrder {
     pub recipient: AccountId,
     pub amount: Amount,
