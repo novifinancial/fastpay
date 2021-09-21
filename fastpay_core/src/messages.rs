@@ -1,25 +1,16 @@
 // Copyright (c) Facebook Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{base_types::*, committee::Committee, error::*};
+use super::{base_types::*, committee::Committee, error::FastPayError};
 
 #[cfg(test)]
 #[path = "unit_tests/messages_tests.rs"]
 mod messages_tests;
 
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashSet,
-    hash::{Hash, Hasher},
-};
+use std::collections::HashSet;
 
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct FundingTransaction {
-    pub recipient: AccountId,
-    pub primary_coins: Amount,
-    // TODO: Authenticated by Primary sender.
-}
-
+/// A message sent from the smart contract on the primary chain.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct PrimarySynchronizationOrder {
     pub recipient: AccountId,
@@ -27,214 +18,287 @@ pub struct PrimarySynchronizationOrder {
     pub transaction_index: VersionNumber,
 }
 
+/// A recipient's address in FastPay or on the primary chain.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Address {
     Primary(PrimaryAddress),
     FastPay(AccountId),
 }
 
+/// An account operation in FastPay.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Operation {
-    Payment {
+    /// Transfer `amount` units of value to the recipient.
+    Transfer {
         recipient: Address,
         amount: Amount,
         user_data: UserData,
     },
-    CreateAccount {
+    /// Create (or activate) a new account by installing the given authentication key.
+    OpenAccount {
         new_id: AccountId,
         new_owner: AccountOwner,
     },
-    ChangeOwner {
-        new_owner: AccountOwner,
+    /// Close the account.
+    CloseAccount,
+    /// Change the authentication key of the account.
+    ChangeOwner { new_owner: AccountOwner },
+    /// Lock the account so that the balance and linked coins may be eventually transfered
+    /// to new coins (according to the "coin creation contract" behind `contract_hash`).
+    Spend {
+        account_balance: Amount,
+        contract_hash: HashValue,
     },
+    /// Close the account (and spend a number of linked coins) to transfer the given total
+    /// amount to the recipient.
+    SpendAndTransfer {
+        recipient: Address,
+        amount: Amount,
+        user_data: UserData,
+    },
+}
+
+/// A request containing an account operation.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct Request {
+    pub account_id: AccountId,
+    pub operation: Operation,
+    pub sequence_number: SequenceNumber,
+}
+
+/// The content of a request to be signed in a RequestOrder.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct RequestValue {
+    pub request: Request,
+    pub limited_to: Option<AuthorityName>,
+}
+
+/// An authenticated request plus additional certified assets.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct RequestOrder {
+    pub value: RequestValue,
+    pub owner: AccountOwner,
+    pub signature: Signature,
+    pub assets: Vec<Certificate>,
+}
+
+/// A transparent coin linked a given account.
+// TODO: This could be an enum to allow several types of coins.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct Coin {
+    pub account_id: AccountId,
+    pub amount: Amount,
+}
+
+/// A statement to be certified by the authorities.
+// TODO: decide if we split Vote & Certificate in one type per kind of value.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub enum Value {
+    Lock(Request),
+    Confirm(Request),
+    Coin(Coin),
+}
+
+/// The balance of an account plus linked coins to be used in a coin creation contract.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationSource {
+    pub account_id: AccountId,
+    pub account_balance: Amount,
+    pub coins: Vec<Certificate>,
+}
+
+/// Instructions to create a number of coins during a CoinCreationOrder.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationContract {
+    /// Diversification seed to ensure that hash(contract) cannot be guessed.
+    pub seed: u128,
+    /// The sources to be used for coin creation.
+    pub sources: Vec<CoinCreationSource>,
+    /// The coins to be created.
+    pub targets: Vec<Coin>,
+}
+
+/// Same as RequestOrder but meant to create coins.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationOrder {
+    /// Instructions to create the coins.
+    pub contract: CoinCreationContract,
+    /// Proof that the source accounts have been locked with a suitable "Spend" operation
+    /// and the account balances are correct.
+    pub locks: Vec<Certificate>,
+}
+
+/// A vote on a statement from an authority.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct Vote {
+    pub value: Value,
+    pub authority: AuthorityName,
+    pub signature: Signature,
+}
+
+/// A certified statement from the committee.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct Certificate {
+    pub value: Value,
+    pub signatures: Vec<(AuthorityName, Signature)>,
+}
+
+/// Order to process a confirmed request.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct ConfirmationOrder {
+    pub certificate: Certificate,
+}
+
+/// Message to obtain information on an account.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct AccountInfoQuery {
+    pub account_id: AccountId,
+    pub query_sequence_number: Option<SequenceNumber>,
+    pub query_received_requests_excluding_first_nth: Option<usize>,
+}
+
+/// The response to an `AccountInfoQuery`
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct AccountInfoResponse {
+    pub account_id: AccountId,
+    pub owner: Option<AccountOwner>,
+    pub balance: Balance,
+    pub next_sequence_number: SequenceNumber,
+    pub pending: Option<Vote>,
+    pub queried_certificate: Option<Certificate>,
+    pub queried_received_requests: Vec<Certificate>,
+}
+
+/// A (trusted) cross-shard request with an authority.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub enum CrossShardRequest {
+    UpdateRecipient { certificate: Certificate },
+    DestroyAccount { account_id: AccountId },
 }
 
 impl Operation {
     pub fn recipient(&self) -> Option<&AccountId> {
         use Operation::*;
         match self {
-            Payment {
+            Transfer {
                 recipient: Address::FastPay(id),
                 ..
-            } => Some(id),
-            CreateAccount { new_id, .. } => Some(new_id),
-            Payment { .. } | ChangeOwner { .. } => None,
+            }
+            | Operation::SpendAndTransfer {
+                recipient: Address::FastPay(id),
+                ..
+            }
+            | OpenAccount { new_id: id, .. } => Some(id),
+
+            Operation::Spend { .. }
+            | Operation::SpendAndTransfer { .. }
+            | Operation::CloseAccount
+            | Transfer { .. }
+            | ChangeOwner { .. } => None,
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Transfer {
-    pub account_id: AccountId,
-    pub operation: Operation,
-    pub sequence_number: SequenceNumber,
-}
-
-#[derive(Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct TransferOrder {
-    pub transfer: Transfer,
-    pub owner: AccountOwner,
-    pub signature: Signature,
-}
-
-#[derive(Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct SignedTransferOrder {
-    pub value: TransferOrder,
-    pub authority: AuthorityName,
-    pub signature: Signature,
-}
-
-#[derive(Eq, Clone, Debug, Serialize, Deserialize)]
-pub struct CertifiedTransferOrder {
-    pub value: TransferOrder,
-    pub signatures: Vec<(AuthorityName, Signature)>,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct RedeemTransaction {
-    pub transfer_certificate: CertifiedTransferOrder,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct ConfirmationOrder {
-    pub transfer_certificate: CertifiedTransferOrder,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct AccountInfoRequest {
-    pub account_id: AccountId,
-    pub request_sequence_number: Option<SequenceNumber>,
-    pub request_received_transfers_excluding_first_nth: Option<usize>,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct AccountInfoResponse {
-    pub account_id: AccountId,
-    pub balance: Balance,
-    pub next_sequence_number: SequenceNumber,
-    pub pending_confirmation: Option<SignedTransferOrder>,
-    pub locked_confirmation: Option<CertifiedTransferOrder>,
-    pub requested_certificate: Option<CertifiedTransferOrder>,
-    pub requested_received_transfers: Vec<CertifiedTransferOrder>,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub enum ConfirmationOutcome {
-    Complete,
-    Retry,
-    Cancel,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub enum CrossShardRequest {
-    UpdateRecipientAccount {
-        certificate: CertifiedTransferOrder,
-    },
-    VerifyAccountDeletion {
-        parent_id: AccountId,
-        sequence_number: SequenceNumber,
-        certificate: CertifiedTransferOrder,
-    },
-    UpdateSenderAccount {
-        certificate: CertifiedTransferOrder,
-        outcome: ConfirmationOutcome,
-    },
-}
-
-impl Hash for TransferOrder {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.transfer.hash(state);
-    }
-}
-
-impl PartialEq for TransferOrder {
-    fn eq(&self, other: &Self) -> bool {
-        self.transfer == other.transfer
-    }
-}
-
-impl Hash for SignedTransferOrder {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.value.hash(state);
-        self.authority.hash(state);
-    }
-}
-
-impl PartialEq for SignedTransferOrder {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value && self.authority == other.authority
-    }
-}
-
-impl Hash for CertifiedTransferOrder {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.value.hash(state);
-        self.signatures.len().hash(state);
-        for (name, _) in self.signatures.iter() {
-            name.hash(state);
+impl Value {
+    pub fn confirm_account_id(&self) -> Option<&AccountId> {
+        match self {
+            Value::Confirm(r) => Some(&r.account_id),
+            _ => None,
         }
     }
-}
 
-impl PartialEq for CertifiedTransferOrder {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-            && self.signatures.len() == other.signatures.len()
-            && self
-                .signatures
-                .iter()
-                .map(|(name, _)| name)
-                .eq(other.signatures.iter().map(|(name, _)| name))
+    pub fn confirm_sequence_number(&self) -> Option<SequenceNumber> {
+        match self {
+            Value::Confirm(r) => Some(r.sequence_number),
+            _ => None,
+        }
     }
-}
 
-impl TransferOrder {
-    pub fn key(&self) -> (AccountId, SequenceNumber) {
-        (
-            self.transfer.account_id.clone(),
-            self.transfer.sequence_number,
-        )
+    pub fn confirm_request(&self) -> Option<&Request> {
+        match self {
+            Value::Confirm(r) => Some(r),
+            Value::Coin(_) | Value::Lock(_) => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn confirm_request_mut(&mut self) -> Option<&mut Request> {
+        match self {
+            Value::Confirm(r) => Some(r),
+            Value::Coin(_) | Value::Lock(_) => None,
+        }
+    }
+
+    pub fn confirm_key(&self) -> Option<(AccountId, SequenceNumber)> {
+        match self {
+            Value::Confirm(r) => Some((r.account_id.clone(), r.sequence_number)),
+            Value::Coin(_) | Value::Lock(_) => None,
+        }
     }
 }
 
 /// Non-testing code should make the pattern matching explicit so that
 /// we kwow where to add protocols in the future.
 #[cfg(test)]
-impl Transfer {
+impl Request {
     pub(crate) fn amount(&self) -> Option<Amount> {
         match &self.operation {
-            Operation::Payment { amount, .. } => Some(*amount),
+            Operation::Transfer { amount, .. } => Some(*amount),
             _ => None,
         }
     }
 
     pub(crate) fn amount_mut(&mut self) -> Option<&mut Amount> {
         match &mut self.operation {
-            Operation::Payment { amount, .. } => Some(amount),
+            Operation::Transfer { amount, .. } => Some(amount),
             _ => None,
         }
     }
 }
 
-impl TransferOrder {
-    pub fn new(transfer: Transfer, secret: &KeyPair) -> Self {
-        let signature = Signature::new(&transfer, secret);
+impl From<Request> for RequestValue {
+    fn from(request: Request) -> Self {
         Self {
-            transfer,
-            owner: secret.public(),
-            signature,
+            request,
+            limited_to: None,
         }
-    }
-
-    pub fn check_signature(&self) -> Result<(), FastPayError> {
-        self.signature.check(&self.transfer, self.owner)
     }
 }
 
-impl SignedTransferOrder {
+impl RequestOrder {
+    pub fn new(value: RequestValue, secret: &KeyPair, assets: Vec<Certificate>) -> Self {
+        let signature = Signature::new(&value, secret);
+        Self {
+            value,
+            owner: secret.public(),
+            signature,
+            assets,
+        }
+    }
+
+    pub fn check(&self, authentication_method: &Option<AccountOwner>) -> Result<(), FastPayError> {
+        fp_ensure!(
+            authentication_method == &Some(self.owner),
+            FastPayError::InvalidOwner
+        );
+        self.signature.check(&self.value, self.owner)
+    }
+}
+
+impl Vote {
     /// Use signing key to create a signed object.
-    pub fn new(value: TransferOrder, key_pair: &KeyPair) -> Self {
-        let signature = Signature::new(&value.transfer, key_pair);
+    pub fn new(value: Value, key_pair: &KeyPair) -> Self {
+        let signature = Signature::new(&value, key_pair);
         Self {
             value,
             authority: key_pair.public(),
@@ -244,10 +308,9 @@ impl SignedTransferOrder {
 
     /// Verify the signature and return the non-zero voting right of the authority.
     pub fn check(&self, committee: &Committee) -> Result<usize, FastPayError> {
-        self.value.check_signature()?;
         let weight = committee.weight(&self.authority);
         fp_ensure!(weight > 0, FastPayError::UnknownSigner);
-        self.signature.check(&self.value.transfer, self.authority)?;
+        self.signature.check(&self.value, self.authority)?;
         Ok(weight)
     }
 }
@@ -256,23 +319,17 @@ pub struct SignatureAggregator<'a> {
     committee: &'a Committee,
     weight: usize,
     used_authorities: HashSet<AuthorityName>,
-    partial: CertifiedTransferOrder,
+    partial: Certificate,
 }
 
 impl<'a> SignatureAggregator<'a> {
     /// Start aggregating signatures for the given value into a certificate.
-    pub fn try_new(value: TransferOrder, committee: &'a Committee) -> Result<Self, FastPayError> {
-        value.check_signature()?;
-        Ok(Self::new_unsafe(value, committee))
-    }
-
-    /// Same as try_new but we don't check the order.
-    pub fn new_unsafe(value: TransferOrder, committee: &'a Committee) -> Self {
+    pub fn new(value: Value, committee: &'a Committee) -> Self {
         Self {
             committee,
             weight: 0,
             used_authorities: HashSet::new(),
-            partial: CertifiedTransferOrder {
+            partial: Certificate {
                 value,
                 signatures: Vec::new(),
             },
@@ -286,8 +343,8 @@ impl<'a> SignatureAggregator<'a> {
         &mut self,
         authority: AuthorityName,
         signature: Signature,
-    ) -> Result<Option<CertifiedTransferOrder>, FastPayError> {
-        signature.check(&self.partial.value.transfer, authority)?;
+    ) -> Result<Option<Certificate>, FastPayError> {
+        signature.check(&self.partial.value, authority)?;
         // Check that each authority only appears once.
         fp_ensure!(
             !self.used_authorities.contains(&authority),
@@ -309,7 +366,7 @@ impl<'a> SignatureAggregator<'a> {
     }
 }
 
-impl CertifiedTransferOrder {
+impl Certificate {
     /// Verify the certificate.
     pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
         // Check the quorum.
@@ -332,28 +389,16 @@ impl CertifiedTransferOrder {
             FastPayError::CertificateRequiresQuorum
         );
         // All what is left is checking signatures!
-        let inner_sig = (self.value.owner, self.value.signature);
-        Signature::verify_batch(
-            &self.value.transfer,
-            std::iter::once(&inner_sig).chain(&self.signatures),
-        )
-    }
-}
-
-impl RedeemTransaction {
-    pub fn new(transfer_certificate: CertifiedTransferOrder) -> Self {
-        Self {
-            transfer_certificate,
-        }
+        Signature::verify_batch(&self.value, &self.signatures)
     }
 }
 
 impl ConfirmationOrder {
-    pub fn new(transfer_certificate: CertifiedTransferOrder) -> Self {
-        Self {
-            transfer_certificate,
-        }
+    pub fn new(certificate: Certificate) -> Self {
+        Self { certificate }
     }
 }
 
-impl BcsSignable for Transfer {}
+impl BcsSignable for RequestValue {}
+impl BcsSignable for Value {}
+impl BcsSignable for CoinCreationContract {}

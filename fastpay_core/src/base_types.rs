@@ -45,6 +45,9 @@ pub struct PublicKeyBytes(pub [u8; dalek::PUBLIC_KEY_LENGTH]);
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Serialize, Deserialize)]
 pub struct AccountId(Vec<SequenceNumber>);
 
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Hash, Serialize, Deserialize)]
+pub struct HashValue(generic_array::GenericArray<u8, <sha2::Sha512 as sha2::Digest>::OutputSize>);
+
 pub type PrimaryAddress = PublicKeyBytes;
 pub type AuthorityName = PublicKeyBytes;
 pub type AccountOwner = PublicKeyBytes;
@@ -423,6 +426,19 @@ where
         // Note: This assumes that names never contain the separator `::`.
         write!(hasher, "{}::", name).expect("Hasher should not fail");
         bcs::serialize_into(hasher, &self).expect("Message serialization should not fail");
+    }
+}
+
+impl HashValue {
+    pub fn new<T>(value: &T) -> Self
+    where
+        T: Signable<sha2::Sha512>,
+    {
+        use sha2::Digest;
+
+        let mut hasher = sha2::Sha512::default();
+        value.write(&mut hasher);
+        HashValue(hasher.finalize())
     }
 }
 

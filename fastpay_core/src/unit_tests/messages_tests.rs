@@ -17,29 +17,24 @@ fn test_signed_values() {
     authorities.insert(name2, /* voting right */ 0);
     let committee = Committee::new(authorities);
 
-    let transfer = Transfer {
+    let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::FastPay(dbg_account(2)),
             amount: Amount::from(1),
             user_data: UserData::default(),
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = TransferOrder::new(transfer.clone(), &key1);
-    let mut bad_order = TransferOrder::new(transfer, &key2);
-    bad_order.owner = name1;
+    let value = Value::Confirm(request);
 
-    let v = SignedTransferOrder::new(order.clone(), &key1);
+    let v = Vote::new(value.clone(), &key1);
     assert!(v.check(&committee).is_ok());
 
-    let v = SignedTransferOrder::new(order.clone(), &key2);
+    let v = Vote::new(value.clone(), &key2);
     assert!(v.check(&committee).is_err());
 
-    let v = SignedTransferOrder::new(order, &key3);
-    assert!(v.check(&committee).is_err());
-
-    let v = SignedTransferOrder::new(bad_order, &key1);
+    let v = Vote::new(value, &key3);
     assert!(v.check(&committee).is_err());
 }
 
@@ -56,24 +51,22 @@ fn test_certificates() {
     authorities.insert(name2, /* voting right */ 1);
     let committee = Committee::new(authorities);
 
-    let transfer = Transfer {
+    let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::FastPay(dbg_account(1)),
             amount: Amount::from(1),
             user_data: UserData::default(),
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = TransferOrder::new(transfer.clone(), &key1);
-    let mut bad_order = TransferOrder::new(transfer, &key2);
-    bad_order.owner = name1;
+    let value = Value::Confirm(request);
 
-    let v1 = SignedTransferOrder::new(order.clone(), &key1);
-    let v2 = SignedTransferOrder::new(order.clone(), &key2);
-    let v3 = SignedTransferOrder::new(order.clone(), &key3);
+    let v1 = Vote::new(value.clone(), &key1);
+    let v2 = Vote::new(value.clone(), &key2);
+    let v3 = Vote::new(value.clone(), &key3);
 
-    let mut builder = SignatureAggregator::try_new(order.clone(), &committee).unwrap();
+    let mut builder = SignatureAggregator::new(value.clone(), &committee);
     assert!(builder
         .append(v1.authority, v1.signature)
         .unwrap()
@@ -83,12 +76,10 @@ fn test_certificates() {
     c.signatures.pop();
     assert!(c.check(&committee).is_err());
 
-    let mut builder = SignatureAggregator::try_new(order, &committee).unwrap();
+    let mut builder = SignatureAggregator::new(value, &committee);
     assert!(builder
         .append(v1.authority, v1.signature)
         .unwrap()
         .is_none());
     assert!(builder.append(v3.authority, v3.signature).is_err());
-
-    assert!(SignatureAggregator::try_new(bad_order, &committee).is_err());
 }
