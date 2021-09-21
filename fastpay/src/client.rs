@@ -150,7 +150,8 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
             let sig = Signature::new(&certificate.value, secx);
             certificate.signatures.push((*pubx, sig));
         }
-        let serialized_certificate = serialize_cert(&certificate);
+        let serialized_certificate =
+            serialize_confirmation_order(&ConfirmationOrder { certificate });
         serialized_certificates.push((
             order.value.request.account_id,
             serialized_certificate.into(),
@@ -189,7 +190,7 @@ fn make_benchmark_certificates_from_votes(
         match aggregator.append(vote.authority, vote.signature) {
             Ok(Some(certificate)) => {
                 debug!("Found certificate: {:?}", certificate);
-                let buf = serialize_cert(&certificate);
+                let buf = serialize_confirmation_order(&ConfirmationOrder { certificate });
                 certificates.push((account_id.clone(), buf.into()));
                 done_senders.insert(account_id);
             }
@@ -256,8 +257,8 @@ fn mass_update_recipients(
     certificates: Vec<(AccountId, Bytes)>,
 ) {
     for (_sender, buf) in certificates {
-        if let Ok(SerializedMessage::Certificate(certificate)) = deserialize_message(&buf[..]) {
-            accounts_config.update_for_received_request(*certificate);
+        if let Ok(SerializedMessage::ConfirmationOrder(order)) = deserialize_message(&buf[..]) {
+            accounts_config.update_for_received_request(order.certificate);
         }
     }
 }
