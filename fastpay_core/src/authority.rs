@@ -296,9 +296,7 @@ impl Authority for AuthorityState {
 
         // Execute the sender's side of the operation.
         let info = match &request.operation {
-            Operation::OpenAccount { .. } => {
-                sender_account.make_account_info(sender.clone())
-            }
+            Operation::OpenAccount { .. } => sender_account.make_account_info(sender.clone()),
             Operation::ChangeOwner { new_owner } => {
                 sender_account.owner = Some(*new_owner);
                 sender_account.make_account_info(sender.clone())

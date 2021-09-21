@@ -86,6 +86,10 @@ CoinCreationSource:
     - coins:
         SEQ:
           TYPENAME: Certificate
+ConfirmationOrder:
+  STRUCT:
+    - certificate:
+        TYPENAME: Certificate
 CrossShardRequest:
   ENUM:
     0:
@@ -269,34 +273,34 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: RequestOrder
     1:
-      Vote:
+      ConfirmationOrder:
         NEWTYPE:
-          TYPENAME: Vote
+          TYPENAME: ConfirmationOrder
     2:
-      Certificate:
-        NEWTYPE:
-          TYPENAME: Certificate
-    3:
-      Error:
-        NEWTYPE:
-          TYPENAME: FastPayError
-    4:
-      InfoQuery:
-        NEWTYPE:
-          TYPENAME: AccountInfoQuery
-    5:
-      InfoResponse:
-        NEWTYPE:
-          TYPENAME: AccountInfoResponse
-    6:
       CoinCreationOrder:
         NEWTYPE:
           TYPENAME: CoinCreationOrder
-    7:
+    3:
+      InfoQuery:
+        NEWTYPE:
+          TYPENAME: AccountInfoQuery
+    4:
+      Vote:
+        NEWTYPE:
+          TYPENAME: Vote
+    5:
       Votes:
         NEWTYPE:
           SEQ:
             TYPENAME: Vote
+    6:
+      InfoResponse:
+        NEWTYPE:
+          TYPENAME: AccountInfoResponse
+    7:
+      Error:
+        NEWTYPE:
+          TYPENAME: FastPayError
     8:
       CrossShardRequest:
         NEWTYPE:

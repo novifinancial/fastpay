@@ -13,14 +13,16 @@ mod serialize_tests;
 
 #[derive(Serialize, Deserialize)]
 pub enum SerializedMessage {
+    // Inbound
     RequestOrder(Box<RequestOrder>),
-    Vote(Box<Vote>),
-    Certificate(Box<Certificate>),
-    Error(Box<FastPayError>),
-    InfoQuery(Box<AccountInfoQuery>),
-    InfoResponse(Box<AccountInfoResponse>),
+    ConfirmationOrder(Box<ConfirmationOrder>),
     CoinCreationOrder(Box<CoinCreationOrder>),
+    InfoQuery(Box<AccountInfoQuery>),
+    // Outbound
+    Vote(Box<Vote>),
     Votes(Vec<Vote>),
+    InfoResponse(Box<AccountInfoResponse>),
+    Error(Box<FastPayError>),
     // Internal to an authority
     CrossShardRequest(Box<CrossShardRequest>),
 }
@@ -30,14 +32,16 @@ pub enum SerializedMessage {
 // so that the variant tags match.
 #[derive(Serialize)]
 enum ShallowSerializedMessage<'a> {
+    // Inbound
     RequestOrder(&'a RequestOrder),
-    Vote(&'a Vote),
-    Certificate(&'a Certificate),
-    Error(&'a FastPayError),
-    InfoQuery(&'a AccountInfoQuery),
-    InfoResponse(&'a AccountInfoResponse),
+    ConfirmationOrder(&'a ConfirmationOrder),
     CoinCreationOrder(&'a CoinCreationOrder),
+    InfoQuery(&'a AccountInfoQuery),
+    // Outbound
+    Vote(&'a Vote),
     Votes(&'a [Vote]),
+    InfoResponse(&'a AccountInfoResponse),
+    Error(&'a FastPayError),
     // Internal to an authority
     CrossShardRequest(&'a CrossShardRequest),
 }
@@ -82,15 +86,18 @@ pub fn serialize_error(value: &FastPayError) -> Vec<u8> {
     serialize(&ShallowSerializedMessage::Error(value))
 }
 
-pub fn serialize_cert(value: &Certificate) -> Vec<u8> {
-    serialize(&ShallowSerializedMessage::Certificate(value))
+pub fn serialize_confirmation_order(value: &ConfirmationOrder) -> Vec<u8> {
+    serialize(&ShallowSerializedMessage::ConfirmationOrder(value))
 }
 
-pub fn serialize_cert_into<W>(writer: W, value: &Certificate) -> Result<(), failure::Error>
+pub fn serialize_confirmation_order_into<W>(
+    writer: W,
+    value: &ConfirmationOrder,
+) -> Result<(), failure::Error>
 where
     W: std::io::Write,
 {
-    serialize_into(writer, &ShallowSerializedMessage::Certificate(value))
+    serialize_into(writer, &ShallowSerializedMessage::ConfirmationOrder(value))
 }
 
 pub fn serialize_info_query(value: &AccountInfoQuery) -> Vec<u8> {

@@ -140,15 +140,8 @@ impl MessageHandler for RunningServerState {
                             .state
                             .handle_request_order(*message)
                             .map(|info| Some(serialize_info_response(&info))),
-                        SerializedMessage::Certificate(message) => {
-                            let confirmation_order = ConfirmationOrder {
-                                certificate: *message,
-                            };
-                            match self
-                                .server
-                                .state
-                                .handle_confirmation_order(confirmation_order)
-                            {
+                        SerializedMessage::ConfirmationOrder(message) => {
+                            match self.server.state.handle_confirmation_order(*message) {
                                 Ok((info, continuation)) => {
                                     // Cross-shard request
                                     self.handle_continuation(continuation).await;
@@ -341,7 +334,7 @@ impl AuthorityClient for Client {
                     .confirm_account_id()
                     .ok_or(FastPayError::InvalidConfirmationOrder)?,
             );
-            self.send_recv_bytes(shard, serialize_cert(&order.certificate))
+            self.send_recv_bytes(shard, serialize_confirmation_order(&order))
                 .await
         })
     }

@@ -170,7 +170,8 @@ impl ClientServerBenchmark {
                 certificate.signatures.push((key.public(), sig));
             }
 
-            let bufx2 = serialize_cert(&certificate);
+            let order = ConfirmationOrder { certificate };
+            let bufx2 = serialize_confirmation_order(&order);
             assert!(!bufx2.is_empty());
 
             orders.push((shard, bufx2.into()));

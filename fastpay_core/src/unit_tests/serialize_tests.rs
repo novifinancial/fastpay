@@ -145,11 +145,12 @@ fn test_cert() {
         cert.signatures.push((key.public(), sig));
     }
 
-    let buf = serialize_cert(&cert);
+    let order = ConfirmationOrder { certificate: cert };
+    let buf = serialize_confirmation_order(&order);
     let result = deserialize_message(buf.as_slice());
     assert!(result.is_ok());
-    if let SerializedMessage::Certificate(o) = result.unwrap() {
-        assert!(*o == cert);
+    if let SerializedMessage::ConfirmationOrder(o) = result.unwrap() {
+        assert!(o.certificate == order.certificate);
     } else {
         panic!()
     }
@@ -332,16 +333,19 @@ fn test_time_cert() {
     let mut buf = Vec::new();
     let now = Instant::now();
 
+    let order = ConfirmationOrder { certificate: cert };
     for _ in 0..count {
-        serialize_cert_into(&mut buf, &cert).unwrap();
+        serialize_confirmation_order_into(&mut buf, &order).unwrap();
     }
     println!("Write Cert: {} microsec", now.elapsed().as_micros() / count);
 
     let now = Instant::now();
     let mut buf2 = buf.as_slice();
     for _ in 0..count {
-        if let SerializedMessage::Certificate(cert) = deserialize_message(&mut buf2).unwrap() {
-            Signature::verify_batch(&cert.value, &cert.signatures).unwrap();
+        if let SerializedMessage::ConfirmationOrder(order) = deserialize_message(&mut buf2).unwrap()
+        {
+            Signature::verify_batch(&order.certificate.value, &order.certificate.signatures)
+                .unwrap();
         }
     }
     assert!(deserialize_message(buf2).is_err());
