@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, HashSet};
 #[path = "unit_tests/authority_tests.rs"]
 mod authority_tests;
 
-/// State of an (offchain) FastPay account.
-#[derive(Debug)]
+/// State of a FastPay account.
+#[derive(Debug, Default)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct AccountState {
     /// Owner of the account. An account without owner cannot execute operations.
@@ -491,20 +491,6 @@ impl Authority for AuthorityState {
             response.queried_received_requests = account.received_log[idx..].to_vec();
         }
         Ok(response)
-    }
-}
-
-impl Default for AccountState {
-    fn default() -> Self {
-        Self {
-            owner: None,
-            balance: Balance::zero(),
-            next_sequence_number: SequenceNumber::new(),
-            pending: None,
-            confirmed_log: Vec::new(),
-            synchronization_log: Vec::new(),
-            received_log: Vec::new(),
-        }
     }
 }
 
