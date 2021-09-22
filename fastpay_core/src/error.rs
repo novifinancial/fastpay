@@ -1,7 +1,7 @@
 // Copyright (c) Facebook Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{base_types::*, messages::*};
+use crate::{base_types::*, messages::Value};
 use failure::Fail;
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,8 @@ pub enum FastPayError {
     // Transfer processing
     #[fail(display = "Transfers must have positive amount")]
     IncorrectTransferAmount,
+    #[fail(display = "Account is still pending confirmation of creation")]
+    AccountIsNotReady,
     #[fail(
         display = "The given sequence number must match the next expected sequence number of the account"
     )]
@@ -50,17 +52,17 @@ pub enum FastPayError {
     InvalidNewAccountId(AccountId),
     #[fail(
         display = "Cannot initiate transfer while a transfer order is still pending confirmation: {:?}",
-        pending_confirmation
+        pending
     )]
-    PreviousTransferMustBeConfirmedFirst { pending_confirmation: TransferOrder },
-    #[fail(display = "Transfer order was processed but no signature was produced by authority")]
-    ErrorWhileProcessingTransferOrder,
+    PreviousRequestMustBeConfirmedFirst { pending: Value },
+    #[fail(display = "Request order was processed but no signature was produced by authority")]
+    ErrorWhileProcessingRequestOrder,
     #[fail(
         display = "An invalid answer was returned by the authority while requesting a certificate"
     )]
     ErrorWhileRequestingCertificate,
     #[fail(
-        display = "Cannot confirm a transfer while previous transfer orders are still pending confirmation: {:?}",
+        display = "Cannot confirm a request while previous request orders are still pending confirmation: {:?}",
         current_sequence_number
     )]
     MissingEarlierConfirmations {
@@ -74,11 +76,9 @@ pub enum FastPayError {
     CertificateNotFound,
     #[fail(display = "Unknown sender's account {:?}", 0)]
     UnknownSenderAccount(AccountId),
-    #[fail(display = "Unknown recipient's account {:?}", 0)]
-    UnknownRecipientAccount(AccountId),
     #[fail(display = "Signatures in a certificate must be from different authorities.")]
     CertificateAuthorityReuse,
-    #[fail(display = "Sequence numbers above the maximal value are not usable for transfers.")]
+    #[fail(display = "Sequence numbers above the maximal value are not usable for requests.")]
     InvalidSequenceNumber,
     #[fail(display = "Sequence number overflow.")]
     SequenceOverflow,
@@ -100,6 +100,14 @@ pub enum FastPayError {
     InvalidDecoding,
     #[fail(display = "Unexpected message.")]
     UnexpectedMessage,
+    #[fail(display = "Invalid request order.")]
+    InvalidRequestOrder,
+    #[fail(display = "Invalid confirmation order.")]
+    InvalidConfirmationOrder,
+    #[fail(display = "Invalid coin creation order.")]
+    InvalidCoinCreationOrder,
+    #[fail(display = "Invalid coin.")]
+    InvalidCoin,
     #[fail(display = "Network error while querying service: {:?}.", error)]
     ClientIoError { error: String },
 }

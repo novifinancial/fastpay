@@ -131,42 +131,42 @@ impl ClientServerBenchmark {
             let owner = key_pair.public();
             let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
             assert!(states[shard].in_shard(&id));
-            let client = AccountOffchainState {
-                owner,
+            let client = AccountState {
+                owner: Some(owner),
                 balance: Balance::from(Amount::from(100)),
                 next_sequence_number: SequenceNumber::from(0),
-                pending_confirmation: None,
-                locked_confirmation: None,
+                pending: None,
                 confirmed_log: Vec::new(),
                 synchronization_log: Vec::new(),
                 received_log: Vec::new(),
             };
             states[shard].accounts.insert(id.clone(), client);
 
-            let transfer = Transfer {
+            let request = Request {
                 account_id: id.clone(),
-                operation: Operation::Payment {
+                operation: Operation::Transfer {
                     recipient: Address::FastPay(next_recipient),
                     amount: Amount::from(50),
                     user_data: UserData::default(),
                 },
                 sequence_number: SequenceNumber::from(0),
             };
-            let order = TransferOrder::new(transfer.clone(), &key_pair);
+            let order = RequestOrder::new(request.clone().into(), &key_pair, Vec::new());
             let shard = AuthorityState::get_shard(self.num_shards, &id);
 
             // Serialize order
-            let bufx = serialize_transfer_order(&order);
+            let bufx = serialize_request_order(&order);
             assert!(!bufx.is_empty());
 
             // Make certificate
-            let mut certificate = CertifiedTransferOrder {
-                value: order,
+            let value = Value::Confirm(request);
+            let mut certificate = Certificate {
+                value,
                 signatures: Vec::new(),
             };
             for i in 0..committee.quorum_threshold() {
                 let key = keys.get(i).unwrap();
-                let sig = Signature::new(&certificate.value.transfer, key);
+                let sig = Signature::new(&certificate.value, key);
                 certificate.signatures.push((key.public(), sig));
             }
 

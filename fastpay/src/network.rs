@@ -135,14 +135,14 @@ impl MessageHandler for RunningServerState {
                 Err(_) => Err(FastPayError::InvalidDecoding),
                 Ok(result) => {
                     match result {
-                        SerializedMessage::Order(message) => self
+                        SerializedMessage::RequestOrder(message) => self
                             .server
                             .state
-                            .handle_transfer_order(*message)
+                            .handle_request_order(*message)
                             .map(|info| Some(serialize_info_response(&info))),
-                        SerializedMessage::Confirmation(message) => {
+                        SerializedMessage::Certificate(message) => {
                             let confirmation_order = ConfirmationOrder {
-                                transfer_certificate: *message,
+                                certificate: *message,
                             };
                             match self
                                 .server
@@ -150,44 +150,35 @@ impl MessageHandler for RunningServerState {
                                 .handle_confirmation_order(confirmation_order)
                             {
                                 Ok((info, continuation)) => {
+                                    // Cross-shard request
                                     self.handle_continuation(continuation).await;
-
                                     // Response
                                     Ok(Some(serialize_info_response(&info)))
                                 }
                                 Err(error) => Err(error),
                             }
                         }
-                        SerializedMessage::InfoRequest(message) => self
+                        SerializedMessage::CoinCreationOrder(message) => {
+                            match self.server.state.handle_coin_creation_order(*message) {
+                                Ok((votes, continuations)) => {
+                                    // Cross-shard requests
+                                    for continuation in continuations {
+                                        self.handle_continuation(continuation).await;
+                                    }
+                                    // Response
+                                    Ok(Some(serialize_votes(&votes)))
+                                }
+                                Err(error) => Err(error),
+                            }
+                        }
+                        SerializedMessage::InfoQuery(message) => self
                             .server
                             .state
-                            .handle_account_info_request(*message)
+                            .handle_account_info_query(*message)
                             .map(|info| Some(serialize_info_response(&info))),
                         SerializedMessage::CrossShardRequest(request) => {
-                            use CrossShardRequest::*;
-                            let result = match *request {
-                                UpdateRecipientAccount { certificate } => {
-                                    self.server.state.update_recipient_account(certificate)
-                                }
-                                VerifyAccountDeletion {
-                                    parent_id,
-                                    sequence_number,
-                                    certificate,
-                                } => self.server.state.verify_account_deletion(
-                                    parent_id,
-                                    sequence_number,
-                                    certificate,
-                                ),
-                                UpdateSenderAccount {
-                                    certificate,
-                                    outcome,
-                                } => self
-                                    .server
-                                    .state
-                                    .update_sender_account(certificate, outcome),
-                            };
-                            match result {
-                                Ok(cont) => self.handle_continuation(cont).await,
+                            match self.server.state.handle_cross_shard_request(*request) {
+                                Ok(()) => (),
                                 Err(error) => {
                                     error!("Failed to handle cross-shard request: {}", error);
                                 }
@@ -195,7 +186,12 @@ impl MessageHandler for RunningServerState {
                             // No user to respond to.
                             Ok(None)
                         }
-                        _ => Err(FastPayError::UnexpectedMessage),
+                        SerializedMessage::Vote(_)
+                        | SerializedMessage::Votes(_)
+                        | SerializedMessage::Error(_)
+                        | SerializedMessage::InfoResponse(_) => {
+                            Err(FastPayError::UnexpectedMessage)
+                        }
                     }
                 }
             };
@@ -319,19 +315,19 @@ impl Client {
 }
 
 impl AuthorityClient for Client {
-    /// Initiate a new transfer to a FastPay or Primary account.
-    fn handle_transfer_order(
+    /// Initiate a new request to a FastPay or Primary account.
+    fn handle_request_order(
         &mut self,
-        order: TransferOrder,
+        order: RequestOrder,
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         Box::pin(async move {
-            let shard = AuthorityState::get_shard(self.num_shards, &order.transfer.account_id);
-            self.send_recv_bytes(shard, serialize_transfer_order(&order))
+            let shard = AuthorityState::get_shard(self.num_shards, &order.value.request.account_id);
+            self.send_recv_bytes(shard, serialize_request_order(&order))
                 .await
         })
     }
 
-    /// Confirm a transfer to a FastPay or Primary account.
+    /// Confirm a request to a FastPay or Primary account.
     fn handle_confirmation_order(
         &mut self,
         order: ConfirmationOrder,
@@ -339,21 +335,25 @@ impl AuthorityClient for Client {
         Box::pin(async move {
             let shard = AuthorityState::get_shard(
                 self.num_shards,
-                &order.transfer_certificate.value.transfer.account_id,
+                order
+                    .certificate
+                    .value
+                    .confirm_account_id()
+                    .ok_or(FastPayError::InvalidConfirmationOrder)?,
             );
-            self.send_recv_bytes(shard, serialize_cert(&order.transfer_certificate))
+            self.send_recv_bytes(shard, serialize_cert(&order.certificate))
                 .await
         })
     }
 
-    /// Handle information requests for this account.
-    fn handle_account_info_request(
+    /// Handle information queries for this account.
+    fn handle_account_info_query(
         &mut self,
-        request: AccountInfoRequest,
+        request: AccountInfoQuery,
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         Box::pin(async move {
             let shard = AuthorityState::get_shard(self.num_shards, &request.account_id);
-            self.send_recv_bytes(shard, serialize_info_request(&request))
+            self.send_recv_bytes(shard, serialize_info_query(&request))
                 .await
         })
     }

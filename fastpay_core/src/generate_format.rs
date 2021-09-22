@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use fastpay_core::{error, messages, serialize};
-
 use serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
 use std::{fs::File, io::Write};
 use structopt::{clap::arg_enum, StructOpt};
@@ -16,8 +15,9 @@ fn get_registry() -> Result<Registry> {
     // 2. Trace the main entry point(s) + every enum separately.
     tracer.trace_type::<messages::Address>(&samples)?;
     tracer.trace_type::<messages::Operation>(&samples)?;
+    tracer.trace_type::<messages::Value>(&samples)?;
+    tracer.trace_type::<messages::Coin>(&samples)?;
     tracer.trace_type::<messages::CrossShardRequest>(&samples)?;
-    tracer.trace_type::<messages::ConfirmationOutcome>(&samples)?;
     tracer.trace_type::<error::FastPayError>(&samples)?;
     tracer.trace_type::<serialize::SerializedMessage>(&samples)?;
     tracer.registry()
@@ -58,9 +58,9 @@ fn main() {
             writeln!(f, "{}", content).unwrap();
         }
         Action::Test => {
-            let f = File::open(FILE_PATH).unwrap();
-            let reference: serde_reflection::Registry = serde_yaml::from_reader(f).unwrap();
-            assert_eq!(registry, reference);
+            let reference = std::fs::read_to_string(FILE_PATH).unwrap();
+            let content = serde_yaml::to_string(&registry).unwrap() + "\n";
+            similar_asserts::assert_str_eq!(&reference, &content);
         }
     }
 }

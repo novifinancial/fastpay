@@ -3,35 +3,35 @@ AccountId:
   NEWTYPESTRUCT:
     SEQ:
       TYPENAME: SequenceNumber
-AccountInfoQuery:
+AccountInfoRequest:
   STRUCT:
     - account_id:
         TYPENAME: AccountId
-    - query_sequence_number:
+    - request_sequence_number:
         OPTION:
           TYPENAME: SequenceNumber
-    - query_received_requests_excluding_first_nth:
+    - request_received_transfers_excluding_first_nth:
         OPTION: U64
 AccountInfoResponse:
   STRUCT:
     - account_id:
         TYPENAME: AccountId
-    - owner:
-        OPTION:
-          TYPENAME: PublicKeyBytes
     - balance:
         TYPENAME: Balance
     - next_sequence_number:
         TYPENAME: SequenceNumber
-    - pending:
+    - pending_confirmation:
         OPTION:
-          TYPENAME: Vote
-    - queried_certificate:
+          TYPENAME: SignedTransferOrder
+    - locked_confirmation:
         OPTION:
-          TYPENAME: Certificate
-    - queried_received_requests:
+          TYPENAME: CertifiedTransferOrder
+    - requested_certificate:
+        OPTION:
+          TYPENAME: CertifiedTransferOrder
+    - requested_received_transfers:
         SEQ:
-          TYPENAME: Certificate
+          TYPENAME: CertifiedTransferOrder
 Address:
   ENUM:
     0:
@@ -46,58 +46,46 @@ Amount:
   NEWTYPESTRUCT: U64
 Balance:
   NEWTYPESTRUCT: I128
-Certificate:
+CertifiedTransferOrder:
   STRUCT:
     - value:
-        TYPENAME: Value
+        TYPENAME: TransferOrder
     - signatures:
         SEQ:
           TUPLE:
             - TYPENAME: PublicKeyBytes
             - TYPENAME: Signature
-Coin:
-  STRUCT:
-    - account_id:
-        TYPENAME: AccountId
-    - amount:
-        TYPENAME: Amount
-CoinCreationContract:
-  STRUCT:
-    - seed: U128
-    - sources:
-        SEQ:
-          TYPENAME: CoinCreationSource
-    - targets:
-        SEQ:
-          TYPENAME: Coin
-CoinCreationOrder:
-  STRUCT:
-    - contract:
-        TYPENAME: CoinCreationContract
-    - locks:
-        SEQ:
-          TYPENAME: Certificate
-CoinCreationSource:
-  STRUCT:
-    - account_id:
-        TYPENAME: AccountId
-    - account_balance:
-        TYPENAME: Amount
-    - coins:
-        SEQ:
-          TYPENAME: Certificate
+ConfirmationOutcome:
+  ENUM:
+    0:
+      Complete: UNIT
+    1:
+      Retry: UNIT
+    2:
+      Cancel: UNIT
 CrossShardRequest:
   ENUM:
     0:
-      UpdateRecipient:
+      UpdateRecipientAccount:
         STRUCT:
           - certificate:
-              TYPENAME: Certificate
+              TYPENAME: CertifiedTransferOrder
     1:
-      DestroyAccount:
+      VerifyAccountDeletion:
         STRUCT:
-          - account_id:
+          - parent_id:
               TYPENAME: AccountId
+          - sequence_number:
+              TYPENAME: SequenceNumber
+          - certificate:
+              TYPENAME: CertifiedTransferOrder
+    2:
+      UpdateSenderAccount:
+        STRUCT:
+          - certificate:
+              TYPENAME: CertifiedTransferOrder
+          - outcome:
+              TYPENAME: ConfirmationOutcome
 FastPayError:
   ENUM:
     0:
@@ -113,38 +101,40 @@ FastPayError:
     4:
       IncorrectTransferAmount: UNIT
     5:
-      AccountIsNotReady: UNIT
-    6:
       UnexpectedSequenceNumber: UNIT
-    7:
+    6:
       InsufficientFunding:
         STRUCT:
           - current_balance:
               TYPENAME: Balance
-    8:
+    7:
       InvalidNewAccountId:
         NEWTYPE:
           TYPENAME: AccountId
-    9:
-      PreviousRequestMustBeConfirmedFirst:
+    8:
+      PreviousTransferMustBeConfirmedFirst:
         STRUCT:
-          - pending:
-              TYPENAME: Value
+          - pending_confirmation:
+              TYPENAME: TransferOrder
+    9:
+      ErrorWhileProcessingTransferOrder: UNIT
     10:
-      ErrorWhileProcessingRequestOrder: UNIT
-    11:
       ErrorWhileRequestingCertificate: UNIT
-    12:
+    11:
       MissingEarlierConfirmations:
         STRUCT:
           - current_sequence_number:
               TYPENAME: SequenceNumber
-    13:
+    12:
       UnexpectedTransactionIndex: UNIT
-    14:
+    13:
       CertificateNotFound: UNIT
-    15:
+    14:
       UnknownSenderAccount:
+        NEWTYPE:
+          TYPENAME: AccountId
+    15:
+      UnknownRecipientAccount:
         NEWTYPE:
           TYPENAME: AccountId
     16:
@@ -172,26 +162,13 @@ FastPayError:
     27:
       UnexpectedMessage: UNIT
     28:
-      InvalidRequestOrder: UNIT
-    29:
-      InvalidConfirmationOrder: UNIT
-    30:
-      InvalidCoinCreationOrder: UNIT
-    31:
-      InvalidCoin: UNIT
-    32:
       ClientIoError:
         STRUCT:
           - error: STR
-HashValue:
-  NEWTYPESTRUCT:
-    TUPLEARRAY:
-      CONTENT: U8
-      SIZE: 64
 Operation:
   ENUM:
     0:
-      Transfer:
+      Payment:
         STRUCT:
           - recipient:
               TYPENAME: Address
@@ -200,104 +177,51 @@ Operation:
           - user_data:
               TYPENAME: UserData
     1:
-      OpenAccount:
+      CreateAccount:
         STRUCT:
           - new_id:
               TYPENAME: AccountId
           - new_owner:
               TYPENAME: PublicKeyBytes
     2:
-      CloseAccount: UNIT
-    3:
       ChangeOwner:
         STRUCT:
           - new_owner:
               TYPENAME: PublicKeyBytes
-    4:
-      Spend:
-        STRUCT:
-          - account_balance:
-              TYPENAME: Amount
-          - contract_hash:
-              TYPENAME: HashValue
-    5:
-      SpendAndTransfer:
-        STRUCT:
-          - recipient:
-              TYPENAME: Address
-          - amount:
-              TYPENAME: Amount
-          - user_data:
-              TYPENAME: UserData
 PublicKeyBytes:
   NEWTYPESTRUCT:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 32
-Request:
-  STRUCT:
-    - account_id:
-        TYPENAME: AccountId
-    - operation:
-        TYPENAME: Operation
-    - sequence_number:
-        TYPENAME: SequenceNumber
-RequestOrder:
-  STRUCT:
-    - value:
-        TYPENAME: RequestValue
-    - owner:
-        TYPENAME: PublicKeyBytes
-    - signature:
-        TYPENAME: Signature
-    - assets:
-        SEQ:
-          TYPENAME: Certificate
-RequestValue:
-  STRUCT:
-    - request:
-        TYPENAME: Request
-    - limited_to:
-        OPTION:
-          TYPENAME: PublicKeyBytes
 SequenceNumber:
   NEWTYPESTRUCT: U64
 SerializedMessage:
   ENUM:
     0:
-      RequestOrder:
+      Order:
         NEWTYPE:
-          TYPENAME: RequestOrder
+          TYPENAME: TransferOrder
     1:
       Vote:
         NEWTYPE:
-          TYPENAME: Vote
+          TYPENAME: SignedTransferOrder
     2:
-      Certificate:
+      Confirmation:
         NEWTYPE:
-          TYPENAME: Certificate
+          TYPENAME: CertifiedTransferOrder
     3:
       Error:
         NEWTYPE:
           TYPENAME: FastPayError
     4:
-      InfoQuery:
+      InfoRequest:
         NEWTYPE:
-          TYPENAME: AccountInfoQuery
+          TYPENAME: AccountInfoRequest
     5:
       InfoResponse:
         NEWTYPE:
           TYPENAME: AccountInfoResponse
     6:
-      CoinCreationOrder:
-        NEWTYPE:
-          TYPENAME: CoinCreationOrder
-    7:
-      Votes:
-        NEWTYPE:
-          SEQ:
-            TYPENAME: Vote
-    8:
       CrossShardRequest:
         NEWTYPE:
           TYPENAME: CrossShardRequest
@@ -306,32 +230,34 @@ Signature:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 64
+SignedTransferOrder:
+  STRUCT:
+    - value:
+        TYPENAME: TransferOrder
+    - authority:
+        TYPENAME: PublicKeyBytes
+    - signature:
+        TYPENAME: Signature
+Transfer:
+  STRUCT:
+    - account_id:
+        TYPENAME: AccountId
+    - operation:
+        TYPENAME: Operation
+    - sequence_number:
+        TYPENAME: SequenceNumber
+TransferOrder:
+  STRUCT:
+    - transfer:
+        TYPENAME: Transfer
+    - owner:
+        TYPENAME: PublicKeyBytes
+    - signature:
+        TYPENAME: Signature
 UserData:
   NEWTYPESTRUCT:
     OPTION:
       TUPLEARRAY:
         CONTENT: U8
         SIZE: 32
-Value:
-  ENUM:
-    0:
-      Lock:
-        NEWTYPE:
-          TYPENAME: Request
-    1:
-      Confirm:
-        NEWTYPE:
-          TYPENAME: Request
-    2:
-      Coin:
-        NEWTYPE:
-          TYPENAME: Coin
-Vote:
-  STRUCT:
-    - value:
-        TYPENAME: Value
-    - authority:
-        TYPENAME: PublicKeyBytes
-    - signature:
-        TYPENAME: Signature
 

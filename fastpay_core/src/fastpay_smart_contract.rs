@@ -1,16 +1,38 @@
 // Copyright (c) Facebook Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+//! This module is sketching a FastPay smart contract on a primary chain.
+
 use super::{base_types::*, committee::Committee, messages::*};
 use failure::ensure;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[cfg(test)]
 #[path = "unit_tests/fastpay_smart_contract_tests.rs"]
 mod fastpay_smart_contract_tests;
 
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct FundingTransaction {
+    pub recipient: AccountId,
+    pub primary_coins: Amount,
+    // TODO: Authenticated by Primary sender.
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct RedeemTransaction {
+    pub certificate: Certificate,
+}
+
+impl RedeemTransaction {
+    pub fn new(certificate: Certificate) -> Self {
+        Self { certificate }
+    }
+}
+
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
-pub struct AccountOnchainState {
+pub struct AccountState {
     /// Prevent spending actions from this account to Primary to be redeemed more than once.
     /// It is the responsability of the owner of the account to redeem the previous action
     /// before initiating a new one. Otherwise, money can be lost.
@@ -22,7 +44,7 @@ pub struct FastPaySmartContractState {
     /// Committee of this FastPay instance.
     committee: Committee,
     /// Onchain states of FastPay smart contract.
-    pub accounts: BTreeMap<AccountId, AccountOnchainState>,
+    pub accounts: BTreeMap<AccountId, AccountState>,
     /// Primary coins in the smart contract.
     total_balance: Amount,
     /// The latest transaction index included in the blockchain.
@@ -69,42 +91,51 @@ impl FastPaySmartContract for FastPaySmartContractState {
         &mut self,
         transaction: RedeemTransaction,
     ) -> Result<(), failure::Error> {
-        transaction.transfer_certificate.check(&self.committee)?;
-        let order = transaction.transfer_certificate.value;
-        let transfer = &order.transfer;
-        match &transfer.operation {
-            Operation::Payment {
-                amount,
+        transaction.certificate.check(&self.committee)?;
+        let request = match &transaction.certificate.value {
+            Value::Confirm(r) => r,
+            _ => failure::bail!("Invalid redeem transaction"),
+        };
+        let account = self
+            .accounts
+            .entry(request.account_id.clone())
+            .or_insert_with(AccountState::new);
+        ensure!(
+            account.last_redeemed < Some(request.sequence_number),
+            "Request certificates to Primary must have increasing sequence numbers.",
+        );
+        account.last_redeemed = Some(request.sequence_number);
+        let amount = match &request.operation {
+            Operation::Transfer {
                 recipient: Address::Primary(_),
+                amount,
                 ..
-            } => {
-                ensure!(
-                    self.total_balance >= *amount,
-                    "The balance on the blockchain cannot be negative",
-                );
-                let account = self
-                    .accounts
-                    .entry(order.transfer.account_id.clone())
-                    .or_insert_with(AccountOnchainState::new);
-                ensure!(
-                    account.last_redeemed < Some(transfer.sequence_number),
-                    "Transfer certificates to Primary must have increasing sequence numbers.",
-                );
-                account.last_redeemed = Some(transfer.sequence_number);
-                self.total_balance = self.total_balance.try_sub(*amount)?;
-                // Transfer Primary coins to order.recipient
-                Ok(())
             }
-            Operation::Payment { .. }
-            | Operation::CreateAccount { .. }
+            | Operation::SpendAndTransfer {
+                recipient: Address::Primary(_),
+                amount,
+                ..
+            } => *amount,
+            Operation::Transfer { .. }
+            | Operation::SpendAndTransfer { .. }
+            | Operation::OpenAccount { .. }
+            | Operation::CloseAccount
+            | Operation::Spend { .. }
             | Operation::ChangeOwner { .. } => {
                 failure::bail!("Invalid redeem transaction");
             }
-        }
+        };
+        ensure!(
+            self.total_balance >= amount,
+            "The balance on the blockchain cannot be negative",
+        );
+        self.total_balance = self.total_balance.try_sub(amount)?;
+        // Transfer Primary coins to recipient
+        Ok(())
     }
 }
 
-impl AccountOnchainState {
+impl AccountState {
     fn new() -> Self {
         Self {
             last_redeemed: None,

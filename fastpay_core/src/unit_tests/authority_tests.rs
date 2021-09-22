@@ -4,86 +4,86 @@
 use super::*;
 
 #[test]
-fn test_handle_transfer_order_bad_signature() {
+fn test_handle_request_order_bad_signature() {
     let sender_key_pair = get_key_pair();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let transfer_order =
-        init_transfer_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+    let request_order =
+        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
     let unknown_key_pair = get_key_pair();
-    let mut bad_signature_transfer_order = transfer_order.clone();
-    bad_signature_transfer_order.signature =
-        Signature::new(&transfer_order.transfer, &unknown_key_pair);
+    let mut bad_signature_request_order = request_order.clone();
+    bad_signature_request_order.signature = Signature::new(&request_order.value, &unknown_key_pair);
     assert!(state
-        .handle_transfer_order(bad_signature_transfer_order)
+        .handle_request_order(bad_signature_request_order)
         .is_err());
     assert!(state
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
 #[test]
-fn test_handle_transfer_order_zero_amount() {
+fn test_handle_request_order_zero_amount() {
     let sender_key_pair = get_key_pair();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    // test transfer non-positive amount
-    let zero_amount_transfer_order =
-        init_transfer_order(dbg_account(1), &sender_key_pair, recipient, Amount::zero());
+    // test request non-positive amount
+    let zero_amount_request_order =
+        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::zero());
     assert!(state
-        .handle_transfer_order(zero_amount_transfer_order)
+        .handle_request_order(zero_amount_request_order)
         .is_err());
     assert!(state
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
 #[test]
-fn test_handle_transfer_order_unknown_sender() {
+fn test_handle_request_order_unknown_sender() {
     let sender_key_pair = get_key_pair();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let transfer_order =
-        init_transfer_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+    let request_order =
+        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
     let unknown_key = get_key_pair();
 
-    let unknown_sender_transfer_order = TransferOrder::new(transfer_order.transfer, &unknown_key);
+    let unknown_sender_request_order =
+        RequestOrder::new(request_order.value, &unknown_key, Vec::new());
     assert!(state
-        .handle_transfer_order(unknown_sender_transfer_order)
+        .handle_request_order(unknown_sender_request_order)
         .is_err());
     assert!(state
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
 #[test]
-fn test_handle_transfer_order_bad_sequence_number() {
+fn test_handle_request_order_bad_sequence_number() {
     let sender_key_pair = get_key_pair();
     let recipient = Address::FastPay(dbg_account(2));
     let state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let transfer_order =
-        init_transfer_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+    let request_order =
+        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
     let mut sequence_number_state = state;
     let sequence_number_state_sender_account = sequence_number_state
@@ -96,85 +96,82 @@ fn test_handle_transfer_order_bad_sequence_number() {
             .increment()
             .unwrap();
     assert!(sequence_number_state
-        .handle_transfer_order(transfer_order)
+        .handle_request_order(request_order)
         .is_err());
     assert!(sequence_number_state
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
 #[test]
-fn test_handle_transfer_order_exceed_balance() {
+fn test_handle_request_order_exceed_balance() {
     let sender_key_pair = get_key_pair();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let transfer_order = init_transfer_order(
+    let request_order = init_request_order(
         dbg_account(1),
         &sender_key_pair,
         recipient,
         Amount::from(1000),
     );
-    assert!(state.handle_transfer_order(transfer_order).is_err());
+    assert!(state.handle_request_order(request_order).is_err());
     assert!(state
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .is_none());
 }
 
 #[test]
-fn test_handle_transfer_order_ok() {
+fn test_handle_request_order_ok() {
     let sender_key_pair = get_key_pair();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let transfer_order =
-        init_transfer_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+    let request_order =
+        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
-    let account_info = state.handle_transfer_order(transfer_order).unwrap();
-    let pending_confirmation = state
+    let account_info = state.handle_request_order(request_order).unwrap();
+    let pending = state
         .accounts
         .get(&dbg_account(1))
         .unwrap()
-        .pending_confirmation
+        .pending
         .clone()
         .unwrap();
-    assert_eq!(
-        account_info.pending_confirmation.unwrap(),
-        pending_confirmation
-    );
+    assert_eq!(account_info.pending.unwrap(), pending);
 }
 
 #[test]
-fn test_handle_transfer_order_double_spend() {
+fn test_handle_request_order_double_spend() {
     let sender_key_pair = get_key_pair();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let transfer_order =
-        init_transfer_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+    let request_order =
+        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
-    let signed_order = state.handle_transfer_order(transfer_order.clone()).unwrap();
-    let double_spend_signed_order = state.handle_transfer_order(transfer_order).unwrap();
-    assert_eq!(signed_order, double_spend_signed_order);
+    let vote = state.handle_request_order(request_order.clone()).unwrap();
+    let double_spend_vote = state.handle_request_order(request_order).unwrap();
+    assert_eq!(vote, double_spend_vote);
 }
 
 #[test]
 fn test_handle_confirmation_order_unknown_sender() {
     let sender_key_pair = get_key_pair();
     let mut state = init_state_with_accounts(vec![(dbg_account(2), dbg_addr(2), Balance::from(0))]);
-    let certified_transfer_order = init_certified_transfer_order(
+    let certificate = init_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -183,7 +180,7 @@ fn test_handle_confirmation_order_unknown_sender() {
     );
 
     assert!(state
-        .handle_confirmation_order(ConfirmationOrder::new(certified_transfer_order))
+        .handle_confirmation_order(ConfirmationOrder::new(certificate))
         .is_err());
     assert!(state.accounts.get(&dbg_account(2)).is_some());
     assert!(state.accounts.get(&dbg_account(1)).is_none());
@@ -208,7 +205,7 @@ fn test_handle_confirmation_order_bad_sequence_number() {
         old_seq_num = old_account.next_sequence_number;
     }
 
-    let certified_transfer_order = init_certified_transfer_order(
+    let certificate = init_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -217,7 +214,7 @@ fn test_handle_confirmation_order_bad_sequence_number() {
     );
     // Replays are ignored.
     assert!(state
-        .handle_confirmation_order(ConfirmationOrder::new(certified_transfer_order))
+        .handle_confirmation_order(ConfirmationOrder::new(certificate))
         .is_ok());
     let new_account = state.accounts.get_mut(&dbg_account(1)).unwrap();
     assert_eq!(old_balance, new_account.balance);
@@ -233,7 +230,7 @@ fn test_handle_confirmation_order_exceed_balance() {
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
 
-    let certified_transfer_order = init_certified_transfer_order(
+    let certificate = init_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -241,7 +238,7 @@ fn test_handle_confirmation_order_exceed_balance() {
         &state,
     );
     assert!(state
-        .handle_confirmation_order(ConfirmationOrder::new(certified_transfer_order))
+        .handle_confirmation_order(ConfirmationOrder::new(certificate))
         .is_ok());
     let new_account = state.accounts.get(&dbg_account(1)).unwrap();
     assert_eq!(Balance::from(-995), new_account.balance);
@@ -258,7 +255,7 @@ fn test_handle_confirmation_order_receiver_balance_overflow() {
         (dbg_account(2), dbg_addr(2), Balance::max()),
     ]);
 
-    let certified_transfer_order = init_certified_transfer_order(
+    let certificate = init_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -266,7 +263,7 @@ fn test_handle_confirmation_order_receiver_balance_overflow() {
         &state,
     );
     assert!(state
-        .handle_confirmation_order(ConfirmationOrder::new(certified_transfer_order))
+        .handle_confirmation_order(ConfirmationOrder::new(certificate))
         .is_ok());
     let new_sender_account = state.accounts.get(&dbg_account(1)).unwrap();
     assert_eq!(Balance::from(0), new_sender_account.balance);
@@ -285,7 +282,7 @@ fn test_handle_confirmation_order_receiver_equal_sender() {
     let name = key_pair.public();
     let mut state = init_state_with_account(dbg_account(1), name, Balance::from(1));
 
-    let certified_transfer_order = init_certified_transfer_order(
+    let certificate = init_certificate(
         dbg_account(1),
         &key_pair,
         Address::FastPay(dbg_account(1)),
@@ -293,7 +290,7 @@ fn test_handle_confirmation_order_receiver_equal_sender() {
         &state,
     );
     assert!(state
-        .handle_confirmation_order(ConfirmationOrder::new(certified_transfer_order))
+        .handle_confirmation_order(ConfirmationOrder::new(certificate))
         .is_ok());
     let account = state.accounts.get(&dbg_account(1)).unwrap();
     assert_eq!(Balance::from(1), account.balance);
@@ -306,16 +303,14 @@ fn test_update_recipient_account() {
     let sender_key_pair = get_key_pair();
     // Sender has no account on this shard.
     let mut state = init_state_with_accounts(vec![(dbg_account(2), dbg_addr(2), Balance::from(1))]);
-    let certified_transfer_order = init_certified_transfer_order(
+    let certificate = init_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
         Amount::from(10),
         &state,
     );
-    assert!(state
-        .update_recipient_account(certified_transfer_order)
-        .is_ok());
+    assert!(state.update_recipient_account(certificate).is_ok());
     let account = state.accounts.get(&dbg_account(2)).unwrap();
     assert_eq!(Balance::from(11), account.balance);
     assert_eq!(SequenceNumber::from(0), account.next_sequence_number);
@@ -329,7 +324,7 @@ fn test_handle_confirmation_order_ok() {
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let certified_transfer_order = init_certified_transfer_order(
+    let certificate = init_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -343,9 +338,10 @@ fn test_handle_confirmation_order_ok() {
     let mut remaining_balance = old_account.balance;
     remaining_balance = remaining_balance
         .try_sub(
-            certified_transfer_order
+            certificate
                 .value
-                .transfer
+                .confirm_request()
+                .unwrap()
                 .amount()
                 .unwrap()
                 .into(),
@@ -353,39 +349,41 @@ fn test_handle_confirmation_order_ok() {
         .unwrap();
 
     let (info, _) = state
-        .handle_confirmation_order(ConfirmationOrder::new(certified_transfer_order.clone()))
+        .handle_confirmation_order(ConfirmationOrder::new(certificate.clone()))
         .unwrap();
     assert_eq!(dbg_account(1), info.account_id);
     assert_eq!(remaining_balance, info.balance);
     assert_eq!(next_sequence_number, info.next_sequence_number);
-    assert_eq!(None, info.pending_confirmation);
+    assert_eq!(None, info.pending);
     assert_eq!(
         state.accounts.get(&dbg_account(1)).unwrap().confirmed_log,
-        vec![certified_transfer_order.clone()]
+        vec![certificate.clone()]
     );
 
     let recipient_account = state.accounts.get(&dbg_account(2)).unwrap();
     assert_eq!(
         recipient_account.balance,
-        certified_transfer_order
+        certificate
             .value
-            .transfer
+            .confirm_request()
+            .unwrap()
             .amount()
             .unwrap()
             .into()
     );
 
-    let info_request = AccountInfoRequest {
+    let info_query = AccountInfoQuery {
         account_id: dbg_account(2),
-        request_sequence_number: None,
-        request_received_transfers_excluding_first_nth: Some(0),
+        query_sequence_number: None,
+        query_received_requests_excluding_first_nth: Some(0),
     };
-    let response = state.handle_account_info_request(info_request).unwrap();
-    assert_eq!(response.requested_received_transfers.len(), 1);
+    let response = state.handle_account_info_query(info_query).unwrap();
+    assert_eq!(response.queried_received_requests.len(), 1);
     assert_eq!(
-        response.requested_received_transfers[0]
+        response.queried_received_requests[0]
             .value
-            .transfer
+            .confirm_request()
+            .unwrap()
             .amount()
             .unwrap(),
         Amount::from(5)
@@ -488,8 +486,7 @@ fn init_state_with_accounts<I: IntoIterator<Item = (AccountId, AccountOwner, Bal
 ) -> AuthorityState {
     let mut state = init_state();
     for (id, owner, balance) in balances {
-        let mut account = AccountOffchainState::new(owner);
-        account.balance = balance;
+        let account = AccountState::new_with_balance(owner, balance, Vec::new());
         state.accounts.insert(id, account);
     }
     state
@@ -501,35 +498,38 @@ fn init_state_with_account(id: AccountId, owner: AccountOwner, balance: Balance)
 }
 
 #[cfg(test)]
-fn init_transfer_order(
+fn init_request_order(
     account_id: AccountId,
     secret: &KeyPair,
     recipient: Address,
     amount: Amount,
-) -> TransferOrder {
-    let transfer = Transfer {
+) -> RequestOrder {
+    let request = Request {
         account_id,
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient,
             amount,
             user_data: UserData::default(),
         },
         sequence_number: SequenceNumber::new(),
     };
-    TransferOrder::new(transfer, secret)
+    RequestOrder::new(request.into(), secret, Vec::new())
 }
 
 #[cfg(test)]
-fn init_certified_transfer_order(
+fn init_certificate(
     account_id: AccountId,
     key_pair: &KeyPair,
     recipient: Address,
     amount: Amount,
     state: &AuthorityState,
-) -> CertifiedTransferOrder {
-    let transfer_order = init_transfer_order(account_id, key_pair, recipient, amount);
-    let vote = SignedTransferOrder::new(transfer_order.clone(), &state.key_pair);
-    let mut builder = SignatureAggregator::try_new(transfer_order, &state.committee).unwrap();
+) -> Certificate {
+    let request = init_request_order(account_id, key_pair, recipient, amount)
+        .value
+        .request;
+    let value = Value::Confirm(request);
+    let vote = Vote::new(value.clone(), &state.key_pair);
+    let mut builder = SignatureAggregator::new(value, &state.committee);
     builder
         .append(vote.authority, vote.signature)
         .unwrap()

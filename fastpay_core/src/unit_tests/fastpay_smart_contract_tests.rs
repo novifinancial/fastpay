@@ -58,22 +58,25 @@ fn test_handle_redeem_transaction_ok() {
         .handle_redeem_transaction(redeem_transaction.clone())
         .is_ok());
     let account_id = redeem_transaction
-        .transfer_certificate
+        .certificate
         .value
-        .transfer
+        .confirm_request()
+        .unwrap()
         .account_id
         .clone();
     let amount = redeem_transaction
-        .transfer_certificate
+        .certificate
         .value
-        .transfer
+        .confirm_request()
+        .unwrap()
         .amount()
         .unwrap();
     let account = contract_state.accounts.get(&account_id).unwrap();
     let sequence_number = redeem_transaction
-        .transfer_certificate
+        .certificate
         .value
-        .transfer
+        .confirm_request()
+        .unwrap()
         .sequence_number;
     assert_eq!(account.last_redeemed, Some(sequence_number));
     old_total_balance = old_total_balance.try_sub(amount).unwrap();
@@ -91,19 +94,14 @@ fn test_handle_redeem_transaction_negative_balance() {
         .is_ok());
     let old_balance = contract_state.total_balance;
 
-    *redeem_transaction
-        .transfer_certificate
+    let amount = redeem_transaction
+        .certificate
         .value
-        .transfer
-        .amount_mut()
-        .unwrap() = redeem_transaction
-        .transfer_certificate
-        .value
-        .transfer
-        .amount_mut()
+        .confirm_request_mut()
         .unwrap()
-        .try_add(too_much_money)
+        .amount_mut()
         .unwrap();
+    *amount = amount.try_add(too_much_money).unwrap();
     assert!(contract_state
         .handle_redeem_transaction(redeem_transaction)
         .is_err());
@@ -150,24 +148,21 @@ fn init_funding_transaction() -> FundingTransaction {
 
 #[cfg(test)]
 fn init_redeem_transaction(committee: Committee, secret: KeyPair) -> RedeemTransaction {
-    let sender_key = get_key_pair();
-    let primary_transfer = Transfer {
+    let request = Request {
         account_id: dbg_account(1),
-        operation: Operation::Payment {
+        operation: Operation::Transfer {
             recipient: Address::Primary(dbg_addr(2)),
             amount: Amount::from(3),
             user_data: UserData::default(),
         },
         sequence_number: SequenceNumber::new(),
     };
-    let order = TransferOrder::new(primary_transfer, &sender_key);
-    let vote = SignedTransferOrder::new(order.clone(), &secret);
-    let mut builder = SignatureAggregator::try_new(order, &committee).unwrap();
+    let value = Value::Confirm(request);
+    let vote = Vote::new(value.clone(), &secret);
+    let mut builder = SignatureAggregator::new(value, &committee);
     let certificate = builder
         .append(vote.authority, vote.signature)
         .unwrap()
         .unwrap();
-    RedeemTransaction {
-        transfer_certificate: certificate,
-    }
+    RedeemTransaction { certificate }
 }
