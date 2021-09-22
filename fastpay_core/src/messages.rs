@@ -227,7 +227,7 @@ impl Value {
     pub fn confirm_request(&self) -> Option<&Request> {
         match self {
             Value::Confirm(r) => Some(r),
-            Value::Coin(_) | Value::Lock(_) => None,
+            _ => None,
         }
     }
 
@@ -235,14 +235,14 @@ impl Value {
     pub fn confirm_request_mut(&mut self) -> Option<&mut Request> {
         match self {
             Value::Confirm(r) => Some(r),
-            Value::Coin(_) | Value::Lock(_) => None,
+            _ => None,
         }
     }
 
     pub fn confirm_key(&self) -> Option<(AccountId, SequenceNumber)> {
         match self {
             Value::Confirm(r) => Some((r.account_id.clone(), r.sequence_number)),
-            Value::Coin(_) | Value::Lock(_) => None,
+            _ => None,
         }
     }
 }

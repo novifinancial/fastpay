@@ -528,15 +528,8 @@ where
                 Value::Confirm(r) => r,
                 _ => continue,
             };
-            match &request.operation {
-                Operation::Transfer { amount, .. } => {
-                    new_balance = new_balance.try_sub((*amount).into())?;
-                }
-                Operation::OpenAccount { .. }
-                | Operation::CloseAccount
-                | Operation::Spend { .. }
-                | Operation::SpendAndTransfer { .. }
-                | Operation::ChangeOwner { .. } => (),
+            if let Operation::Transfer { amount, .. } = &request.operation {
+                new_balance = new_balance.try_sub((*amount).into())?;
             }
             if request.sequence_number >= new_next_sequence_number {
                 assert_eq!(
@@ -563,15 +556,8 @@ where
                 Value::Confirm(r) => r,
                 _ => continue,
             };
-            match &request.operation {
-                Operation::Transfer { amount, .. } => {
-                    new_balance = new_balance.try_add((*amount).into())?;
-                }
-                Operation::OpenAccount { .. }
-                | Operation::CloseAccount
-                | Operation::Spend { .. }
-                | Operation::SpendAndTransfer { .. }
-                | Operation::ChangeOwner { .. } => (),
+            if let Operation::Transfer { amount, .. } = &request.operation {
+                new_balance = new_balance.try_add((*amount).into())?;
             }
         }
         // Atomic update
@@ -685,20 +671,11 @@ where
                 _ => return Ok(()),
             };
             let account_id = &request.account_id;
-            match &request.operation {
-                Operation::Transfer { recipient, .. } => {
-                    ensure!(
-                        recipient == &Address::FastPay(self.account_id.clone()), // TODO: avoid copy
-                        "Request should be received by us."
-                    );
-                }
-                Operation::OpenAccount { .. }
-                | Operation::CloseAccount
-                | Operation::Spend { .. }
-                | Operation::SpendAndTransfer { .. }
-                | Operation::ChangeOwner { .. } => {
-                    // TODO: decide what to do
-                }
+            if let Operation::Transfer { recipient, .. } = &request.operation {
+                ensure!(
+                    recipient == &Address::FastPay(self.account_id.clone()), // TODO: avoid copy
+                    "Request should be received by us."
+                );
             }
             self.communicate_requests(
                 account_id.clone(),
@@ -713,15 +690,8 @@ where
                 .received_certificates
                 .entry(certificate.value.confirm_key().unwrap())
             {
-                match &request.operation {
-                    Operation::Transfer { amount, .. } => {
-                        self.balance = self.balance.try_add((*amount).into())?;
-                    }
-                    Operation::OpenAccount { .. }
-                    | Operation::CloseAccount
-                    | Operation::Spend { .. }
-                    | Operation::SpendAndTransfer { .. }
-                    | Operation::ChangeOwner { .. } => (),
+                if let Operation::Transfer { amount, .. } = &request.operation {
+                    self.balance = self.balance.try_add((*amount).into())?;
                 }
                 entry.insert(certificate);
             }
