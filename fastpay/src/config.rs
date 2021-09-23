@@ -149,7 +149,7 @@ impl AccountsConfig {
     pub fn update_for_received_request(&mut self, certificate: Certificate) {
         let request = match &certificate.value {
             Value::Confirm(r) => r,
-            Value::Coin(_) | Value::Lock(_) => return,
+            _ => return,
         };
         if let Operation::Transfer {
             recipient: Address::FastPay(recipient),
