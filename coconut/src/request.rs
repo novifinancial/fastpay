@@ -127,7 +127,7 @@ impl CoinsRequest {
                     && Parameters::check_pairing(&sigma.0, kappa, &(sigma.1 + nu), &parameters.g2)
             })
             .then(|| ())
-            .ok_or_else(|| CoconutError::PairingCheckFailed)
+            .ok_or(CoconutError::PairingCheckFailed)
     }
 
     fn make_proof() -> RequestCoinsProof {

@@ -32,7 +32,7 @@ impl Coin {
     pub fn aggregate(shares: &[(Self, u64)]) -> CoconutResult<Self> {
         let (mut part1, part2): (Vec<_>, Vec<_>) =
             shares.iter().map(|(x, i)| (x.0, (x.1, *i))).unzip();
-        let h = part1.pop().ok_or_else(|| CoconutError::EmptyShares)?;
+        let h = part1.pop().ok_or(CoconutError::EmptyShares)?;
         let s = Polynomial::lagrange_interpolate(&part2);
         Ok(Self(h, s))
     }
@@ -58,10 +58,7 @@ impl BlindedCoins {
         debug_assert!(parameters.max_attributes() >= 2);
 
         // Compute the base group element h.
-        let base_hs: Vec<_> = cms
-            .iter()
-            .map(|cm| Parameters::hash_to_g1(cm.to_bytes()))
-            .collect();
+        let base_hs = cms.iter().map(|cm| Parameters::hash_to_g1(cm.to_bytes()));
 
         // Homomorphically computes the blinded credential.
         let y0 = &secret.ys[0];
@@ -88,9 +85,7 @@ impl BlindedCoins {
         self.blind
             .iter()
             .zip(blinding_factors.iter())
-            .map(|((h, b), (k_value, k_id))| {
-                Coin(h.clone(), b + gamma_0 * (-k_value) + gamma_1 * (-k_id))
-            })
+            .map(|((h, b), (k_value, k_id))| Coin(*h, b + gamma_0 * (-k_value) + gamma_1 * (-k_id)))
             .collect()
     }
 }
