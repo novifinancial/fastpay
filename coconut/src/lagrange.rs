@@ -4,6 +4,10 @@ use core::iter::Sum;
 use core::ops::Mul;
 use ff::Field as _;
 
+#[cfg(test)]
+#[path = "tests/lagrange_tests.rs"]
+pub mod lagrange_tests;
+
 /// Represents a polynomial.
 pub struct Polynomial {
     coefficients: Vec<Scalar>,
