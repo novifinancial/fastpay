@@ -61,9 +61,9 @@ Coin:
         TYPENAME: AccountId
     - amount:
         TYPENAME: Amount
+    - seed: U128
 CoinCreationContract:
   STRUCT:
-    - seed: U128
     - sources:
         SEQ:
           TYPENAME: CoinCreationSource

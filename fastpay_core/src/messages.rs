@@ -89,6 +89,7 @@ pub struct RequestOrder {
 pub struct Coin {
     pub account_id: AccountId,
     pub amount: Amount,
+    pub seed: u128,
 }
 
 /// A statement to be certified by the authorities.
@@ -113,8 +114,6 @@ pub struct CoinCreationSource {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CoinCreationContract {
-    /// Diversification seed to ensure that hash(contract) cannot be guessed.
-    pub seed: u128,
     /// The sources to be used for coin creation.
     pub sources: Vec<CoinCreationSource>,
     /// The coins to be created.
