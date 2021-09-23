@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{base_types::*, committee::Committee, error::FastPayError, messages::*};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 #[cfg(test)]
 #[path = "unit_tests/authority_tests.rs"]
@@ -387,15 +387,23 @@ impl Authority for AuthorityState {
                 _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
             }
             // Verify source coins.
+            let mut seeds = BTreeSet::new();
             for coin in &source.coins {
                 // Verify coin certificate.
                 coin.check(&self.committee)?;
                 match &coin.value {
-                    Value::Coin(Coin { account_id, amount }) => {
+                    Value::Coin(Coin {
+                        account_id,
+                        amount,
+                        seed,
+                    }) => {
                         // Verify locked account.
                         fp_ensure!(account_id == &source.account_id, FastPayError::InvalidCoin);
-                        // Update source amount.
+                        // Seeds must be distinct.
+                        fp_ensure!(!seeds.contains(seed), FastPayError::InvalidCoin);
+                        // Update source amount and seeds.
                         source_amount = source_amount.try_add(*amount)?;
+                        seeds.insert(*seed);
                     }
                     _ => fp_bail!(FastPayError::InvalidCoin),
                 }
