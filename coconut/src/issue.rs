@@ -4,6 +4,10 @@ use crate::setup::{Parameters, PublicKey, SecretKey};
 use bls12_381::{G1Projective, Scalar};
 use group::GroupEncoding as _;
 
+#[cfg(test)]
+#[path = "tests/issue_tests.rs"]
+pub mod issue_tests;
+
 #[derive(Clone)]
 pub struct Coin(pub G1Projective, pub G1Projective);
 

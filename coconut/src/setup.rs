@@ -81,10 +81,10 @@ pub struct SecretKey {
 }
 
 impl SecretKey {
-    pub fn new(parameters: &mut Parameters, attributes: usize) -> Self {
+    pub fn new(parameters: &mut Parameters) -> Self {
         Self {
             x: parameters.random_scalar(),
-            ys: (0..attributes)
+            ys: (0..parameters.max_attributes())
                 .map(|_| parameters.random_scalar())
                 .collect(),
         }
@@ -101,7 +101,7 @@ pub struct PublicKey {
 
 impl PublicKey {
     /// Make a new public key from a secret key.
-    pub fn new(parameters: &mut Parameters, secret: &SecretKey) -> Self {
+    pub fn new(parameters: &Parameters, secret: &SecretKey) -> Self {
         Self {
             alpha: parameters.g2 * secret.x,
             betas: secret.ys.iter().map(|y| parameters.g2 * y).collect(),
@@ -121,8 +121,8 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
-    pub fn new(parameters: &mut Parameters, attributes: usize, index: u64) -> Self {
-        let secret = SecretKey::new(parameters, attributes);
+    pub fn new(parameters: &mut Parameters, index: u64) -> Self {
+        let secret = SecretKey::new(parameters);
         let public = PublicKey::new(parameters, &secret);
         Self {
             index,

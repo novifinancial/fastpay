@@ -4,6 +4,10 @@ use crate::setup::{Parameters, PublicKey};
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::GroupEncoding as _;
 
+#[cfg(test)]
+#[path = "tests/request_tests.rs"]
+pub mod request_tests;
+
 /// Represents a ZK proof of valid coin requests.
 type RequestCoinsProof = usize;
 
@@ -41,7 +45,7 @@ impl CoinsRequest {
         blinding_factors: &[(Scalar, Scalar)],
     ) -> Self {
         debug_assert!(sigmas.len() == input_attributes.len());
-        debug_assert!(output_attributes.len() * 2 == blinding_factors.len());
+        debug_assert!(output_attributes.len() == blinding_factors.len());
         debug_assert!(parameters.max_attributes() >= 2);
 
         // Randomize the input credentials; each credential represents an input coin.
@@ -132,11 +136,13 @@ impl CoinsRequest {
 
     fn make_proof() -> RequestCoinsProof {
         // TODO
-        unimplemented!()
+        //unimplemented!()
+        0
     }
 
     fn verify_proof(&self) -> CoconutResult<()> {
         // TODO
-        unimplemented!()
+        //unimplemented!()
+        Ok(())
     }
 }
