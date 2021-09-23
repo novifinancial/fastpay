@@ -6,10 +6,11 @@ use rand::rngs::ThreadRng;
 use rand::thread_rng;
 use sha2::Sha512;
 
-/// G1 domain as defined by IETF:
+/// G1 hash domain as defined by IETF:
 /// https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-11#appendix-J.9.1
 const G1_HASH_DOMAIN: &[u8] = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
+/// The global system parameters (public).
 pub struct Parameters {
     /// A generator of G1.
     pub g1: G1Projective,
@@ -73,6 +74,7 @@ impl Parameters {
     }
 }
 
+/// The secret key of each authority.
 pub struct SecretKey {
     pub x: Scalar,
     pub ys: Vec<Scalar>,
@@ -89,6 +91,8 @@ impl SecretKey {
     }
 }
 
+/// The public key. This structure can represent the public key of a single authority or their
+/// aggregated public key (aggregated keys are undistinguishable from single-authority keys).
 pub struct PublicKey {
     pub alpha: G2Projective,
     pub betas: Vec<G2Projective>,
@@ -96,6 +100,7 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
+    /// Make a new public key from a secret key.
     pub fn new(parameters: &mut Parameters, secret: &SecretKey) -> Self {
         Self {
             alpha: parameters.g2 * secret.x,
@@ -105,15 +110,24 @@ impl PublicKey {
     }
 }
 
+/// Convenience structure representing the keypair of an authority.
 pub struct KeyPair {
+    /// The index of this authority (used for Lagrange interpolation).
+    pub index: u64,
+    /// The secret key of the authority.
     pub secret: SecretKey,
+    /// The public key of the authority.
     pub public: PublicKey,
 }
 
 impl KeyPair {
-    pub fn new(parameters: &mut Parameters, attributes: usize) -> Self {
+    pub fn new(parameters: &mut Parameters, attributes: usize, index: u64) -> Self {
         let secret = SecretKey::new(parameters, attributes);
         let public = PublicKey::new(parameters, &secret);
-        Self { secret, public }
+        Self {
+            index,
+            secret,
+            public,
+        }
     }
 }

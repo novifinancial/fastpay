@@ -22,12 +22,9 @@ pub type CoconutResult<T> = Result<T, CoconutError>;
 
 #[derive(Debug, Error)]
 pub enum CoconutError {
-    #[error("Unexpected number of attributes; expected {expected:}, got {got:}")]
-    TooManyAttributes { expected: usize, got: usize },
-
-    #[error("Invalid message")]
-    InvalidMessage,
-
     #[error("Pairing check failed")]
     PairingCheckFailed,
+
+    #[error("Cannot aggregate coin from empty shares")]
+    EmptyShares,
 }

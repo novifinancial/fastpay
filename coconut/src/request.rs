@@ -1,6 +1,6 @@
 use crate::error::{CoconutError, CoconutResult};
-use crate::setup::{Parameters, PublicKey, SecretKey};
-use crate::Coin;
+use crate::issue::Coin;
+use crate::setup::{Parameters, PublicKey};
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::GroupEncoding as _;
 
@@ -138,62 +138,5 @@ impl CoinsRequest {
     fn verify_proof(&self) -> CoconutResult<()> {
         // TODO
         unimplemented!()
-    }
-}
-
-pub struct BlindedCoins {
-    /// A vector of blinded coins.
-    blind: Vec<(G1Projective, G1Projective)>,
-}
-
-impl BlindedCoins {
-    pub fn new(
-        // The system parameters.
-        parameters: &Parameters,
-        // The secret key of the authority.
-        secret: &SecretKey,
-        // The common commitments Cm of the coin values and ids.
-        cms: &[G1Projective],
-        // The blinded output coin values and ids.
-        cs: &[(G1Projective, G1Projective)],
-    ) -> Self {
-        debug_assert!(cms.len() == cs.len());
-        debug_assert!(parameters.max_attributes() >= 2);
-
-        // Compute the base group element h.
-        let base_hs: Vec<_> = cms
-            .iter()
-            .map(|cm| Parameters::hash_to_g1(cm.to_bytes()))
-            .collect();
-
-        // Homomorphically computes the blinded credential.
-        let y0 = &secret.ys[0];
-        let y1 = &secret.ys[1];
-        let blind = cs
-            .iter()
-            .zip(base_hs.into_iter())
-            .map(|((v, id), h)| (h, v * y0 + id * y1 + h * secret.x))
-            .collect();
-
-        Self { blind }
-    }
-
-    /// Unblinds the coins.
-    pub fn unblind(
-        &self,
-        // The public key of the authority.
-        public_key: &PublicKey,
-        // The blinding factors used to produce the coin requests.
-        blinding_factors: &[(Scalar, Scalar)],
-    ) -> Vec<Coin> {
-        let gamma_0 = &public_key.gammas[0];
-        let gamma_1 = &public_key.gammas[1];
-        self.blind
-            .iter()
-            .zip(blinding_factors.iter())
-            .map(|((h, b), (k_value, k_id))| {
-                Coin(h.clone(), b + gamma_0 * (-k_value) + gamma_1 * (-k_id))
-            })
-            .collect()
     }
 }
