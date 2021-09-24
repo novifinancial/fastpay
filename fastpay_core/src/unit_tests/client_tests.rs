@@ -107,9 +107,9 @@ fn make_client(
     account_id: AccountId,
     authority_clients: HashMap<AuthorityName, LocalAuthorityClient>,
     committee: Committee,
-) -> ClientState<LocalAuthorityClient> {
+) -> AccountClientState<LocalAuthorityClient> {
     let key_pair = get_key_pair();
-    ClientState::new(
+    AccountClientState::new(
         account_id,
         Some(key_pair),
         committee,
@@ -136,7 +136,7 @@ fn fund_account<I: IntoIterator<Item = i128>>(
     }
 }
 
-fn init_local_client_state(balances: Vec<i128>) -> ClientState<LocalAuthorityClient> {
+fn init_local_client_state(balances: Vec<i128>) -> AccountClientState<LocalAuthorityClient> {
     let (mut authority_clients, committee) = init_local_authorities(balances.len());
     let zeroes = vec![0; balances.len()];
     let client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
@@ -158,7 +158,7 @@ fn init_local_client_state(balances: Vec<i128>) -> ClientState<LocalAuthorityCli
 
 fn init_local_client_state_with_bad_authority(
     balances: Vec<i128>,
-) -> ClientState<LocalAuthorityClient> {
+) -> AccountClientState<LocalAuthorityClient> {
     let (mut authority_clients, committee) = init_local_authorities_bad_1(balances.len());
     let zeroes = vec![0; balances.len()];
     let client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
@@ -306,11 +306,11 @@ fn test_open_account() {
         }) if &new_id == id
     ));
     // Make a client to try the new account.
-    let mut client = ClientState::new(
+    let mut client = AccountClientState::new(
         new_id,
         Some(new_key_pair),
         sender.committee.clone(),
-        sender.authority_clients.clone(),
+        sender.authority_clients,
         SequenceNumber::from(0),
         Vec::new(),
         Vec::new(),
