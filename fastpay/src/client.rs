@@ -64,19 +64,19 @@ fn make_authority_mass_clients(
     authority_clients
 }
 
-fn make_client_state(
+fn make_account_client_state(
     accounts: &AccountsConfig,
     committee_config: &CommitteeConfig,
     account_id: AccountId,
     buffer_size: usize,
     send_timeout: std::time::Duration,
     recv_timeout: std::time::Duration,
-) -> ClientState<network::Client> {
+) -> AccountClientState<network::Client> {
     let account = accounts.get(&account_id).expect("Unknown account");
     let committee = Committee::new(committee_config.voting_rights());
     let authority_clients =
         make_authority_clients(committee_config, buffer_size, send_timeout, recv_timeout);
-    ClientState::new(
+    AccountClientState::new(
         account_id,
         Some(account.key_pair.copy()),
         committee,
@@ -392,7 +392,7 @@ fn main() {
 
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
-                let mut client_state = make_client_state(
+                let mut client_state = make_account_client_state(
                     &accounts_config,
                     &committee_config,
                     sender,
@@ -411,7 +411,7 @@ fn main() {
                 println!("{:?}", cert);
                 accounts_config.update_from_state(&client_state);
                 info!("Updating recipient's local balance");
-                let mut recipient_client_state = make_client_state(
+                let mut recipient_client_state = make_account_client_state(
                     &accounts_config,
                     &committee_config,
                     recipient,
@@ -434,7 +434,7 @@ fn main() {
         ClientCommands::QueryBalance { account_id } => {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
-                let mut client_state = make_client_state(
+                let mut client_state = make_account_client_state(
                     &accounts_config,
                     &committee_config,
                     account_id,

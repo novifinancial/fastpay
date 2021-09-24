@@ -4,7 +4,7 @@
 use crate::transport::NetworkProtocol;
 use fastpay_core::{
     base_types::*,
-    client::ClientState,
+    client::AccountClientState,
     messages::{Address, Certificate, Operation, Value},
 };
 
@@ -135,7 +135,7 @@ impl AccountsConfig {
         self.accounts.values_mut()
     }
 
-    pub fn update_from_state<A>(&mut self, state: &ClientState<A>) {
+    pub fn update_from_state<A>(&mut self, state: &AccountClientState<A>) {
         let account = self
             .accounts
             .get_mut(state.account_id())

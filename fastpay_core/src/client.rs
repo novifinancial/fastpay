@@ -36,7 +36,7 @@ pub trait AuthorityClient {
     ) -> AsyncResult<AccountInfoResponse, FastPayError>;
 }
 
-pub struct ClientState<AuthorityClient> {
+pub struct AccountClientState<AuthorityClient> {
     /// The offchain account id.
     account_id: AccountId,
     /// The current signature key, if we own this account.
@@ -66,7 +66,7 @@ pub struct ClientState<AuthorityClient> {
 }
 
 // Operations are considered successful when they successfully reach a quorum of authorities.
-pub trait Client {
+pub trait AccountClient {
     /// Send money to a FastPay account.
     fn transfer_to_fastpay(
         &mut self,
@@ -119,7 +119,7 @@ pub trait Client {
     fn get_spendable_amount(&mut self) -> AsyncResult<Amount, failure::Error>;
 }
 
-impl<A> ClientState<A> {
+impl<A> AccountClientState<A> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         account_id: AccountId,
@@ -241,7 +241,7 @@ enum CommunicateAction {
     SynchronizeNextSequenceNumber(SequenceNumber),
 }
 
-impl<A> ClientState<A>
+impl<A> AccountClientState<A>
 where
     A: AuthorityClient + Send + Sync + 'static + Clone,
 {
@@ -567,7 +567,7 @@ where
                 );
                 match &request.operation {
                     Operation::ChangeOwner { new_owner } => {
-                        match self.known_key_pairs.entry(new_owner.clone()) {
+                        match self.known_key_pairs.entry(*new_owner) {
                             btree_map::Entry::Occupied(kp) => {
                                 let old = std::mem::take(&mut self.key_pair);
                                 self.key_pair = Some(kp.remove());
@@ -653,14 +653,14 @@ where
     }
 
     fn make_request_order(&self, request: Request) -> Result<RequestOrder, failure::Error> {
-        let key_pair = self.key_pair.as_ref().ok_or(failure::format_err!(
-            "Cannot make request for an account that we don't own"
-        ))?;
+        let key_pair = self.key_pair.as_ref().ok_or_else(|| {
+            failure::format_err!("Cannot make request for an account that we don't own")
+        })?;
         Ok(RequestOrder::new(request.into(), key_pair, Vec::new()))
     }
 }
 
-impl<A> Client for ClientState<A>
+impl<A> AccountClient for AccountClientState<A>
 where
     A: AuthorityClient + Send + Sync + Clone + 'static,
 {
