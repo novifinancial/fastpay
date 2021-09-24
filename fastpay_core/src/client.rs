@@ -37,11 +37,11 @@ pub trait AuthorityClient {
 }
 
 pub struct ClientState<AuthorityClient> {
-    /// Our offchain account id.
+    /// The offchain account id.
     account_id: AccountId,
-    /// Our signature key.
-    key_pair: KeyPair,
-    /// Our FastPay committee.
+    /// The current signature key, if we own this account.
+    key_pair: Option<KeyPair>,
+    /// The FastPay committee.
     committee: Committee,
     /// How to talk to this committee.
     authority_clients: HashMap<AuthorityName, AuthorityClient>,
@@ -50,8 +50,8 @@ pub struct ClientState<AuthorityClient> {
     next_sequence_number: SequenceNumber,
     /// Pending request.
     pending_request: Option<RequestOrder>,
-    /// Pending new key pair.
-    pending_key_pair: Option<KeyPair>,
+    /// Known key pairs (past and future).
+    known_key_pairs: BTreeMap<AccountOwner, KeyPair>,
 
     // The remaining fields are used to minimize networking, and may not always be persisted locally.
     /// Request certificates that we have created ("sent").
@@ -87,6 +87,22 @@ pub trait Client {
     fn receive_from_fastpay(&mut self, certificate: Certificate)
         -> AsyncResult<(), failure::Error>;
 
+    /// Rotate the key of the account.
+    fn rotate_key_pair(&mut self, key_pair: KeyPair) -> AsyncResult<Certificate, failure::Error>;
+
+    /// Transfer ownership of the account.
+    fn transfer_ownership(
+        &mut self,
+        new_owner: AccountOwner,
+    ) -> AsyncResult<Certificate, failure::Error>;
+
+    /// Open a new account with a derived UID.
+    fn open_account(&mut self, new_owner: AccountOwner)
+        -> AsyncResult<Certificate, failure::Error>;
+
+    /// Close the account (and lose everything in it!!)
+    fn close_account(&mut self) -> AsyncResult<Certificate, failure::Error>;
+
     /// Send money to a FastPay account.
     /// Do not check balance. (This may block the client)
     /// Do not confirm the transaction.
@@ -107,7 +123,7 @@ impl<A> ClientState<A> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         account_id: AccountId,
-        key_pair: KeyPair,
+        key_pair: Option<KeyPair>,
         committee: Committee,
         authority_clients: HashMap<AuthorityName, A>,
         next_sequence_number: SequenceNumber,
@@ -122,7 +138,7 @@ impl<A> ClientState<A> {
             authority_clients,
             next_sequence_number,
             pending_request: None,
-            pending_key_pair: None,
+            known_key_pairs: BTreeMap::new(),
             sent_certificates,
             received_certificates: received_certificates
                 .into_iter()
@@ -134,6 +150,10 @@ impl<A> ClientState<A> {
 
     pub fn account_id(&self) -> &AccountId {
         &self.account_id
+    }
+
+    pub fn owner(&self) -> Option<AccountOwner> {
+        self.key_pair.as_ref().map(|kp| kp.public())
     }
 
     pub fn next_sequence_number(&self) -> SequenceNumber {
@@ -507,7 +527,7 @@ where
             },
             sequence_number: self.next_sequence_number,
         };
-        let order = RequestOrder::new(request.into(), &self.key_pair, Vec::new());
+        let order = self.make_request_order(request)?;
         let certificate = self
             .execute_request(order, /* with_confirmation */ true)
             .await?;
@@ -523,6 +543,15 @@ where
     ) -> Result<(), FastPayError> {
         let mut new_balance = self.balance;
         let mut new_next_sequence_number = self.next_sequence_number;
+        for old_cert in &self.sent_certificates {
+            let request = match &old_cert.value {
+                Value::Confirm(r) => r,
+                _ => continue,
+            };
+            if let Operation::Transfer { amount, .. } = &request.operation {
+                new_balance = new_balance.try_add((*amount).into())?;
+            }
+        }
         for new_cert in &sent_certificates {
             let request = match &new_cert.value {
                 Value::Confirm(r) => r,
@@ -536,28 +565,35 @@ where
                     request.sequence_number, new_next_sequence_number,
                     "New certificates should be given in order"
                 );
-                if let Operation::ChangeOwner { new_owner } = &request.operation {
-                    // TODO: add client support for initiating key rotations
-                    // TODO: support handing over the account to someone else.
-                    // TODO: crash resistance + key storage
-                    let key_pair = std::mem::take(&mut self.pending_key_pair)
-                        .expect("We are rotating the key for ourselves.");
-                    assert_eq!(new_owner, &key_pair.public(), "Idem");
-                    self.key_pair = key_pair;
+                match &request.operation {
+                    Operation::ChangeOwner { new_owner } => {
+                        match self.known_key_pairs.entry(new_owner.clone()) {
+                            btree_map::Entry::Occupied(kp) => {
+                                let old = std::mem::take(&mut self.key_pair);
+                                self.key_pair = Some(kp.remove());
+                                if let Some(kp) = old {
+                                    self.known_key_pairs.insert(kp.public(), kp);
+                                }
+                            }
+                            btree_map::Entry::Vacant(_) => {
+                                let old = std::mem::take(&mut self.key_pair);
+                                if let Some(kp) = old {
+                                    self.known_key_pairs.insert(kp.public(), kp);
+                                }
+                            }
+                        }
+                    }
+                    Operation::CloseAccount
+                    | Operation::Spend { .. }
+                    | Operation::SpendAndTransfer { .. } => {
+                        self.key_pair = None;
+                    }
+                    Operation::OpenAccount { .. } | Operation::Transfer { .. } => (),
                 }
                 new_next_sequence_number = request
                     .sequence_number
                     .increment()
                     .unwrap_or_else(|_| SequenceNumber::max());
-            }
-        }
-        for old_cert in &self.sent_certificates {
-            let request = match &old_cert.value {
-                Value::Confirm(r) => r,
-                _ => continue,
-            };
-            if let Operation::Transfer { amount, .. } = &request.operation {
-                new_balance = new_balance.try_add((*amount).into())?;
             }
         }
         // Atomic update
@@ -614,6 +650,13 @@ where
             .await?;
         }
         Ok(self.sent_certificates.last().unwrap().clone())
+    }
+
+    fn make_request_order(&self, request: Request) -> Result<RequestOrder, failure::Error> {
+        let key_pair = self.key_pair.as_ref().ok_or(failure::format_err!(
+            "Cannot make request for an account that we don't own"
+        ))?;
+        Ok(RequestOrder::new(request.into(), key_pair, Vec::new()))
     }
 }
 
@@ -699,6 +742,76 @@ where
         })
     }
 
+    fn rotate_key_pair(&mut self, key_pair: KeyPair) -> AsyncResult<Certificate, failure::Error> {
+        Box::pin(async move {
+            let new_owner = key_pair.public();
+            let request = Request {
+                account_id: self.account_id.clone(),
+                operation: Operation::ChangeOwner { new_owner },
+                sequence_number: self.next_sequence_number,
+            };
+            self.known_key_pairs.insert(key_pair.public(), key_pair);
+            let order = self.make_request_order(request)?;
+
+            let certificate = self
+                .execute_request(order, /* with_confirmation */ true)
+                .await?;
+            Ok(certificate)
+        })
+    }
+
+    fn transfer_ownership(
+        &mut self,
+        new_owner: AccountOwner,
+    ) -> AsyncResult<Certificate, failure::Error> {
+        Box::pin(async move {
+            let request = Request {
+                account_id: self.account_id.clone(),
+                operation: Operation::ChangeOwner { new_owner },
+                sequence_number: self.next_sequence_number,
+            };
+            let order = self.make_request_order(request)?;
+            let certificate = self
+                .execute_request(order, /* with_confirmation */ true)
+                .await?;
+            Ok(certificate)
+        })
+    }
+
+    fn open_account(
+        &mut self,
+        new_owner: AccountOwner,
+    ) -> AsyncResult<Certificate, failure::Error> {
+        Box::pin(async move {
+            let new_id = self.account_id.make_child(self.next_sequence_number);
+            let request = Request {
+                account_id: self.account_id.clone(),
+                operation: Operation::OpenAccount { new_id, new_owner },
+                sequence_number: self.next_sequence_number,
+            };
+            let order = self.make_request_order(request)?;
+            let certificate = self
+                .execute_request(order, /* with_confirmation */ true)
+                .await?;
+            Ok(certificate)
+        })
+    }
+
+    fn close_account(&mut self) -> AsyncResult<Certificate, failure::Error> {
+        Box::pin(async move {
+            let request = Request {
+                account_id: self.account_id.clone(),
+                operation: Operation::CloseAccount,
+                sequence_number: self.next_sequence_number,
+            };
+            let order = self.make_request_order(request)?;
+            let certificate = self
+                .execute_request(order, /* with_confirmation */ true)
+                .await?;
+            Ok(certificate)
+        })
+    }
+
     fn transfer_to_fastpay_unsafe_unconfirmed(
         &mut self,
         amount: Amount,
@@ -715,7 +828,7 @@ where
                 },
                 sequence_number: self.next_sequence_number,
             };
-            let order = RequestOrder::new(request.into(), &self.key_pair, Vec::new());
+            let order = self.make_request_order(request)?;
             let new_certificate = self
                 .execute_request(order, /* with_confirmation */ false)
                 .await?;

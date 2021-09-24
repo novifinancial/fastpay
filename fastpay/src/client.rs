@@ -78,7 +78,7 @@ fn make_client_state(
         make_authority_clients(committee_config, buffer_size, send_timeout, recv_timeout);
     ClientState::new(
         account_id,
-        account.key_pair.copy(),
+        Some(account.key_pair.copy()),
         committee,
         authority_clients,
         account.next_sequence_number,
