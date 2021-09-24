@@ -1,3 +1,4 @@
+use crate::lagrange::Polynomial;
 use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use bls12_381::{G1Projective, G2Prepared, G2Projective, Scalar};
 use ff::Field as _;
@@ -25,6 +26,8 @@ pub struct Parameters {
 
 impl Parameters {
     pub fn new(max_attributes: usize) -> Parameters {
+        debug_assert!(max_attributes > 0);
+
         Self {
             g1: G1Projective::generator(),
             hs: (0..max_attributes)
@@ -80,17 +83,6 @@ pub struct SecretKey {
     pub ys: Vec<Scalar>,
 }
 
-impl SecretKey {
-    pub fn new(parameters: &mut Parameters) -> Self {
-        Self {
-            x: parameters.random_scalar(),
-            ys: (0..parameters.max_attributes())
-                .map(|_| parameters.random_scalar())
-                .collect(),
-        }
-    }
-}
-
 /// The public key. This structure can represent the public key of a single authority or their
 /// aggregated public key (aggregated keys are undistinguishable from single-authority keys).
 pub struct PublicKey {
@@ -121,13 +113,46 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
-    pub fn new(parameters: &mut Parameters, index: u64) -> Self {
-        let secret = SecretKey::new(parameters);
-        let public = PublicKey::new(parameters, &secret);
-        Self {
-            index,
-            secret,
-            public,
-        }
+    /// Compute the keys of all authorities along with the aggregated public key. This function
+    /// should be distributed so that no single authority learns the master secret key.
+    pub fn ttp(
+        parameters: &mut Parameters,
+        threshold: usize,
+        committee: usize,
+    ) -> (PublicKey, Vec<KeyPair>) {
+        debug_assert!(threshold <= committee && threshold > 0);
+
+        let v = Polynomial::random(parameters, threshold);
+        let ws: Vec<_> = (0..parameters.max_attributes())
+            .map(|_| Polynomial::random(parameters, threshold))
+            .collect();
+
+        // Compute the key of each authority
+        let keys = (1..=committee)
+            .map(|i| {
+                let index = i as u64;
+                let x = v.evaluate(&Scalar::from(index));
+                let ys = ws
+                    .iter()
+                    .map(|w| w.evaluate(&Scalar::from(index)))
+                    .collect();
+                let secret = SecretKey { x, ys };
+                let public = PublicKey::new(parameters, &secret);
+                KeyPair {
+                    index,
+                    secret,
+                    public,
+                }
+            })
+            .collect();
+
+        // Make the aggregated public key.
+        let master_secret = SecretKey {
+            x: v.evaluate(&Scalar::zero()),
+            ys: ws.iter().map(|w| w.evaluate(&Scalar::zero())).collect(),
+        };
+        let master_public = PublicKey::new(parameters, &master_secret);
+
+        (master_public, keys)
     }
 }
