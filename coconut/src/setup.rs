@@ -7,6 +7,10 @@ use rand::rngs::ThreadRng;
 use rand::thread_rng;
 use sha2::Sha512;
 
+#[cfg(test)]
+#[path = "tests/setup_tests.rs"]
+pub mod setup_tests;
+
 /// G1 hash domain as defined by IETF:
 /// https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-11#appendix-J.9.1
 const G1_HASH_DOMAIN: &[u8] = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
@@ -122,11 +126,22 @@ impl KeyPair {
     ) -> (PublicKey, Vec<KeyPair>) {
         debug_assert!(threshold <= committee && threshold > 0);
 
-        let v = Polynomial::random(parameters, threshold);
+        let v = Polynomial::random(parameters, threshold - 1);
         let ws: Vec<_> = (0..parameters.max_attributes())
-            .map(|_| Polynomial::random(parameters, threshold))
+            .map(|_| Polynomial::random(parameters, threshold - 1))
             .collect();
 
+        Self::derive_keys(parameters, committee, v, ws)
+    }
+
+    /// Helper function to derive keys from the polynomial. Separating `ttp` and `derive_keys` into
+    /// separate functions is handy for tests.
+    fn derive_keys(
+        parameters: &Parameters,
+        committee: usize,
+        v: Polynomial,
+        ws: Vec<Polynomial>,
+    ) -> (PublicKey, Vec<KeyPair>) {
         // Compute the key of each authority
         let keys = (1..=committee)
             .map(|i| {
@@ -152,7 +167,6 @@ impl KeyPair {
             ys: ws.iter().map(|w| w.evaluate(&Scalar::zero())).collect(),
         };
         let master_public = PublicKey::new(parameters, &master_secret);
-
         (master_public, keys)
     }
 }

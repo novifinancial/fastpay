@@ -19,9 +19,9 @@ pub struct CoinsRequest {
     /// Nu group elements associated with the input credentials (`sigmas`).
     nus: Vec<G1Projective>,
     /// The common commitments Cm of the output coin values and ids.
-    _cms: Vec<G1Projective>,
+    pub cms: Vec<G1Projective>,
     /// The blinded output coin values and ids.
-    _cs: Vec<(G1Projective, G1Projective)>,
+    pub cs: Vec<(G1Projective, G1Projective)>,
     /// A ZK-proof asserting correctness of all the other fields and that the sum of the input
     /// coins equals the sum of the output coins.
     _proof: RequestCoinsProof,
@@ -111,8 +111,8 @@ impl CoinsRequest {
             sigmas,
             kappas,
             nus,
-            _cms: cms,
-            _cs: cs,
+            cms,
+            cs,
             _proof: proof,
         }
     }

@@ -10,7 +10,7 @@ pub mod lagrange_tests;
 
 /// Represents a polynomial.
 pub struct Polynomial {
-    coefficients: Vec<Scalar>,
+    pub coefficients: Vec<Scalar>,
 }
 
 impl Polynomial {

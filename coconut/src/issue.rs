@@ -1,4 +1,3 @@
-use crate::error::{CoconutError, CoconutResult};
 use crate::lagrange::Polynomial;
 use crate::setup::{Parameters, PublicKey, SecretKey};
 use bls12_381::{G1Projective, Scalar};
@@ -22,7 +21,7 @@ impl Coin {
     pub fn plain_verify(
         &self,
         parameters: &Parameters,
-        public_key: PublicKey,
+        public_key: &PublicKey,
         value: Scalar,
         id: Scalar,
     ) -> bool {
@@ -33,12 +32,12 @@ impl Coin {
     }
 
     /// Aggregates multiple shares of coins into a single coin.
-    pub fn aggregate(shares: &[(Self, u64)]) -> CoconutResult<Self> {
-        let (mut part1, part2): (Vec<_>, Vec<_>) =
-            shares.iter().map(|(x, i)| (x.0, (x.1, *i))).unzip();
-        let h = part1.pop().ok_or(CoconutError::EmptyShares)?;
-        let s = Polynomial::lagrange_interpolate(&part2);
-        Ok(Self(h, s))
+    pub fn aggregate(shares: &[(Self, u64)]) -> Self {
+        debug_assert!(!shares.is_empty());
+        let (coin, _) = &shares[0];
+        let shares: Vec<_> = shares.iter().map(|(coin, i)| (coin.1, *i)).collect();
+        let s = Polynomial::lagrange_interpolate(&shares);
+        Self(coin.0, s)
     }
 }
 
