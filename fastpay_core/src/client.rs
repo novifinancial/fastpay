@@ -16,6 +16,7 @@ mod client_tests;
 
 pub type AsyncResult<'a, T, E> = future::BoxFuture<'a, Result<T, E>>;
 
+/// How to communicate with an authority.
 pub trait AuthorityClient {
     /// Initiate a new transfer to a FastPay or Primary account.
     fn handle_request_order(
@@ -36,36 +37,9 @@ pub trait AuthorityClient {
     ) -> AsyncResult<AccountInfoResponse, FastPayError>;
 }
 
-pub struct AccountClientState<AuthorityClient> {
-    /// The offchain account id.
-    account_id: AccountId,
-    /// The current signature key, if we own this account.
-    key_pair: Option<KeyPair>,
-    /// The FastPay committee.
-    committee: Committee,
-    /// How to talk to this committee.
-    authority_clients: HashMap<AuthorityName, AuthorityClient>,
-    /// Expected sequence number for the next certified request.
-    /// This is also the number of request certificates that we have created.
-    next_sequence_number: SequenceNumber,
-    /// Pending request.
-    pending_request: Option<RequestOrder>,
-    /// Known key pairs (past and future).
-    known_key_pairs: BTreeMap<AccountOwner, KeyPair>,
-
-    // The remaining fields are used to minimize networking, and may not always be persisted locally.
-    /// Request certificates that we have created ("sent").
-    /// Normally, `sent_certificates` should contain one certificate for each index in `0..next_sequence_number`.
-    sent_certificates: Vec<Certificate>,
-    /// Known received certificates, indexed by account_id and sequence number.
-    /// TODO: API to search and download yet unknown `received_certificates`.
-    received_certificates: BTreeMap<(AccountId, SequenceNumber), Certificate>,
-    /// The known spendable balance (including a possible initial funding, excluding unknown sent
-    /// or received certificates).
-    balance: Balance,
-}
-
-// Operations are considered successful when they successfully reach a quorum of authorities.
+/// How to communicate with an FastPay account across all the authorities. As a rule,
+/// operations are considered successful (and communication may stop) when they succeeed
+/// in gathering a quorum of responses.
 pub trait AccountClient {
     /// Send money to a FastPay account.
     fn transfer_to_fastpay(
@@ -117,6 +91,37 @@ pub trait AccountClient {
     /// TODO: Currently, this value only reflects received transfers that were
     /// locally processed by `receive_from_fastpay`.
     fn get_spendable_amount(&mut self) -> AsyncResult<Amount, failure::Error>;
+}
+
+/// Reference implementation of the `AccountClient` trait using many instances of
+/// some `AuthorityClient` implementation for communication.
+pub struct AccountClientState<AuthorityClient> {
+    /// The offchain account id.
+    account_id: AccountId,
+    /// The current signature key, if we own this account.
+    key_pair: Option<KeyPair>,
+    /// The FastPay committee.
+    committee: Committee,
+    /// How to talk to this committee.
+    authority_clients: HashMap<AuthorityName, AuthorityClient>,
+    /// Expected sequence number for the next certified request.
+    /// This is also the number of request certificates that we have created.
+    next_sequence_number: SequenceNumber,
+    /// Pending request.
+    pending_request: Option<RequestOrder>,
+    /// Known key pairs (past and future).
+    known_key_pairs: BTreeMap<AccountOwner, KeyPair>,
+
+    // The remaining fields are used to minimize networking, and may not always be persisted locally.
+    /// Request certificates that we have created ("sent").
+    /// Normally, `sent_certificates` should contain one certificate for each index in `0..next_sequence_number`.
+    sent_certificates: Vec<Certificate>,
+    /// Known received certificates, indexed by account_id and sequence number.
+    /// TODO: API to search and download yet unknown `received_certificates`.
+    received_certificates: BTreeMap<(AccountId, SequenceNumber), Certificate>,
+    /// The known spendable balance (including a possible initial funding, excluding unknown sent
+    /// or received certificates).
+    balance: Balance,
 }
 
 impl<A> AccountClientState<A> {
