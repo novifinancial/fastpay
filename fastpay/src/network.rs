@@ -285,7 +285,7 @@ impl Client {
         time::timeout(self.recv_timeout, stream.read_data()).await?
     }
 
-    pub async fn send_recv_bytes(
+    pub async fn send_recv_info_bytes(
         &mut self,
         shard: ShardId,
         buf: Vec<u8>,
@@ -305,6 +305,27 @@ impl Client {
             }
         }
     }
+
+    pub async fn send_recv_votes_bytes(
+        &mut self,
+        shard: ShardId,
+        buf: Vec<u8>,
+    ) -> Result<Vec<Vote>, FastPayError> {
+        match self.send_recv_bytes_internal(shard, buf).await {
+            Err(error) => Err(FastPayError::ClientIoError {
+                error: format!("{}", error),
+            }),
+            Ok(response) => {
+                // Parse reply
+                match deserialize_message(&response[..]) {
+                    Ok(SerializedMessage::Votes(votes)) => Ok(votes.to_vec()),
+                    Ok(SerializedMessage::Error(error)) => Err(*error),
+                    Err(_) => Err(FastPayError::InvalidDecoding),
+                    _ => Err(FastPayError::UnexpectedMessage),
+                }
+            }
+        }
+    }
 }
 
 impl AuthorityClient for Client {
@@ -315,7 +336,7 @@ impl AuthorityClient for Client {
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         Box::pin(async move {
             let shard = AuthorityState::get_shard(self.num_shards, &order.value.request.account_id);
-            self.send_recv_bytes(shard, serialize_request_order(&order))
+            self.send_recv_info_bytes(shard, serialize_request_order(&order))
                 .await
         })
     }
@@ -334,7 +355,27 @@ impl AuthorityClient for Client {
                     .confirm_account_id()
                     .ok_or(FastPayError::InvalidConfirmationOrder)?,
             );
-            self.send_recv_bytes(shard, serialize_confirmation_order(&order))
+            self.send_recv_info_bytes(shard, serialize_confirmation_order(&order))
+                .await
+        })
+    }
+
+    /// Creation a coin.
+    fn handle_coin_creation_order(
+        &mut self,
+        order: CoinCreationOrder,
+    ) -> AsyncResult<Vec<Vote>, FastPayError> {
+        Box::pin(async move {
+            let shard = AuthorityState::get_shard(
+                self.num_shards,
+                &order
+                    .contract
+                    .targets
+                    .first()
+                    .ok_or(FastPayError::InvalidCoinCreationOrder)?
+                    .account_id,
+            ); // TODO: this is arbitrary
+            self.send_recv_votes_bytes(shard, serialize_coin_creation_order(&order))
                 .await
         })
     }
@@ -346,7 +387,7 @@ impl AuthorityClient for Client {
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         Box::pin(async move {
             let shard = AuthorityState::get_shard(self.num_shards, &request.account_id);
-            self.send_recv_bytes(shard, serialize_info_query(&request))
+            self.send_recv_info_bytes(shard, serialize_info_query(&request))
                 .await
         })
     }

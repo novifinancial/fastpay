@@ -27,8 +27,8 @@ pub enum FastPayError {
     // Signature verification
     #[fail(display = "Request was not signed by an authorized owner")]
     InvalidOwner,
-    #[fail(display = "Signature is not valid: {}", error)]
-    InvalidSignature { error: String },
+    #[fail(display = "Signature for object {} is not valid: {}", type_name, error)]
+    InvalidSignature { error: String, type_name: String },
     #[fail(display = "Value was not signed by a known authority")]
     UnknownSigner,
     // Certificate verification
@@ -37,8 +37,6 @@ pub enum FastPayError {
     // Transfer processing
     #[fail(display = "Transfers must have positive amount")]
     IncorrectTransferAmount,
-    #[fail(display = "Account is still pending confirmation of creation")]
-    AccountIsNotReady,
     #[fail(
         display = "The given sequence number must match the next expected sequence number of the account"
     )]
@@ -74,8 +72,8 @@ pub enum FastPayError {
     // Account access
     #[fail(display = "No certificate for this account and sequence number")]
     CertificateNotfound,
-    #[fail(display = "Unknown sender's account {:?}", 0)]
-    UnknownSenderAccount(AccountId),
+    #[fail(display = "The account being queried is not active {:?}", 0)]
+    InactiveAccount(AccountId),
     #[fail(display = "Signatures in a certificate must be from different authorities.")]
     CertificateAuthorityReuse,
     #[fail(display = "Sequence numbers above the maximal value are not usable for requests.")]
