@@ -409,6 +409,8 @@ impl From<SequenceNumber> for usize {
 /// Something that we know how to hash and sign.
 pub trait Signable<Hasher> {
     fn write(&self, hasher: &mut Hasher);
+
+    fn type_name() -> &'static str;
 }
 
 /// Activate the blanket implementation of `Signable` based on serde and BCS.
@@ -422,10 +424,14 @@ where
     Hasher: std::io::Write,
 {
     fn write(&self, hasher: &mut Hasher) {
-        let name = serde_name::trace_name::<Self>().expect("Self must be a struct or an enum");
+        let name = <Self as Signable<Hasher>>::type_name();
         // Note: This assumes that names never contain the separator `::`.
         write!(hasher, "{}::", name).expect("Hasher should not fail");
         bcs::serialize_into(hasher, &self).expect("Message serialization should not fail");
+    }
+
+    fn type_name() -> &'static str {
+        serde_name::trace_name::<Self>().expect("Self must be a struct or an enum")
     }
 }
 
@@ -469,11 +475,12 @@ impl Signature {
 
     pub fn check<T>(&self, value: &T, author: PublicKeyBytes) -> Result<(), FastPayError>
     where
-        T: Signable<Vec<u8>>,
+        T: Signable<Vec<u8>> + std::fmt::Debug,
     {
         self.check_internal(value, author)
             .map_err(|error| FastPayError::InvalidSignature {
-                error: format!("{}", error),
+                error: error.to_string(),
+                type_name: T::type_name().to_string(),
             })
     }
 
@@ -502,7 +509,8 @@ impl Signature {
     {
         Signature::verify_batch_internal(value, votes).map_err(|error| {
             FastPayError::InvalidSignature {
-                error: format!("{}", error),
+                error: format!("batched {}", error),
+                type_name: T::type_name().to_string(),
             }
         })
     }

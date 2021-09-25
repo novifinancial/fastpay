@@ -117,8 +117,12 @@ impl Authority for AuthorityState {
         }
         let account_id = order.value.request.account_id.clone();
         match self.accounts.get_mut(&account_id) {
-            None => fp_bail!(FastPayError::UnknownSenderAccount(account_id)),
+            None => fp_bail!(FastPayError::InactiveAccount(account_id)),
             Some(account) => {
+                fp_ensure!(
+                    account.owner.is_some(),
+                    FastPayError::InactiveAccount(account_id)
+                );
                 // Check authentication of the request.
                 order.check(&account.owner)?;
                 let request = order.value.request;
@@ -168,10 +172,10 @@ impl Authority for AuthorityState {
         let mut sender_account = self
             .accounts
             .get_mut(&sender)
-            .ok_or_else(|| FastPayError::UnknownSenderAccount(sender.clone()))?;
+            .ok_or_else(|| FastPayError::InactiveAccount(sender.clone()))?;
         fp_ensure!(
             sender_account.owner.is_some(),
-            FastPayError::AccountIsNotReady
+            FastPayError::InactiveAccount(sender.clone())
         );
         if sender_account.next_sequence_number < request.sequence_number {
             fp_bail!(FastPayError::MissingEarlierConfirmations {
@@ -192,7 +196,9 @@ impl Authority for AuthorityState {
         // Final touch on the sender's account.
         let info = sender_account.make_account_info(sender.clone());
         if sender_account.owner.is_none() {
-            // Remove inactive account.
+            // Tentatively remove inactive account. (It might be created again as a
+            // recipient, though. To solve this, regular cleanups should be scheduled in
+            // background.)
             self.accounts.remove(&sender);
         }
 
@@ -431,9 +437,15 @@ impl AuthorityState {
     }
 
     fn account_state(&self, account_id: &AccountId) -> Result<&AccountState, FastPayError> {
-        self.accounts
+        let account = self
+            .accounts
             .get(account_id)
-            .ok_or_else(|| FastPayError::UnknownSenderAccount(account_id.clone()))
+            .ok_or_else(|| FastPayError::InactiveAccount(account_id.clone()))?;
+        fp_ensure!(
+            account.owner.is_some(),
+            FastPayError::InactiveAccount(account_id.clone())
+        );
+        Ok(account)
     }
 
     #[cfg(test)]

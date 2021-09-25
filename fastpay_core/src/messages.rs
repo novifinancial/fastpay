@@ -206,9 +206,31 @@ impl Operation {
             | ChangeOwner { .. } => None,
         }
     }
+
+    pub fn received_amount(&self) -> Option<Amount> {
+        use Operation::*;
+        match self {
+            Transfer { amount, .. } | Operation::SpendAndTransfer { amount, .. } => Some(*amount),
+            _ => None,
+        }
+    }
 }
 
 impl Value {
+    pub fn coin_amount(&self) -> Option<Amount> {
+        match self {
+            Value::Coin(coin) => Some(coin.amount),
+            _ => None,
+        }
+    }
+
+    pub fn coin_account_id(&self) -> Option<&AccountId> {
+        match self {
+            Value::Coin(coin) => Some(&coin.account_id),
+            _ => None,
+        }
+    }
+
     pub fn confirm_account_id(&self) -> Option<&AccountId> {
         match self {
             Value::Confirm(r) => Some(&r.account_id),

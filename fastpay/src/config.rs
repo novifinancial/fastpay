@@ -92,6 +92,7 @@ pub struct UserAccount {
     pub key_pair: KeyPair,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
+    pub coins: Vec<Certificate>,
     pub sent_certificates: Vec<Certificate>,
     pub received_certificates: Vec<Certificate>,
 }
@@ -104,6 +105,7 @@ impl UserAccount {
             key_pair,
             next_sequence_number: SequenceNumber::new(),
             balance,
+            coins: Vec::new(),
             sent_certificates: Vec::new(),
             received_certificates: Vec::new(),
         }

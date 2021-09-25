@@ -82,6 +82,7 @@ fn make_account_client_state(
         committee,
         authority_clients,
         account.next_sequence_number,
+        account.coins.clone(),
         account.sent_certificates.clone(),
         account.received_certificates.clone(),
         account.balance,
