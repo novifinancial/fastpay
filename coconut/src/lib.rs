@@ -1,3 +1,4 @@
+#[macro_use]
 mod error;
 pub mod issue;
 pub mod lagrange;

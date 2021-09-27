@@ -104,6 +104,11 @@ impl PublicKey {
             gammas: secret.ys.iter().map(|y| parameters.g1 * y).collect(),
         }
     }
+
+    /// Return the maximum number of attributes that can be embedded into a credential.
+    pub fn max_attributes(&self) -> usize {
+        self.betas.len()
+    }
 }
 
 /// Convenience structure representing the keypair of an authority.
