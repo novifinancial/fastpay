@@ -129,6 +129,7 @@ impl CoinsRequest {
         }
     }
 
+    /// Verifies the coin request.
     pub fn verify(&self, parameters: &Parameters, public_key: &PublicKey) -> CoconutResult<()> {
         // Verify the ZK proof.
         self.proof.verify(
