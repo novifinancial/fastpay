@@ -198,13 +198,22 @@ fn test_get_strong_majority_balance() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         let mut client = init_local_client_state(vec![3, 4, 4, 4]);
-        assert_eq!(client.get_strong_majority_balance().await, Balance::from(4));
+        assert_eq!(
+            client.query_strong_majority_balance().await,
+            Balance::from(4)
+        );
 
         let mut client = init_local_client_state(vec![0, 3, 4, 4]);
-        assert_eq!(client.get_strong_majority_balance().await, Balance::from(3));
+        assert_eq!(
+            client.query_strong_majority_balance().await,
+            Balance::from(3)
+        );
 
         let mut client = init_local_client_state(vec![0, 3, 4]);
-        assert_eq!(client.get_strong_majority_balance().await, Balance::from(0));
+        assert_eq!(
+            client.query_strong_majority_balance().await,
+            Balance::from(0)
+        );
     });
 }
 
@@ -223,7 +232,7 @@ fn test_initiating_valid_transfer() {
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
     assert!(matches!(sender.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(sender.get_strong_majority_balance()),
+        rt.block_on(sender.query_strong_majority_balance()),
         Balance::from(1)
     );
     assert_eq!(
@@ -250,12 +259,12 @@ fn test_rotate_key_pair() {
         certificate
     );
     assert_eq!(
-        rt.block_on(sender.get_strong_majority_balance()),
+        rt.block_on(sender.query_strong_majority_balance()),
         Balance::from(4)
     );
     assert_eq!(
-        rt.block_on(sender.get_spendable_amount()).unwrap(),
-        Amount::from(4)
+        rt.block_on(sender.query_safe_balance()).unwrap(),
+        Balance::from(4)
     );
     // Can still use the account.
     rt.block_on(sender.transfer_to_fastpay(Amount::from(3), dbg_account(2), UserData::default()))
@@ -279,12 +288,12 @@ fn test_transfer_ownership() {
         certificate
     );
     assert_eq!(
-        rt.block_on(sender.get_strong_majority_balance()),
+        rt.block_on(sender.query_strong_majority_balance()),
         Balance::from(4)
     );
     assert_eq!(
-        rt.block_on(sender.get_spendable_amount()).unwrap(),
-        Amount::from(4)
+        rt.block_on(sender.query_safe_balance()).unwrap(),
+        Balance::from(4)
     );
     // Cannot use the account any more.
     assert!(rt
@@ -396,9 +405,7 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
         vec![0; 4],
     );
     // spend account #1 and create coins
-    let certificates = rt
-        .block_on(client1.spend_and_create_coins(coins.clone()))?
-        .clone();
+    let certificates = rt.block_on(client1.spend_and_create_coins(coins.clone()))?;
     assert!(client1.lock_certificate.is_some());
     assert_eq!(certificates.len(), coins.len());
     // receive coins on account #2
@@ -408,16 +415,14 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
     }
     assert_eq!(client2.coins.len(), coins.len());
     assert_eq!(
-        rt.block_on(client2.get_spendable_amount()).unwrap(),
-        Amount::from(0)
+        rt.block_on(client2.query_safe_balance()).unwrap(),
+        Balance::from(0)
     );
-    assert_eq!(client2.get_coin_value().unwrap(), Amount::from(3));
+    assert_eq!(client2.get_coins_value().unwrap(), Amount::from(3));
     // transfer coins back to account #3
-    let certificate = rt
-        .block_on(
-            client2.spend_and_transfer(Address::FastPay(dbg_account(3)), UserData::default()),
-        )?
-        .clone();
+    let certificate = rt.block_on(
+        client2.spend_and_transfer(Address::FastPay(dbg_account(3)), UserData::default()),
+    )?;
     assert!(matches!(&certificate.value, Value::Confirm(
         Request {
             operation: Operation::SpendAndTransfer { recipient: Address::FastPay(id), amount, .. },
@@ -425,13 +430,13 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
         }) if id == &dbg_account(3) && *amount == Amount::from(3)
     ));
     assert_eq!(
-        rt.block_on(client3.get_strong_majority_balance()),
+        rt.block_on(client3.query_strong_majority_balance()),
         Balance::from(3)
     );
     rt.block_on(client3.receive_from_fastpay(certificate))?;
     assert_eq!(
-        rt.block_on(client3.get_spendable_amount()).unwrap(),
-        Amount::from(3)
+        rt.block_on(client3.query_safe_balance()).unwrap(),
+        Balance::from(3)
     );
     Ok(())
 }
@@ -477,12 +482,12 @@ fn test_open_account() {
         Balance::from(3),
     );
     assert_eq!(
-        rt.block_on(client.get_strong_majority_balance()),
+        rt.block_on(client.query_strong_majority_balance()),
         Balance::from(3)
     );
     assert_eq!(
-        rt.block_on(client.get_spendable_amount()).unwrap(),
-        Amount::from(3)
+        rt.block_on(client.query_safe_balance()).unwrap(),
+        Balance::from(3)
     );
     assert!(rt
         .block_on(client.transfer_to_fastpay(Amount::from(3), dbg_account(3), UserData::default()))
@@ -530,7 +535,7 @@ fn test_initiating_valid_transfer_despite_bad_authority() {
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
     assert!(matches!(sender.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(sender.get_strong_majority_balance()),
+        rt.block_on(sender.query_strong_majority_balance()),
         Balance::from(1)
     );
     assert_eq!(
@@ -552,7 +557,7 @@ fn test_initiating_transfer_low_funds() {
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(0));
     assert!(matches!(sender.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(sender.get_strong_majority_balance()),
+        rt.block_on(sender.query_strong_majority_balance()),
         Balance::from(2)
     );
 }
@@ -576,7 +581,7 @@ fn test_bidirectional_transfer() {
         vec![0; 4],
     );
     // Update client1's local balance accordingly.
-    client1.balance = rt.block_on(client1.get_strong_majority_balance());
+    client1.balance = rt.block_on(client1.query_strong_majority_balance());
     assert_eq!(client1.balance, Balance::from(3));
 
     let certificate = rt
@@ -590,7 +595,7 @@ fn test_bidirectional_transfer() {
     assert_eq!(client1.next_sequence_number, SequenceNumber::from(1));
     assert!(matches!(client1.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_balance()),
+        rt.block_on(client1.query_strong_majority_balance()),
         Balance::from(0)
     );
     assert_eq!(client1.balance, Balance::from(0));
@@ -606,7 +611,7 @@ fn test_bidirectional_transfer() {
     );
     // Our sender already confirmed.
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(3)
     );
     assert_eq!(client2.balance, Balance::from(0));
@@ -614,7 +619,7 @@ fn test_bidirectional_transfer() {
     rt.block_on(client2.receive_from_fastpay(certificate))
         .unwrap();
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(3)
     );
     assert_eq!(client2.balance, Balance::from(3));
@@ -630,7 +635,7 @@ fn test_bidirectional_transfer() {
     assert_eq!(client2.next_sequence_number, SequenceNumber::from(1));
     assert!(matches!(client2.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(2)
     );
     assert_eq!(
@@ -638,7 +643,7 @@ fn test_bidirectional_transfer() {
         SequenceNumber::from(1)
     );
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_balance()),
+        rt.block_on(client1.query_strong_majority_balance()),
         Balance::from(1)
     );
 }
@@ -675,7 +680,7 @@ fn test_receiving_unconfirmed_transfer() {
     assert!(matches!(client1.pending_request, PendingRequest::None));
     // ..but not confirmed remotely, hence an unchanged balance and sequence number.
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_balance()),
+        rt.block_on(client1.query_strong_majority_balance()),
         Balance::from(3)
     );
     assert_eq!(
@@ -686,7 +691,7 @@ fn test_receiving_unconfirmed_transfer() {
     rt.block_on(client2.receive_from_fastpay(certificate))
         .unwrap();
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(2)
     );
 }
@@ -762,7 +767,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
     assert!(matches!(client1.pending_request, PendingRequest::None));
     // Last one was not confirmed remotely, hence an unchanged (remote) balance and sequence number.
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_balance()),
+        rt.block_on(client1.query_strong_majority_balance()),
         Balance::from(2)
     );
     assert_eq!(
@@ -773,7 +778,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
     rt.block_on(client2.receive_from_fastpay(certificate))
         .unwrap();
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(2)
     );
 }
