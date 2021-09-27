@@ -120,12 +120,18 @@ pub trait AccountClient {
         user_data: UserData,
     ) -> AsyncResult<Certificate, failure::Error>;
 
-    /// Find how much money we can spend (from the public balance).
-    /// TODO: Currently, this value only reflects received transfers that were
-    /// locally processed by `receive_from_fastpay`.
-    fn get_spendable_amount(&mut self) -> AsyncResult<Amount, failure::Error>;
+    /// Compute a safe (i.e. pessimistic) balance by synchronizing our "sent" certificates
+    /// with authorities, and otherwise using local data on received transfers (i.e.
+    /// certificates that were locally processed by `receive_from_fastpay`).
+    /// TODO: automatically synchronize received transfers as well.
+    fn query_safe_balance(&mut self) -> AsyncResult<Balance, failure::Error>;
 
-    fn get_coin_value(&self) -> Result<Amount, failure::Error>;
+    /// Return the value of the known coins attached to this account.
+    fn get_coins_value(&self) -> Result<Amount, failure::Error>;
+
+    /// Find the highest balance that is backed by a quorum of authorities.
+    /// NOTE: This is only safe in the synchronous model, assuming a sufficient timeout value.
+    fn query_strong_majority_balance(&mut self) -> future::BoxFuture<Balance>;
 }
 
 #[derive(Debug, Clone)]
@@ -335,33 +341,6 @@ where
                 async move {
                     match fut.await {
                         Ok(info) => Some((*name, info.next_sequence_number)),
-                        _ => None,
-                    }
-                }
-            })
-            .collect();
-        self.committee.get_strong_majority_lower_bound(
-            numbers.filter_map(|x| async move { x }).collect().await,
-        )
-    }
-
-    /// Find the highest balance that is backed by a quorum of authorities.
-    /// NOTE: This is only reliable in the synchronous model, with a sufficient timeout value.
-    #[cfg(test)]
-    async fn get_strong_majority_balance(&mut self) -> Balance {
-        let query = AccountInfoQuery {
-            account_id: self.account_id.clone(),
-            query_sequence_number: None,
-            query_received_requests_excluding_first_nth: None,
-        };
-        let numbers: futures::stream::FuturesUnordered<_> = self
-            .authority_clients
-            .iter_mut()
-            .map(|(name, client)| {
-                let fut = client.handle_account_info_query(query.clone());
-                async move {
-                    match fut.await {
-                        Ok(info) => Some((*name, info.balance)),
                         _ => None,
                     }
                 }
@@ -597,12 +576,12 @@ where
     ) -> Result<Certificate, failure::Error> {
         // Trying to overspend may block the account. To prevent this, we compare with
         // the balance as we know it.
-        let safe_amount = self.get_spendable_amount().await?;
+        let safe_balance = self.query_safe_balance().await?;
         ensure!(
-            amount <= safe_amount,
-            "Requested amount ({:?}) is not backed by sufficient funds ({:?})",
+            Balance::from(amount) <= safe_balance,
+            "Requested amount ({}) is not backed by sufficient funds ({})",
             amount,
-            safe_amount
+            safe_balance
         );
         let request = Request {
             account_id: self.account_id.clone(),
@@ -850,6 +829,32 @@ impl<A> AccountClient for AccountClientState<A>
 where
     A: AuthorityClient + Send + Sync + Clone + 'static,
 {
+    fn query_strong_majority_balance(&mut self) -> future::BoxFuture<Balance> {
+        Box::pin(async move {
+            let query = AccountInfoQuery {
+                account_id: self.account_id.clone(),
+                query_sequence_number: None,
+                query_received_requests_excluding_first_nth: None,
+            };
+            let numbers: futures::stream::FuturesUnordered<_> = self
+                .authority_clients
+                .iter_mut()
+                .map(|(name, client)| {
+                    let fut = client.handle_account_info_query(query.clone());
+                    async move {
+                        match fut.await {
+                            Ok(info) => Some((*name, info.balance)),
+                            _ => None,
+                        }
+                    }
+                })
+                .collect();
+            self.committee.get_strong_majority_lower_bound(
+                numbers.filter_map(|x| async move { x }).collect().await,
+            )
+        })
+    }
+
     fn transfer_to_fastpay(
         &mut self,
         amount: Amount,
@@ -868,7 +873,7 @@ where
         Box::pin(self.transfer(amount, Address::Primary(recipient), user_data))
     }
 
-    fn get_spendable_amount(&mut self) -> AsyncResult<Amount, failure::Error> {
+    fn query_safe_balance(&mut self) -> AsyncResult<Balance, failure::Error> {
         Box::pin(async move {
             match self.pending_request.clone() {
                 PendingRequest::Confirming(order) => {
@@ -887,12 +892,7 @@ where
                 let new_sent_certificates = self.download_sent_certificates().await?;
                 self.update_sent_certificates(new_sent_certificates)?;
             }
-            let amount = if self.balance < Balance::zero() {
-                Amount::zero()
-            } else {
-                Amount::try_from(self.balance).unwrap_or_else(|_| std::u64::MAX.into())
-            };
-            Ok(amount)
+            Ok(self.balance)
         })
     }
 
@@ -1018,12 +1018,12 @@ where
         contract_hash: HashValue,
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
-            let safe_amount = self.get_spendable_amount().await?;
+            let safe_balance = self.query_safe_balance().await?;
             ensure!(
-                account_balance == safe_amount,
-                "Suggested balance ({:?}) does not match available funds ({:?})",
+                Balance::from(account_balance) <= safe_balance,
+                "Suggested balance ({}) does not match available funds ({})",
                 account_balance,
-                safe_amount
+                safe_balance
             );
             if self.lock_certificate.is_none() {
                 let request = Request {
@@ -1060,15 +1060,9 @@ where
         new_coins: Vec<Coin>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error> {
         Box::pin(async move {
-            let account_balance = self.get_spendable_amount().await?;
-            let mut amount = account_balance;
-            for coin in &self.coins {
-                let v = coin
-                    .value
-                    .coin_amount()
-                    .ok_or_else(|| failure::format_err!("Client state contains invalid coins"))?;
-                amount = amount.try_add(v)?;
-            }
+            let account_balance = self.query_safe_balance().await?;
+            let mut amount =
+                Amount::try_from(account_balance.try_add(self.get_coins_value()?.into())?)?;
             let mut seeds = BTreeSet::new();
             for coin in &new_coins {
                 ensure!(!seeds.contains(&coin.seed), "Coin seeds must be unique");
@@ -1077,6 +1071,7 @@ where
                     .try_sub(coin.amount)
                     .map_err(|_| failure::format_err!("Insufficient balance to create coins"))?;
             }
+            let account_balance = Amount::try_from(account_balance)?;
             let source = CoinCreationSource {
                 account_id: self.account_id.clone(),
                 account_balance,
@@ -1092,7 +1087,7 @@ where
         })
     }
 
-    fn get_coin_value(&self) -> Result<Amount, failure::Error> {
+    fn get_coins_value(&self) -> Result<Amount, failure::Error> {
         let mut amount = Amount::from(0);
         for coin in &self.coins {
             let v = coin
@@ -1111,8 +1106,8 @@ where
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
             let amount = {
-                let balance = self.get_spendable_amount().await?;
-                balance.try_add(self.get_coin_value()?)?
+                let balance = self.query_safe_balance().await?;
+                Amount::try_from(balance.try_add(self.get_coins_value()?.into())?)?
             };
             let request = Request {
                 account_id: self.account_id.clone(),

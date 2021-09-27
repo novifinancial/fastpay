@@ -311,7 +311,7 @@ struct ClientOpt {
     #[structopt(long, default_value = transport::DEFAULT_MAX_DATAGRAM_SIZE)]
     buffer_size: usize,
 
-    /// Subcommands. Acceptable values are transfer, query_balance, benchmark, and create_accounts.
+    /// Subcommands.
     #[structopt(subcommand)]
     cmd: ClientCommands,
 }
@@ -333,7 +333,16 @@ enum ClientCommands {
         amount: u64,
     },
 
-    /// Obtain the spendable balance
+    /// Obtain the balance of the account directly from a quorum of authorities. WARNING:
+    /// the result may be over/under-estimated if the network timeout is too short and some
+    /// authorities are malicious.
+    #[structopt(name = "query_raw_balance")]
+    QueryRawBalance {
+        /// Account id
+        account_id: AccountId,
+    },
+
+    /// Obtain a safe balance value guaranteed by the client.
     #[structopt(name = "query_balance")]
     QueryBalance {
         /// Account id
@@ -432,6 +441,31 @@ fn main() {
             });
         }
 
+        ClientCommands::QueryRawBalance { account_id } => {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(async move {
+                let mut client_state = make_account_client_state(
+                    &accounts_config,
+                    &committee_config,
+                    account_id,
+                    buffer_size,
+                    send_timeout,
+                    recv_timeout,
+                );
+                info!("Starting query for raw balance");
+                let time_start = Instant::now();
+                let balance = client_state.query_strong_majority_balance().await;
+                let time_total = time_start.elapsed().as_micros();
+                info!("Raw balance confirmed after {} us", time_total);
+                println!("{}", balance);
+                accounts_config.update_from_state(&client_state);
+                accounts_config
+                    .write(accounts_config_path)
+                    .expect("Unable to write user accounts");
+                info!("Saved client account state");
+            });
+        }
+
         ClientCommands::QueryBalance { account_id } => {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
@@ -443,12 +477,12 @@ fn main() {
                     send_timeout,
                     recv_timeout,
                 );
-                info!("Starting balance query");
+                info!("Query safe balance using client information");
                 let time_start = Instant::now();
-                let amount = client_state.get_spendable_amount().await.unwrap();
+                let balance = client_state.query_safe_balance().await.unwrap();
                 let time_total = time_start.elapsed().as_micros();
-                info!("Balance confirmed after {} us", time_total);
-                println!("{:?}", amount);
+                info!("Safe balance obtained after {} us", time_total);
+                println!("{}", balance);
                 accounts_config.update_from_state(&client_state);
                 accounts_config
                     .write(accounts_config_path)
