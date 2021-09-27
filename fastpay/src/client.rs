@@ -330,7 +330,7 @@ enum ClientCommands {
         recipient: AccountId,
 
         /// Amount to transfer
-        amount: u64,
+        amount: Amount,
     },
 
     /// Obtain the balance of the account directly from a quorum of authorities. WARNING:
@@ -365,10 +365,10 @@ enum ClientCommands {
         server_configs: Option<Vec<String>>,
     },
 
-    /// Create new user accounts and print the public keys
-    #[structopt(name = "create_accounts")]
-    CreateAccounts {
-        /// known initial balance of the account
+    /// Create initial user accounts and print information to be used for initialization of authority setup.
+    #[structopt(name = "create_initial_accounts")]
+    CreateInitialAccounts {
+        /// Known initial balance of the account
         #[structopt(long, default_value = "0")]
         initial_funding: Balance,
 
@@ -398,8 +398,6 @@ fn main() {
             recipient,
             amount,
         } => {
-            let amount = Amount::from(amount);
-
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
                 let mut client_state = make_account_client_state(
@@ -566,7 +564,7 @@ fn main() {
             });
         }
 
-        ClientCommands::CreateAccounts {
+        ClientCommands::CreateInitialAccounts {
             initial_funding,
             num,
         } => {
