@@ -727,6 +727,17 @@ where
                 || matches!(&self.pending_request, PendingRequest::Locking(o) if o.value.request == order.value.request),
             "Client state has a different pending request",
         );
+        match &self.lock_certificate {
+            None => (),
+            Some(certificate) => {
+                ensure!(
+                    matches!(&certificate.value, Value::Lock(r) if &order.value.request == r),
+                    "Account has already been locked for a different operation."
+                );
+                return Ok(certificate.clone());
+            }
+        }
+
         ensure!(
             order.value.request.sequence_number == self.next_sequence_number,
             "Unexpected sequence number"
@@ -741,6 +752,8 @@ where
             .await?;
         let certificate = new_sent_certificates.pop().unwrap();
         assert_eq!(certificate.value, Value::Lock(order.value.request));
+        // Store the precious locking certificate for future uses.
+        self.lock_certificate = Some(certificate.clone());
         // Clear `pending_request` and update `sent_certificates`,
         // `balance`, and `next_sequence_number`. (Note that if we were using persistent
         // storage, we should ensure update atomicity in the eventuality of a crash.)
@@ -1025,20 +1038,16 @@ where
                 account_balance,
                 safe_balance
             );
-            if self.lock_certificate.is_none() {
-                let request = Request {
-                    account_id: self.account_id.clone(),
-                    operation: Operation::Spend {
-                        account_balance,
-                        contract_hash,
-                    },
-                    sequence_number: self.next_sequence_number,
-                };
-                let order = self.make_request_order_with_assets(request, self.coins.clone())?;
-                let certificate = self.execute_locking_request(order).await?;
-                self.lock_certificate = Some(certificate);
-            } // TODO: otherwise verify consistency.
-            Ok(self.lock_certificate.as_ref().unwrap().clone())
+            let request = Request {
+                account_id: self.account_id.clone(),
+                operation: Operation::Spend {
+                    account_balance,
+                    contract_hash,
+                },
+                sequence_number: self.next_sequence_number,
+            };
+            let order = self.make_request_order_with_assets(request, self.coins.clone())?;
+            self.execute_locking_request(order).await
         })
     }
 
