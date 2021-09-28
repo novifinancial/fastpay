@@ -110,6 +110,24 @@ impl UserAccount {
             received_certificates: Vec::new(),
         }
     }
+
+    pub fn derived_from(certificate: &Certificate, key_pair: KeyPair) -> Option<Self> {
+        let account = Self {
+            account_id: certificate
+                .value
+                .confirm_request()?
+                .operation
+                .recipient()?
+                .clone(),
+            key_pair,
+            next_sequence_number: SequenceNumber::new(),
+            balance: Balance::default(),
+            coins: Vec::new(),
+            sent_certificates: Vec::new(),
+            received_certificates: Vec::new(),
+        };
+        Some(account)
+    }
 }
 
 pub struct AccountsConfig {

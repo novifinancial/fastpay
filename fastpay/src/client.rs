@@ -333,6 +333,18 @@ enum ClientCommands {
         amount: Amount,
     },
 
+    /// Open a new account deriving the UID from an existing one.
+    #[structopt(name = "open_account")]
+    OpenAccount {
+        /// Sending account id (must be one of our accounts)
+        #[structopt(long = "from")]
+        sender: AccountId,
+
+        /// Public key of the new owner (otherwise create one)
+        #[structopt(long = "to")]
+        owner: Option<AccountOwner>,
+    },
+
     /// Obtain the balance of the account directly from a quorum of authorities. WARNING:
     /// the result may be over/under-estimated if the network timeout is too short and some
     /// authorities are malicious.
@@ -432,6 +444,59 @@ fn main() {
                     .await
                     .unwrap();
                 accounts_config.update_from_state(&recipient_client_state);
+                accounts_config
+                    .write(accounts_config_path)
+                    .expect("Unable to write user accounts");
+                info!("Saved user account states");
+            });
+        }
+
+        ClientCommands::OpenAccount { sender, owner } => {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(async move {
+                let mut client_state = make_account_client_state(
+                    &accounts_config,
+                    &committee_config,
+                    sender,
+                    buffer_size,
+                    send_timeout,
+                    recv_timeout,
+                );
+                let (new_owner, key_pair) = match owner {
+                    Some(key) => (key, None),
+                    None => {
+                        let key_pair = get_key_pair();
+                        (key_pair.public(), Some(key_pair))
+                    }
+                };
+                info!("Starting account derivation");
+                let time_start = Instant::now();
+                let cert = client_state.open_account(new_owner).await.unwrap();
+                let time_total = time_start.elapsed().as_micros();
+                info!("Operation confirmed after {} us", time_total);
+                println!("{:?}", cert);
+                accounts_config.update_from_state(&client_state);
+
+                if let Some(key_pair) = key_pair {
+                    info!("Updating recipient's state");
+                    let new_account = UserAccount::derived_from(&cert, key_pair).unwrap();
+                    let recipient = new_account.account_id.clone();
+                    accounts_config.insert(new_account);
+
+                    let mut recipient_client_state = make_account_client_state(
+                        &accounts_config,
+                        &committee_config,
+                        recipient,
+                        buffer_size,
+                        send_timeout,
+                        recv_timeout,
+                    );
+                    recipient_client_state
+                        .receive_from_fastpay(cert)
+                        .await
+                        .unwrap();
+                    accounts_config.update_from_state(&recipient_client_state);
+                }
                 accounts_config
                     .write(accounts_config_path)
                     .expect("Unable to write user accounts");
