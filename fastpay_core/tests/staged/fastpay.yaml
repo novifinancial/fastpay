@@ -61,9 +61,9 @@ Coin:
         TYPENAME: AccountId
     - amount:
         TYPENAME: Amount
+    - seed: U128
 CoinCreationContract:
   STRUCT:
-    - seed: U128
     - sources:
         SEQ:
           TYPENAME: CoinCreationSource
@@ -86,6 +86,10 @@ CoinCreationSource:
     - coins:
         SEQ:
           TYPENAME: Certificate
+ConfirmationOrder:
+  STRUCT:
+    - certificate:
+        TYPENAME: Certificate
 CrossShardRequest:
   ENUM:
     0:
@@ -106,6 +110,7 @@ FastPayError:
       InvalidSignature:
         STRUCT:
           - error: STR
+          - type_name: STR
     2:
       UnknownSigner: UNIT
     3:
@@ -113,73 +118,71 @@ FastPayError:
     4:
       IncorrectTransferAmount: UNIT
     5:
-      AccountIsNotReady: UNIT
-    6:
       UnexpectedSequenceNumber: UNIT
-    7:
+    6:
       InsufficientFunding:
         STRUCT:
           - current_balance:
               TYPENAME: Balance
-    8:
+    7:
       InvalidNewAccountId:
         NEWTYPE:
           TYPENAME: AccountId
-    9:
+    8:
       PreviousRequestMustBeConfirmedFirst:
         STRUCT:
           - pending:
               TYPENAME: Value
-    10:
+    9:
       ErrorWhileProcessingRequestOrder: UNIT
-    11:
+    10:
       ErrorWhileRequestingCertificate: UNIT
-    12:
+    11:
       MissingEarlierConfirmations:
         STRUCT:
           - current_sequence_number:
               TYPENAME: SequenceNumber
-    13:
+    12:
       UnexpectedTransactionIndex: UNIT
-    14:
+    13:
       CertificateNotfound: UNIT
-    15:
+    14:
       InactiveAccount:
         NEWTYPE:
           TYPENAME: AccountId
-    16:
+    15:
       CertificateAuthorityReuse: UNIT
-    17:
+    16:
       InvalidSequenceNumber: UNIT
-    18:
+    17:
       SequenceOverflow: UNIT
-    19:
+    18:
       SequenceUnderflow: UNIT
-    20:
+    19:
       AmountOverflow: UNIT
-    21:
+    20:
       AmountUnderflow: UNIT
-    22:
+    21:
       BalanceOverflow: UNIT
-    23:
+    22:
       BalanceUnderflow: UNIT
-    24:
+    23:
       WrongShard: UNIT
-    25:
+    24:
       InvalidCrossShardRequest: UNIT
-    26:
+    25:
       InvalidDecoding: UNIT
-    27:
+    26:
       UnexpectedMessage: UNIT
-    28:
+    27:
       InvalidRequestOrder: UNIT
-    29:
+    28:
       InvalidConfirmationOrder: UNIT
-    30:
+    29:
       InvalidCoinCreationOrder: UNIT
-    31:
+    30:
       InvalidCoin: UNIT
-    32:
+    31:
       ClientIoError:
         STRUCT:
           - error: STR
@@ -269,34 +272,34 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: RequestOrder
     1:
-      Vote:
+      ConfirmationOrder:
         NEWTYPE:
-          TYPENAME: Vote
+          TYPENAME: ConfirmationOrder
     2:
-      Certificate:
-        NEWTYPE:
-          TYPENAME: Certificate
-    3:
-      Error:
-        NEWTYPE:
-          TYPENAME: FastPayError
-    4:
-      InfoQuery:
-        NEWTYPE:
-          TYPENAME: AccountInfoQuery
-    5:
-      InfoResponse:
-        NEWTYPE:
-          TYPENAME: AccountInfoResponse
-    6:
       CoinCreationOrder:
         NEWTYPE:
           TYPENAME: CoinCreationOrder
-    7:
+    3:
+      InfoQuery:
+        NEWTYPE:
+          TYPENAME: AccountInfoQuery
+    4:
+      Vote:
+        NEWTYPE:
+          TYPENAME: Vote
+    5:
       Votes:
         NEWTYPE:
           SEQ:
             TYPENAME: Vote
+    6:
+      InfoResponse:
+        NEWTYPE:
+          TYPENAME: AccountInfoResponse
+    7:
+      Error:
+        NEWTYPE:
+          TYPENAME: FastPayError
     8:
       CrossShardRequest:
         NEWTYPE:
@@ -334,4 +337,3 @@ Vote:
         TYPENAME: PublicKeyBytes
     - signature:
         TYPENAME: Signature
-

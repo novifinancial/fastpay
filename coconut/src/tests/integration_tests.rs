@@ -1,5 +1,5 @@
 use crate::fixtures::{aggregated_key, keypairs, parameters, request};
-use crate::issue::{BlindedCoins, Coin};
+use crate::issuance::{BlindedCoins, Coin};
 use bls12_381::Scalar;
 
 #[test]
