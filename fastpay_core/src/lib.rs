@@ -6,6 +6,7 @@
 #[macro_use]
 pub mod error;
 
+pub mod account;
 pub mod authority;
 pub mod base_types;
 pub mod client;

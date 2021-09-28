@@ -64,24 +64,25 @@ fn make_authority_mass_clients(
     authority_clients
 }
 
-fn make_client_state(
+fn make_account_client_state(
     accounts: &AccountsConfig,
     committee_config: &CommitteeConfig,
     account_id: AccountId,
     buffer_size: usize,
     send_timeout: std::time::Duration,
     recv_timeout: std::time::Duration,
-) -> ClientState<network::Client> {
+) -> AccountClientState<network::Client> {
     let account = accounts.get(&account_id).expect("Unknown account");
     let committee = Committee::new(committee_config.voting_rights());
     let authority_clients =
         make_authority_clients(committee_config, buffer_size, send_timeout, recv_timeout);
-    ClientState::new(
+    AccountClientState::new(
         account_id,
-        account.key_pair.copy(),
+        Some(account.key_pair.copy()),
         committee,
         authority_clients,
         account.next_sequence_number,
+        account.coins.clone(),
         account.sent_certificates.clone(),
         account.received_certificates.clone(),
         account.balance,
@@ -150,7 +151,8 @@ fn make_benchmark_certificates_from_orders_and_server_configs(
             let sig = Signature::new(&certificate.value, secx);
             certificate.signatures.push((*pubx, sig));
         }
-        let serialized_certificate = serialize_cert(&certificate);
+        let serialized_certificate =
+            serialize_confirmation_order(&ConfirmationOrder { certificate });
         serialized_certificates.push((
             order.value.request.account_id,
             serialized_certificate.into(),
@@ -189,7 +191,7 @@ fn make_benchmark_certificates_from_votes(
         match aggregator.append(vote.authority, vote.signature) {
             Ok(Some(certificate)) => {
                 debug!("Found certificate: {:?}", certificate);
-                let buf = serialize_cert(&certificate);
+                let buf = serialize_confirmation_order(&ConfirmationOrder { certificate });
                 certificates.push((account_id.clone(), buf.into()));
                 done_senders.insert(account_id);
             }
@@ -256,8 +258,8 @@ fn mass_update_recipients(
     certificates: Vec<(AccountId, Bytes)>,
 ) {
     for (_sender, buf) in certificates {
-        if let Ok(SerializedMessage::Certificate(certificate)) = deserialize_message(&buf[..]) {
-            accounts_config.update_for_received_request(*certificate);
+        if let Ok(SerializedMessage::ConfirmationOrder(order)) = deserialize_message(&buf[..]) {
+            accounts_config.update_for_received_request(order.certificate);
         }
     }
 }
@@ -309,7 +311,7 @@ struct ClientOpt {
     #[structopt(long, default_value = transport::DEFAULT_MAX_DATAGRAM_SIZE)]
     buffer_size: usize,
 
-    /// Subcommands. Acceptable values are transfer, query_balance, benchmark, and create_accounts.
+    /// Subcommands.
     #[structopt(subcommand)]
     cmd: ClientCommands,
 }
@@ -331,7 +333,16 @@ enum ClientCommands {
         amount: u64,
     },
 
-    /// Obtain the spendable balance
+    /// Obtain the balance of the account directly from a quorum of authorities. WARNING:
+    /// the result may be over/under-estimated if the network timeout is too short and some
+    /// authorities are malicious.
+    #[structopt(name = "query_raw_balance")]
+    QueryRawBalance {
+        /// Account id
+        account_id: AccountId,
+    },
+
+    /// Obtain a safe balance value guaranteed by the client.
     #[structopt(name = "query_balance")]
     QueryBalance {
         /// Account id
@@ -391,7 +402,7 @@ fn main() {
 
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
-                let mut client_state = make_client_state(
+                let mut client_state = make_account_client_state(
                     &accounts_config,
                     &committee_config,
                     sender,
@@ -410,7 +421,7 @@ fn main() {
                 println!("{:?}", cert);
                 accounts_config.update_from_state(&client_state);
                 info!("Updating recipient's local balance");
-                let mut recipient_client_state = make_client_state(
+                let mut recipient_client_state = make_account_client_state(
                     &accounts_config,
                     &committee_config,
                     recipient,
@@ -430,10 +441,10 @@ fn main() {
             });
         }
 
-        ClientCommands::QueryBalance { account_id } => {
+        ClientCommands::QueryRawBalance { account_id } => {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
-                let mut client_state = make_client_state(
+                let mut client_state = make_account_client_state(
                     &accounts_config,
                     &committee_config,
                     account_id,
@@ -441,12 +452,37 @@ fn main() {
                     send_timeout,
                     recv_timeout,
                 );
-                info!("Starting balance query");
+                info!("Starting query for raw balance");
                 let time_start = Instant::now();
-                let amount = client_state.get_spendable_amount().await.unwrap();
+                let balance = client_state.query_strong_majority_balance().await;
                 let time_total = time_start.elapsed().as_micros();
-                info!("Balance confirmed after {} us", time_total);
-                println!("{:?}", amount);
+                info!("Raw balance confirmed after {} us", time_total);
+                println!("{}", balance);
+                accounts_config.update_from_state(&client_state);
+                accounts_config
+                    .write(accounts_config_path)
+                    .expect("Unable to write user accounts");
+                info!("Saved client account state");
+            });
+        }
+
+        ClientCommands::QueryBalance { account_id } => {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(async move {
+                let mut client_state = make_account_client_state(
+                    &accounts_config,
+                    &committee_config,
+                    account_id,
+                    buffer_size,
+                    send_timeout,
+                    recv_timeout,
+                );
+                info!("Query safe balance using client information");
+                let time_start = Instant::now();
+                let balance = client_state.query_safe_balance().await.unwrap();
+                let time_total = time_start.elapsed().as_micros();
+                info!("Safe balance obtained after {} us", time_total);
+                println!("{}", balance);
                 accounts_config.update_from_state(&client_state);
                 accounts_config
                     .write(accounts_config_path)

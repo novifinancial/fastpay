@@ -4,7 +4,7 @@
 #![deny(warnings)]
 
 use fastpay::{config::*, network, transport};
-use fastpay_core::{authority::*, base_types::*, committee::Committee};
+use fastpay_core::{account::AccountState, authority::*, base_types::*, committee::Committee};
 
 use futures::future::join_all;
 use log::*;
@@ -39,15 +39,7 @@ fn make_shard_server(
         if AuthorityState::get_shard(num_shards, id) != shard {
             continue;
         }
-        let client = AccountState {
-            owner: Some(*owner),
-            balance: *balance,
-            next_sequence_number: SequenceNumber::from(0),
-            pending: None,
-            confirmed_log: Vec::new(),
-            synchronization_log: Vec::new(),
-            received_log: Vec::new(),
-        };
+        let client = AccountState::new(*owner, *balance);
         state.accounts.insert(id.clone(), client);
     }
 

@@ -89,6 +89,7 @@ pub struct RequestOrder {
 pub struct Coin {
     pub account_id: AccountId,
     pub amount: Amount,
+    pub seed: u128,
 }
 
 /// A statement to be certified by the authorities.
@@ -113,8 +114,6 @@ pub struct CoinCreationSource {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CoinCreationContract {
-    /// Diversification seed to ensure that hash(contract) cannot be guessed.
-    pub seed: u128,
     /// The sources to be used for coin creation.
     pub sources: Vec<CoinCreationSource>,
     /// The coins to be created.
@@ -207,9 +206,31 @@ impl Operation {
             | ChangeOwner { .. } => None,
         }
     }
+
+    pub fn received_amount(&self) -> Option<Amount> {
+        use Operation::*;
+        match self {
+            Transfer { amount, .. } | Operation::SpendAndTransfer { amount, .. } => Some(*amount),
+            _ => None,
+        }
+    }
 }
 
 impl Value {
+    pub fn coin_amount(&self) -> Option<Amount> {
+        match self {
+            Value::Coin(coin) => Some(coin.amount),
+            _ => None,
+        }
+    }
+
+    pub fn coin_account_id(&self) -> Option<&AccountId> {
+        match self {
+            Value::Coin(coin) => Some(&coin.account_id),
+            _ => None,
+        }
+    }
+
     pub fn confirm_account_id(&self) -> Option<&AccountId> {
         match self {
             Value::Confirm(r) => Some(&r.account_id),
@@ -227,7 +248,7 @@ impl Value {
     pub fn confirm_request(&self) -> Option<&Request> {
         match self {
             Value::Confirm(r) => Some(r),
-            Value::Coin(_) | Value::Lock(_) => None,
+            _ => None,
         }
     }
 
@@ -235,14 +256,14 @@ impl Value {
     pub fn confirm_request_mut(&mut self) -> Option<&mut Request> {
         match self {
             Value::Confirm(r) => Some(r),
-            Value::Coin(_) | Value::Lock(_) => None,
+            _ => None,
         }
     }
 
     pub fn confirm_key(&self) -> Option<(AccountId, SequenceNumber)> {
         match self {
             Value::Confirm(r) => Some((r.account_id.clone(), r.sequence_number)),
-            Value::Coin(_) | Value::Lock(_) => None,
+            _ => None,
         }
     }
 }

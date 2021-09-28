@@ -4,7 +4,8 @@
 
 use super::*;
 use crate::{
-    authority::{AccountState, Authority, AuthorityState},
+    account::AccountState,
+    authority::{Authority, AuthorityState},
     base_types::Amount,
 };
 use futures::lock::Mutex;
@@ -40,6 +41,20 @@ impl AuthorityClient for LocalAuthorityClient {
         })
     }
 
+    fn handle_coin_creation_order(
+        &mut self,
+        order: CoinCreationOrder,
+    ) -> AsyncResult<Vec<Vote>, FastPayError> {
+        let state = self.0.clone();
+        Box::pin(async move {
+            state
+                .lock()
+                .await
+                .handle_coin_creation_order(order)
+                .map(|(votes, _)| votes)
+        })
+    }
+
     fn handle_account_info_query(
         &mut self,
         query: AccountInfoQuery,
@@ -55,7 +70,6 @@ impl LocalAuthorityClient {
     }
 }
 
-#[cfg(test)]
 fn init_local_authorities(
     count: usize,
 ) -> (HashMap<AuthorityName, LocalAuthorityClient>, Committee) {
@@ -77,7 +91,6 @@ fn init_local_authorities(
     (clients, committee)
 }
 
-#[cfg(test)]
 fn init_local_authorities_bad_1(
     count: usize,
 ) -> (HashMap<AuthorityName, LocalAuthorityClient>, Committee) {
@@ -104,26 +117,25 @@ fn init_local_authorities_bad_1(
     (clients, committee)
 }
 
-#[cfg(test)]
 fn make_client(
     account_id: AccountId,
     authority_clients: HashMap<AuthorityName, LocalAuthorityClient>,
     committee: Committee,
-) -> ClientState<LocalAuthorityClient> {
+) -> AccountClientState<LocalAuthorityClient> {
     let key_pair = get_key_pair();
-    ClientState::new(
+    AccountClientState::new(
         account_id,
-        key_pair,
+        Some(key_pair),
         committee,
         authority_clients,
         SequenceNumber::new(),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         Balance::from(0),
     )
 }
 
-#[cfg(test)]
 fn fund_account<I: IntoIterator<Item = i128>>(
     clients: &mut HashMap<AuthorityName, LocalAuthorityClient>,
     account_id: AccountId,
@@ -134,54 +146,48 @@ fn fund_account<I: IntoIterator<Item = i128>>(
     for (_, client) in clients.iter_mut() {
         client.0.as_ref().try_lock().unwrap().accounts_mut().insert(
             account_id.clone(),
-            AccountState::new_with_balance(
-                owner,
-                balances.next().unwrap_or_else(Balance::zero),
-                /* no receive log to justify the balances */ Vec::new(),
-            ),
+            AccountState::new(owner, balances.next().unwrap_or_else(Balance::zero)),
         );
     }
 }
 
-#[cfg(test)]
-fn init_local_client_state(balances: Vec<i128>) -> ClientState<LocalAuthorityClient> {
+fn init_local_client_state(balances: Vec<i128>) -> AccountClientState<LocalAuthorityClient> {
     let (mut authority_clients, committee) = init_local_authorities(balances.len());
     let zeroes = vec![0; balances.len()];
     let client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.key_pair.public(),
+        client1.owner().unwrap(),
         balances,
     );
     let client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.key_pair.public(),
+        client2.owner().unwrap(),
         zeroes,
     );
     client1
 }
 
-#[cfg(test)]
 fn init_local_client_state_with_bad_authority(
     balances: Vec<i128>,
-) -> ClientState<LocalAuthorityClient> {
+) -> AccountClientState<LocalAuthorityClient> {
     let (mut authority_clients, committee) = init_local_authorities_bad_1(balances.len());
     let zeroes = vec![0; balances.len()];
     let client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.key_pair.public(),
+        client1.owner().unwrap(),
         balances,
     );
     let client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.key_pair.public(),
+        client2.owner().unwrap(),
         zeroes,
     );
     client1
@@ -192,13 +198,22 @@ fn test_get_strong_majority_balance() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         let mut client = init_local_client_state(vec![3, 4, 4, 4]);
-        assert_eq!(client.get_strong_majority_balance().await, Balance::from(4));
+        assert_eq!(
+            client.query_strong_majority_balance().await,
+            Balance::from(4)
+        );
 
         let mut client = init_local_client_state(vec![0, 3, 4, 4]);
-        assert_eq!(client.get_strong_majority_balance().await, Balance::from(3));
+        assert_eq!(
+            client.query_strong_majority_balance().await,
+            Balance::from(3)
+        );
 
         let mut client = init_local_client_state(vec![0, 3, 4]);
-        assert_eq!(client.get_strong_majority_balance().await, Balance::from(0));
+        assert_eq!(
+            client.query_strong_majority_balance().await,
+            Balance::from(0)
+        );
     });
 }
 
@@ -215,9 +230,9 @@ fn test_initiating_valid_transfer() {
         ))
         .unwrap();
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(sender.pending_request, None);
+    assert!(matches!(sender.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(sender.get_strong_majority_balance()),
+        rt.block_on(sender.query_strong_majority_balance()),
         Balance::from(1)
     );
     assert_eq!(
@@ -225,6 +240,284 @@ fn test_initiating_valid_transfer() {
             .unwrap(),
         certificate
     );
+}
+
+#[test]
+fn test_rotate_key_pair() {
+    let mut rt = Runtime::new().unwrap();
+    let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
+    sender.balance = Balance::from(4);
+    let new_key_pair = get_key_pair();
+    let new_pubk = new_key_pair.public();
+    let certificate = rt.block_on(sender.rotate_key_pair(new_key_pair)).unwrap();
+    assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
+    assert!(matches!(sender.pending_request, PendingRequest::None));
+    assert_eq!(sender.owner().unwrap(), new_pubk);
+    assert_eq!(
+        rt.block_on(sender.query_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
+            .unwrap(),
+        certificate
+    );
+    assert_eq!(
+        rt.block_on(sender.query_strong_majority_balance()),
+        Balance::from(4)
+    );
+    assert_eq!(
+        rt.block_on(sender.query_safe_balance()).unwrap(),
+        Balance::from(4)
+    );
+    // Can still use the account.
+    rt.block_on(sender.transfer_to_fastpay(Amount::from(3), dbg_account(2), UserData::default()))
+        .unwrap();
+}
+
+#[test]
+fn test_transfer_ownership() {
+    let mut rt = Runtime::new().unwrap();
+    let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
+    sender.balance = Balance::from(4);
+    let new_key_pair = get_key_pair();
+    let new_pubk = new_key_pair.public();
+    let certificate = rt.block_on(sender.transfer_ownership(new_pubk)).unwrap();
+    assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
+    assert!(matches!(sender.pending_request, PendingRequest::None));
+    assert!(sender.key_pair.is_none());
+    assert_eq!(
+        rt.block_on(sender.query_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
+            .unwrap(),
+        certificate
+    );
+    assert_eq!(
+        rt.block_on(sender.query_strong_majority_balance()),
+        Balance::from(4)
+    );
+    assert_eq!(
+        rt.block_on(sender.query_safe_balance()).unwrap(),
+        Balance::from(4)
+    );
+    // Cannot use the account any more.
+    assert!(rt
+        .block_on(sender.transfer_to_fastpay(Amount::from(3), dbg_account(2), UserData::default()))
+        .is_err());
+}
+
+#[test]
+fn test_create_single_coin() {
+    create_and_transfer_coins(vec![Coin {
+        account_id: dbg_account(2),
+        amount: Amount::from(3),
+        seed: 1,
+    }])
+    .unwrap();
+}
+
+#[test]
+fn test_create_multiple_coins() {
+    create_and_transfer_coins(vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(1),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(2),
+            seed: 2,
+        },
+    ])
+    .unwrap();
+}
+
+#[test]
+fn test_create_multiple_coins_repeated_seeds() {
+    assert!(create_and_transfer_coins(vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(1),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(2),
+            seed: 1,
+        },
+    ])
+    .is_err());
+}
+
+#[test]
+fn test_create_multiple_coins_wrong_account() {
+    assert!(create_and_transfer_coins(vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(1),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(2),
+            seed: 2,
+        },
+    ])
+    .is_err());
+}
+
+#[test]
+fn test_create_multiple_coins_balance_exceeded() {
+    assert!(create_and_transfer_coins(vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(2),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(2),
+            seed: 2,
+        },
+    ])
+    .is_err());
+}
+
+fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
+    let mut rt = Runtime::new().unwrap();
+    let (mut authority_clients, committee) = init_local_authorities(4);
+    let mut client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
+    fund_account(
+        &mut authority_clients,
+        client1.account_id.clone(),
+        client1.owner().unwrap(),
+        vec![2, 3, 4, 4],
+    );
+    client1.balance = Balance::from(3);
+    let mut client2 = make_client(dbg_account(2), authority_clients.clone(), committee.clone());
+    fund_account(
+        &mut authority_clients,
+        client2.account_id.clone(),
+        client2.owner().unwrap(),
+        vec![0; 4],
+    );
+    let mut client3 = make_client(dbg_account(3), authority_clients.clone(), committee);
+    fund_account(
+        &mut authority_clients,
+        client3.account_id.clone(),
+        client3.owner().unwrap(),
+        vec![0; 4],
+    );
+    // spend account #1 and create coins
+    let certificates = rt.block_on(client1.spend_and_create_coins(coins.clone()))?;
+    assert!(client1.lock_certificate.is_some());
+    assert_eq!(certificates.len(), coins.len());
+    // receive coins on account #2
+    for (i, certificate) in certificates.into_iter().enumerate() {
+        assert!(matches!(&certificate.value, Value::Coin(c) if c == &coins[i]));
+        rt.block_on(client2.receive_from_fastpay(certificate))?;
+    }
+    assert_eq!(client2.coins.len(), coins.len());
+    assert_eq!(
+        rt.block_on(client2.query_safe_balance()).unwrap(),
+        Balance::from(0)
+    );
+    assert_eq!(client2.get_coins_value().unwrap(), Amount::from(3));
+    // transfer coins back to account #3
+    let certificate = rt.block_on(
+        client2.spend_and_transfer(Address::FastPay(dbg_account(3)), UserData::default()),
+    )?;
+    assert!(matches!(&certificate.value, Value::Confirm(
+        Request {
+            operation: Operation::SpendAndTransfer { recipient: Address::FastPay(id), amount, .. },
+            ..
+        }) if id == &dbg_account(3) && *amount == Amount::from(3)
+    ));
+    assert_eq!(
+        rt.block_on(client3.query_strong_majority_balance()),
+        Balance::from(3)
+    );
+    rt.block_on(client3.receive_from_fastpay(certificate))?;
+    assert_eq!(
+        rt.block_on(client3.query_safe_balance()).unwrap(),
+        Balance::from(3)
+    );
+    Ok(())
+}
+
+#[test]
+fn test_open_account() {
+    let mut rt = Runtime::new().unwrap();
+    let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
+    sender.balance = Balance::from(4);
+    let new_key_pair = get_key_pair();
+    let new_pubk = new_key_pair.public();
+    let new_id = AccountId::new(vec![SequenceNumber::from(1), SequenceNumber::from(1)]);
+    // Transfer before creating the account.
+    assert!(rt
+        .block_on(sender.transfer_to_fastpay(Amount::from(3), new_id.clone(), UserData::default()))
+        .is_ok());
+    // Open the new account.
+    let certificate = rt.block_on(sender.open_account(new_pubk)).unwrap();
+    assert_eq!(sender.next_sequence_number, SequenceNumber::from(2));
+    assert!(matches!(sender.pending_request, PendingRequest::None));
+    assert!(sender.key_pair.is_some());
+    assert_eq!(
+        rt.block_on(sender.query_certificate(sender.account_id.clone(), SequenceNumber::from(1)))
+            .unwrap(),
+        certificate
+    );
+    assert!(matches!(&certificate.value, Value::Confirm(
+        Request {
+            operation: Operation::OpenAccount { new_id:id, .. },
+            ..
+        }) if &new_id == id
+    ));
+    // Make a client to try the new account.
+    let mut client = AccountClientState::new(
+        new_id,
+        Some(new_key_pair),
+        sender.committee.clone(),
+        sender.authority_clients,
+        SequenceNumber::from(0),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Balance::from(3),
+    );
+    assert_eq!(
+        rt.block_on(client.query_strong_majority_balance()),
+        Balance::from(3)
+    );
+    assert_eq!(
+        rt.block_on(client.query_safe_balance()).unwrap(),
+        Balance::from(3)
+    );
+    assert!(rt
+        .block_on(client.transfer_to_fastpay(Amount::from(3), dbg_account(3), UserData::default()))
+        .is_ok());
+}
+
+#[test]
+fn test_close_account() {
+    let mut rt = Runtime::new().unwrap();
+    let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
+    sender.balance = Balance::from(4);
+    let certificate = rt.block_on(sender.close_account()).unwrap();
+    assert!(matches!(
+        &certificate.value,
+        Value::Confirm(Request {
+            operation: Operation::CloseAccount,
+            ..
+        })
+    ));
+    assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
+    assert!(matches!(sender.pending_request, PendingRequest::None));
+    assert!(sender.key_pair.is_none());
+    // Cannot query the certificate.
+    assert!(rt
+        .block_on(sender.query_certificate(sender.account_id.clone(), SequenceNumber::from(0)))
+        .is_err(),);
+    // Cannot use the account any more.
+    assert!(rt
+        .block_on(sender.transfer_to_fastpay(Amount::from(3), dbg_account(2), UserData::default()))
+        .is_err());
 }
 
 #[test]
@@ -240,9 +533,9 @@ fn test_initiating_valid_transfer_despite_bad_authority() {
         ))
         .unwrap();
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(sender.pending_request, None);
+    assert!(matches!(sender.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(sender.get_strong_majority_balance()),
+        rt.block_on(sender.query_strong_majority_balance()),
         Balance::from(1)
     );
     assert_eq!(
@@ -262,9 +555,9 @@ fn test_initiating_transfer_low_funds() {
         .is_err());
     // Trying to overspend does not block an account.
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(0));
-    assert_eq!(sender.pending_request, None);
+    assert!(matches!(sender.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(sender.get_strong_majority_balance()),
+        rt.block_on(sender.query_strong_majority_balance()),
         Balance::from(2)
     );
 }
@@ -278,17 +571,17 @@ fn test_bidirectional_transfer() {
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.key_pair.public(),
+        client1.owner().unwrap(),
         vec![2, 3, 4, 4],
     );
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.key_pair.public(),
+        client2.owner().unwrap(),
         vec![0; 4],
     );
     // Update client1's local balance accordingly.
-    client1.balance = rt.block_on(client1.get_strong_majority_balance());
+    client1.balance = rt.block_on(client1.query_strong_majority_balance());
     assert_eq!(client1.balance, Balance::from(3));
 
     let certificate = rt
@@ -300,9 +593,9 @@ fn test_bidirectional_transfer() {
         .unwrap();
 
     assert_eq!(client1.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(client1.pending_request, None);
+    assert!(matches!(client1.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_balance()),
+        rt.block_on(client1.query_strong_majority_balance()),
         Balance::from(0)
     );
     assert_eq!(client1.balance, Balance::from(0));
@@ -318,7 +611,7 @@ fn test_bidirectional_transfer() {
     );
     // Our sender already confirmed.
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(3)
     );
     assert_eq!(client2.balance, Balance::from(0));
@@ -326,7 +619,7 @@ fn test_bidirectional_transfer() {
     rt.block_on(client2.receive_from_fastpay(certificate))
         .unwrap();
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(3)
     );
     assert_eq!(client2.balance, Balance::from(3));
@@ -340,9 +633,9 @@ fn test_bidirectional_transfer() {
     ))
     .unwrap();
     assert_eq!(client2.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(client2.pending_request, None);
+    assert!(matches!(client2.pending_request, PendingRequest::None));
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(2)
     );
     assert_eq!(
@@ -350,7 +643,7 @@ fn test_bidirectional_transfer() {
         SequenceNumber::from(1)
     );
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_balance()),
+        rt.block_on(client1.query_strong_majority_balance()),
         Balance::from(1)
     );
 }
@@ -364,13 +657,13 @@ fn test_receiving_unconfirmed_transfer() {
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.key_pair.public(),
+        client1.owner().unwrap(),
         vec![2, 3, 4, 4],
     );
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.key_pair.public(),
+        client2.owner().unwrap(),
         vec![0; 4],
     );
 
@@ -384,10 +677,10 @@ fn test_receiving_unconfirmed_transfer() {
     // Transfer was executed locally, creating negative balance.
     assert_eq!(client1.balance, Balance::from(-2));
     assert_eq!(client1.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(client1.pending_request, None);
+    assert!(matches!(client1.pending_request, PendingRequest::None));
     // ..but not confirmed remotely, hence an unchanged balance and sequence number.
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_balance()),
+        rt.block_on(client1.query_strong_majority_balance()),
         Balance::from(3)
     );
     assert_eq!(
@@ -398,7 +691,7 @@ fn test_receiving_unconfirmed_transfer() {
     rt.block_on(client2.receive_from_fastpay(certificate))
         .unwrap();
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(2)
     );
 }
@@ -413,19 +706,19 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
     fund_account(
         &mut authority_clients,
         client0.account_id.clone(),
-        client0.key_pair.public(),
+        client0.owner().unwrap(),
         vec![2, 3, 4, 4],
     );
     fund_account(
         &mut authority_clients,
         client1.account_id.clone(),
-        client1.key_pair.public(),
+        client1.owner().unwrap(),
         vec![0; 4],
     );
     fund_account(
         &mut authority_clients,
         client2.account_id.clone(),
-        client2.key_pair.public(),
+        client2.owner().unwrap(),
         vec![0; 4],
     );
 
@@ -468,13 +761,13 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
     // Requests were executed locally, possibly creating negative balances.
     assert_eq!(client0.balance, Balance::from(-2));
     assert_eq!(client0.next_sequence_number, SequenceNumber::from(2));
-    assert_eq!(client0.pending_request, None);
+    assert!(matches!(client0.pending_request, PendingRequest::None));
     assert_eq!(client1.balance, Balance::from(-2));
     assert_eq!(client1.next_sequence_number, SequenceNumber::from(1));
-    assert_eq!(client1.pending_request, None);
+    assert!(matches!(client1.pending_request, PendingRequest::None));
     // Last one was not confirmed remotely, hence an unchanged (remote) balance and sequence number.
     assert_eq!(
-        rt.block_on(client1.get_strong_majority_balance()),
+        rt.block_on(client1.query_strong_majority_balance()),
         Balance::from(2)
     );
     assert_eq!(
@@ -485,7 +778,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
     rt.block_on(client2.receive_from_fastpay(certificate))
         .unwrap();
     assert_eq!(
-        rt.block_on(client2.get_strong_majority_balance()),
+        rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(2)
     );
 }

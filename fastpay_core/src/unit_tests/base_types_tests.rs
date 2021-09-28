@@ -5,12 +5,12 @@
 
 use super::*;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Foo(String);
 
 impl BcsSignable for Foo {}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Bar(String);
 
 impl BcsSignable for Bar {}
