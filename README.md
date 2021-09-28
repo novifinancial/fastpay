@@ -54,6 +54,9 @@ ACCOUNT2="`tail -n -1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 # Launch local benchmark using all user accounts
 ./client --committee committee.json --accounts accounts.json benchmark
 
+# Create derived account
+./client --committee committee.json --accounts accounts.json open_account --from "$ACCOUNT1"
+
 # Inspect state of first account
 fgrep "$ACCOUNT1" accounts.json
 
