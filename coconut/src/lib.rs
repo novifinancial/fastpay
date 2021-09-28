@@ -1,6 +1,6 @@
 #[macro_use]
 mod error;
-pub mod issue;
+pub mod issuance;
 pub mod lagrange;
 pub mod request;
 pub mod setup;

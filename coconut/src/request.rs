@@ -1,5 +1,5 @@
 use crate::error::{CoconutError, CoconutResult};
-use crate::issue::Coin;
+use crate::issuance::Coin;
 use crate::setup::{Parameters, PublicKey};
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::GroupEncoding as _;

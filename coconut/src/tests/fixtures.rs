@@ -1,4 +1,4 @@
-use crate::issue::Coin;
+use crate::issuance::Coin;
 use crate::request::CoinsRequest;
 use crate::setup::{KeyPair, Parameters, PublicKey};
 use bls12_381::Scalar;
