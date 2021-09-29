@@ -8,15 +8,16 @@ use fastpay_core::{account::AccountState, authority::*, base_types::*, committee
 
 use futures::future::join_all;
 use log::*;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
 #[allow(clippy::too_many_arguments)]
 fn make_shard_server(
     local_ip_addr: &str,
-    server_config_path: &str,
-    committee_config_path: &str,
-    initial_accounts_config_path: &str,
+    server_config_path: &Path,
+    committee_config_path: &Path,
+    initial_accounts_config_path: &Path,
     buffer_size: usize,
     cross_shard_queue_size: usize,
     shard: u32,
@@ -55,9 +56,9 @@ fn make_shard_server(
 
 fn make_servers(
     local_ip_addr: &str,
-    server_config_path: &str,
-    committee_config_path: &str,
-    initial_accounts_config_path: &str,
+    server_config_path: &Path,
+    committee_config_path: &Path,
+    initial_accounts_config_path: &Path,
     buffer_size: usize,
     cross_shard_queue_size: usize,
 ) -> Vec<network::Server> {
@@ -85,10 +86,10 @@ fn make_servers(
     name = "FastPay Server",
     about = "A byzantine fault tolerant payments sidechain with low-latency finality and high throughput"
 )]
-struct ServerOpt {
+struct ServerOptions {
     /// Path to the file containing the server configuration of this FastPay authority (including its secret key)
     #[structopt(long)]
-    server: String,
+    server: PathBuf,
 
     /// Subcommands. Acceptable values are run and generate.
     #[structopt(subcommand)]
@@ -110,11 +111,11 @@ enum ServerCommands {
 
         /// Path to the file containing the public description of all authorities in this FastPay committee
         #[structopt(long)]
-        committee: String,
+        committee: PathBuf,
 
         /// Path to the file describing the initial user accounts
         #[structopt(long)]
-        initial_accounts: String,
+        initial_accounts: PathBuf,
 
         /// Runs a specific shard (from 0 to shards-1)
         #[structopt(long)]
@@ -144,7 +145,7 @@ enum ServerCommands {
 
 fn main() {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let options = ServerOpt::from_args();
+    let options = ServerOptions::from_args();
 
     let server_config_path = &options.server;
 
