@@ -132,10 +132,11 @@ fn test_handle_request_order_exceed_balance() {
 fn test_handle_request_order_ok() {
     let sender_key_pair = KeyPair::generate();
     let recipient = Address::FastPay(dbg_account(2));
-    let mut state = init_state_with_accounts(vec![
-        (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
-        (dbg_account(2), dbg_addr(2), Balance::from(0)),
-    ]);
+    let mut state = init_state_with_accounts(vec![(
+        dbg_account(1),
+        sender_key_pair.public(),
+        Balance::from(5),
+    )]);
     let request_order =
         make_transfer_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
@@ -381,6 +382,7 @@ fn test_handle_confirmation_order_ok() {
             .unwrap()
             .into()
     );
+    assert_eq!(recipient_account.owner, Some(dbg_addr(2)));
 
     let info_query = AccountInfoQuery {
         account_id: dbg_account(2),
@@ -398,6 +400,530 @@ fn test_handle_confirmation_order_ok() {
             .unwrap(),
         Amount::from(5)
     );
+}
+
+#[test]
+fn test_handle_confirmation_order_inactive_sender_ok() {
+    let sender_key_pair = KeyPair::generate();
+    let mut state = init_state_with_accounts(vec![(
+        dbg_account(1),
+        sender_key_pair.public(),
+        Balance::from(5),
+    )]);
+    let certificate = make_transfer_certificate(
+        dbg_account(1),
+        &sender_key_pair,
+        Address::FastPay(dbg_account(2)),
+        Amount::from(5),
+        &state,
+    );
+
+    let old_account = state.accounts.get_mut(&dbg_account(1)).unwrap();
+    let mut next_sequence_number = old_account.next_sequence_number;
+    next_sequence_number.try_add_assign_one().unwrap();
+    let mut remaining_balance = old_account.balance;
+    remaining_balance
+        .try_sub_assign(
+            certificate
+                .value
+                .confirm_request()
+                .unwrap()
+                .amount()
+                .unwrap()
+                .into(),
+        )
+        .unwrap();
+
+    let (info, _) = state
+        .handle_confirmation_order(ConfirmationOrder::new(certificate.clone()))
+        .unwrap();
+    assert_eq!(dbg_account(1), info.account_id);
+    assert_eq!(remaining_balance, info.balance);
+    assert_eq!(next_sequence_number, info.next_sequence_number);
+    assert_eq!(None, info.pending);
+    assert_eq!(
+        state.accounts.get(&dbg_account(1)).unwrap().confirmed_log,
+        vec![certificate.clone()]
+    );
+
+    let recipient_account = state.accounts.get(&dbg_account(2)).unwrap();
+    assert_eq!(
+        recipient_account.balance,
+        certificate
+            .value
+            .confirm_request()
+            .unwrap()
+            .amount()
+            .unwrap()
+            .into()
+    );
+    assert_eq!(recipient_account.owner, None);
+
+    let info_query = AccountInfoQuery {
+        account_id: dbg_account(2),
+        query_sequence_number: None,
+        query_received_certificates_excluding_first_nth: Some(0),
+    };
+    // Cannot query inactive accounts.
+    assert!(state.handle_account_info_query(info_query).is_err());
+}
+
+#[test]
+fn test_handle_coin_creation_order_ok() {
+    let mut state = init_state_with_accounts(Vec::new());
+    let coins = vec![
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(3),
+                seed: 1,
+            }),
+        ),
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(7),
+                seed: 2,
+            }),
+        ),
+    ];
+    let sources = vec![CoinCreationSource {
+        account_id: dbg_account(1),
+        account_balance: Amount::from(5),
+        coins,
+    }];
+    let targets = vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(8),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(7),
+            seed: 2,
+        },
+    ];
+    let contract = CoinCreationContract {
+        sources,
+        targets: targets.clone(),
+    };
+    let contract_hash = HashValue::new(&contract);
+    let locks = vec![make_certificate(
+        &state,
+        Value::Lock(Request {
+            account_id: dbg_account(1),
+            operation: Operation::Spend {
+                account_balance: Amount::from(5),
+                contract_hash,
+            },
+            sequence_number: SequenceNumber::default(),
+        }),
+    )];
+
+    let (votes, continuations) = state
+        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .unwrap();
+    assert_eq!(votes.len(), 2);
+    for i in 0..2 {
+        assert!(matches!(&votes[i].value, Value::Coin(c) if c == &targets[i]));
+    }
+    assert_eq!(continuations.len(), 1);
+    assert!(
+        matches!(&continuations[0], CrossShardContinuation::Request { shard_id, request }
+                 if *shard_id == 0
+                 && matches!(request.as_ref(), CrossShardRequest::DestroyAccount { account_id:id }
+                             if id == &dbg_account(1)
+                 )
+        )
+    );
+}
+
+#[test]
+fn test_handle_coin_creation_order_no_source_coin_ok() {
+    let mut state = init_state_with_accounts(Vec::new());
+    let sources = vec![CoinCreationSource {
+        account_id: dbg_account(1),
+        account_balance: Amount::from(15),
+        coins: Vec::new(),
+    }];
+    let targets = vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(8),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(7),
+            seed: 2,
+        },
+    ];
+    let contract = CoinCreationContract {
+        sources,
+        targets: targets.clone(),
+    };
+    let contract_hash = HashValue::new(&contract);
+    let locks = vec![make_certificate(
+        &state,
+        Value::Lock(Request {
+            account_id: dbg_account(1),
+            operation: Operation::Spend {
+                account_balance: Amount::from(15),
+                contract_hash,
+            },
+            sequence_number: SequenceNumber::default(),
+        }),
+    )];
+
+    let (votes, continuations) = state
+        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .unwrap();
+    assert_eq!(votes.len(), 2);
+    for i in 0..2 {
+        assert!(matches!(&votes[i].value, Value::Coin(c) if c == &targets[i]));
+    }
+    assert_eq!(continuations.len(), 1);
+    assert!(
+        matches!(&continuations[0], CrossShardContinuation::Request { shard_id, request }
+                 if *shard_id == 0
+                 && matches!(request.as_ref(), CrossShardRequest::DestroyAccount { account_id:id }
+                             if id == &dbg_account(1)
+                 )
+        )
+    );
+}
+
+#[test]
+fn test_handle_coin_creation_order_empty_target_coin() {
+    let mut state = init_state_with_accounts(Vec::new());
+    let sources = vec![CoinCreationSource {
+        account_id: dbg_account(1),
+        account_balance: Amount::from(15),
+        coins: Vec::new(),
+    }];
+    let targets = vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(8),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(7),
+            seed: 2,
+        },
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(0),
+            seed: 3,
+        },
+    ];
+    let contract = CoinCreationContract { sources, targets };
+    let contract_hash = HashValue::new(&contract);
+    let locks = vec![make_certificate(
+        &state,
+        Value::Lock(Request {
+            account_id: dbg_account(1),
+            operation: Operation::Spend {
+                account_balance: Amount::from(15),
+                contract_hash,
+            },
+            sequence_number: SequenceNumber::default(),
+        }),
+    )];
+
+    assert!(state
+        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .is_err());
+}
+
+#[test]
+fn test_handle_coin_creation_order_insufficient_funds() {
+    let mut state = init_state_with_accounts(Vec::new());
+    let coins = vec![
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(3),
+                seed: 1,
+            }),
+        ),
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(7),
+                seed: 2,
+            }),
+        ),
+    ];
+    let sources = vec![CoinCreationSource {
+        account_id: dbg_account(1),
+        account_balance: Amount::from(5),
+        coins,
+    }];
+    let targets = vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(8),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(8),
+            seed: 2,
+        },
+    ];
+    let contract = CoinCreationContract { sources, targets };
+    let contract_hash = HashValue::new(&contract);
+    let locks = vec![make_certificate(
+        &state,
+        Value::Lock(Request {
+            account_id: dbg_account(1),
+            operation: Operation::Spend {
+                account_balance: Amount::from(5),
+                contract_hash,
+            },
+            sequence_number: SequenceNumber::default(),
+        }),
+    )];
+
+    assert!(state
+        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .is_err());
+}
+
+#[test]
+fn test_handle_coin_creation_order_replayed_seed() {
+    let mut state = init_state_with_accounts(Vec::new());
+    let coins = vec![
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(3),
+                seed: 1,
+            }),
+        ),
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(7),
+                seed: 1,
+            }),
+        ),
+    ];
+    let sources = vec![CoinCreationSource {
+        account_id: dbg_account(1),
+        account_balance: Amount::from(5),
+        coins,
+    }];
+    let targets = vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(7),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(8),
+            seed: 2,
+        },
+    ];
+    let contract = CoinCreationContract { sources, targets };
+    let contract_hash = HashValue::new(&contract);
+    let locks = vec![make_certificate(
+        &state,
+        Value::Lock(Request {
+            account_id: dbg_account(1),
+            operation: Operation::Spend {
+                account_balance: Amount::from(5),
+                contract_hash,
+            },
+            sequence_number: SequenceNumber::default(),
+        }),
+    )];
+
+    assert!(state
+        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .is_err());
+}
+
+#[test]
+fn test_handle_coin_creation_order_incorrect_source() {
+    let mut state = init_state_with_accounts(Vec::new());
+    let coins = vec![
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(3),
+                seed: 1,
+            }),
+        ),
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(2),
+                amount: Amount::from(7),
+                seed: 2,
+            }),
+        ),
+    ];
+    let sources = vec![CoinCreationSource {
+        account_id: dbg_account(1),
+        account_balance: Amount::from(5),
+        coins,
+    }];
+    let targets = vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(7),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(8),
+            seed: 2,
+        },
+    ];
+    let contract = CoinCreationContract { sources, targets };
+    let contract_hash = HashValue::new(&contract);
+    let locks = vec![make_certificate(
+        &state,
+        Value::Lock(Request {
+            account_id: dbg_account(1),
+            operation: Operation::Spend {
+                account_balance: Amount::from(5),
+                contract_hash,
+            },
+            sequence_number: SequenceNumber::default(),
+        }),
+    )];
+
+    assert!(state
+        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .is_err());
+}
+
+#[test]
+fn test_handle_coin_creation_order_repeated_source() {
+    let mut state = init_state_with_accounts(Vec::new());
+    let coins = vec![
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(3),
+                seed: 1,
+            }),
+        ),
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(7),
+                seed: 2,
+            }),
+        ),
+    ];
+    let source = CoinCreationSource {
+        account_id: dbg_account(1),
+        account_balance: Amount::from(5),
+        coins,
+    };
+    let sources = vec![source.clone(), source];
+    let targets = vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(7),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(8),
+            seed: 2,
+        },
+    ];
+    let contract = CoinCreationContract { sources, targets };
+    let contract_hash = HashValue::new(&contract);
+    let locks = vec![make_certificate(
+        &state,
+        Value::Lock(Request {
+            account_id: dbg_account(1),
+            operation: Operation::Spend {
+                account_balance: Amount::from(5),
+                contract_hash,
+            },
+            sequence_number: SequenceNumber::default(),
+        }),
+    )];
+
+    assert!(state
+        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .is_err());
+}
+
+#[test]
+fn test_handle_coin_creation_order_invalid_balance() {
+    let mut state = init_state_with_accounts(Vec::new());
+    let coins = vec![
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(3),
+                seed: 1,
+            }),
+        ),
+        make_certificate(
+            &state,
+            Value::Coin(Coin {
+                account_id: dbg_account(1),
+                amount: Amount::from(7),
+                seed: 2,
+            }),
+        ),
+    ];
+    let sources = vec![CoinCreationSource {
+        account_id: dbg_account(1),
+        account_balance: Amount::from(6),
+        coins,
+    }];
+    let targets = vec![
+        Coin {
+            account_id: dbg_account(2),
+            amount: Amount::from(7),
+            seed: 1,
+        },
+        Coin {
+            account_id: dbg_account(3),
+            amount: Amount::from(8),
+            seed: 2,
+        },
+    ];
+    let contract = CoinCreationContract { sources, targets };
+    let contract_hash = HashValue::new(&contract);
+    let locks = vec![make_certificate(
+        &state,
+        Value::Lock(Request {
+            account_id: dbg_account(1),
+            operation: Operation::Spend {
+                account_balance: Amount::from(5),
+                contract_hash,
+            },
+            sequence_number: SequenceNumber::default(),
+        }),
+    )];
+
+    assert!(state
+        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .is_err());
 }
 
 #[test]
@@ -480,7 +1006,6 @@ fn test_get_shards() {
 
 // helpers
 
-#[cfg(test)]
 fn init_state() -> AuthorityState {
     let key_pair = KeyPair::generate();
     let name = key_pair.public();
@@ -490,7 +1015,6 @@ fn init_state() -> AuthorityState {
     AuthorityState::new(committee, name, key_pair)
 }
 
-#[cfg(test)]
 fn init_state_with_accounts<I: IntoIterator<Item = (AccountId, AccountOwner, Balance)>>(
     balances: I,
 ) -> AuthorityState {
@@ -502,12 +1026,10 @@ fn init_state_with_accounts<I: IntoIterator<Item = (AccountId, AccountOwner, Bal
     state
 }
 
-#[cfg(test)]
 fn init_state_with_account(id: AccountId, owner: AccountOwner, balance: Balance) -> AuthorityState {
     init_state_with_accounts(std::iter::once((id, owner, balance)))
 }
 
-#[cfg(test)]
 fn make_transfer_request_order(
     account_id: AccountId,
     secret: &KeyPair,
@@ -526,7 +1048,15 @@ fn make_transfer_request_order(
     RequestOrder::new(request.into(), secret, Vec::new())
 }
 
-#[cfg(test)]
+fn make_certificate(state: &AuthorityState, value: Value) -> Certificate {
+    let vote = Vote::new(value.clone(), &state.key_pair);
+    let mut builder = SignatureAggregator::new(value, &state.committee);
+    builder
+        .append(vote.authority, vote.signature)
+        .unwrap()
+        .unwrap()
+}
+
 fn make_transfer_certificate(
     account_id: AccountId,
     key_pair: &KeyPair,
@@ -538,15 +1068,9 @@ fn make_transfer_certificate(
         .value
         .request;
     let value = Value::Confirm(request);
-    let vote = Vote::new(value.clone(), &state.key_pair);
-    let mut builder = SignatureAggregator::new(value, &state.committee);
-    builder
-        .append(vote.authority, vote.signature)
-        .unwrap()
-        .unwrap()
+    make_certificate(state, value)
 }
 
-#[cfg(test)]
 fn init_primary_synchronization_order(recipient: AccountId) -> PrimarySynchronizationOrder {
     let mut transaction_index = SequenceNumber::new();
     transaction_index.try_add_assign_one().unwrap();

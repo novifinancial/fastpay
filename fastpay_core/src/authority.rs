@@ -298,13 +298,19 @@ impl Authority for AuthorityState {
             }
         }
         // Verify target amount.
-        let mut target_amount = Amount::default();
+        let mut target_amount = Amount::zero();
         for coin in &targets {
+            fp_ensure!(
+                coin.amount > Amount::zero(),
+                FastPayError::InvalidCoinCreationOrder
+            );
             target_amount.try_add_assign(coin.amount)?;
         }
         fp_ensure!(
             target_amount <= source_amount,
-            FastPayError::InvalidCoinCreationOrder
+            FastPayError::InsufficientFunding {
+                current_balance: source_amount.into()
+            }
         );
         // Construct votes and continuations.
         let mut votes = Vec::new();
