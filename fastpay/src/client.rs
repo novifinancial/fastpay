@@ -13,6 +13,7 @@ use futures::stream::StreamExt;
 use log::*;
 use std::{
     collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 use structopt::StructOpt;
@@ -125,7 +126,7 @@ fn make_benchmark_request_orders(
 /// Try to make certificates from orders and server configs
 fn make_benchmark_certificates_from_orders_and_server_configs(
     orders: Vec<RequestOrder>,
-    server_config: Vec<&str>,
+    server_config: Vec<&Path>,
 ) -> Vec<(AccountId, Bytes)> {
     let mut keys = Vec::new();
     for file in server_config {
@@ -290,14 +291,14 @@ fn deserialize_response(response: &[u8]) -> Option<AccountInfoResponse> {
     name = "FastPay Client",
     about = "A Byzantine-fault tolerant sidechain with low-latency finality and high throughput"
 )]
-struct ClientOpt {
+struct ClientOptions {
     /// Sets the file storing the state of our user accounts (an empty one will be created if missing)
     #[structopt(long)]
-    accounts: String,
+    accounts: PathBuf,
 
     /// Sets the file describing the public configurations of all authorities
     #[structopt(long)]
-    committee: String,
+    committee: PathBuf,
 
     /// Timeout for sending queries (us)
     #[structopt(long, default_value = "4000000")]
@@ -374,7 +375,7 @@ enum ClientCommands {
 
         /// Use server configuration files to generate certificates (instead of aggregating received votes).
         #[structopt(long)]
-        server_configs: Option<Vec<String>>,
+        server_configs: Option<Vec<PathBuf>>,
     },
 
     /// Create initial user accounts and print information to be used for initialization of authority setup.
@@ -391,7 +392,7 @@ enum ClientCommands {
 
 fn main() {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let options = ClientOpt::from_args();
+    let options = ClientOptions::from_args();
 
     let send_timeout = Duration::from_micros(options.send_timeout);
     let recv_timeout = Duration::from_micros(options.recv_timeout);

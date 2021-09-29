@@ -13,6 +13,7 @@ use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Write},
+    path::Path,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -38,12 +39,12 @@ pub struct AuthorityServerConfig {
 }
 
 impl AuthorityServerConfig {
-    pub fn read(path: &str) -> Result<Self, std::io::Error> {
+    pub fn read(path: &Path) -> Result<Self, std::io::Error> {
         let data = fs::read(path)?;
         Ok(serde_json::from_slice(data.as_slice())?)
     }
 
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         let data = serde_json::to_string_pretty(self).unwrap();
@@ -58,7 +59,7 @@ pub struct CommitteeConfig {
 }
 
 impl CommitteeConfig {
-    pub fn read(path: &str) -> Result<Self, std::io::Error> {
+    pub fn read(path: &Path) -> Result<Self, std::io::Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let stream = serde_json::Deserializer::from_reader(reader).into_iter();
@@ -67,7 +68,7 @@ impl CommitteeConfig {
         })
     }
 
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         for config in &self.authorities {
@@ -191,7 +192,7 @@ impl AccountsConfig {
         }
     }
 
-    pub fn read_or_create(path: &str) -> Result<Self, std::io::Error> {
+    pub fn read_or_create(path: &Path) -> Result<Self, std::io::Error> {
         let file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -207,7 +208,7 @@ impl AccountsConfig {
         })
     }
 
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         for account in self.accounts.values() {
@@ -223,7 +224,7 @@ pub struct InitialStateConfig {
 }
 
 impl InitialStateConfig {
-    pub fn read(path: &str) -> Result<Self, failure::Error> {
+    pub fn read(path: &Path) -> Result<Self, failure::Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let mut accounts = Vec::new();
@@ -241,7 +242,7 @@ impl InitialStateConfig {
         Ok(Self { accounts })
     }
 
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         for (id, pubkey, balance) in &self.accounts {
