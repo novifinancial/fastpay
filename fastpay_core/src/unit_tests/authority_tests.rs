@@ -383,12 +383,12 @@ fn test_handle_confirmation_order_ok() {
     let info_query = AccountInfoQuery {
         account_id: dbg_account(2),
         query_sequence_number: None,
-        query_received_requests_excluding_first_nth: Some(0),
+        query_received_certificates_excluding_first_nth: Some(0),
     };
     let response = state.handle_account_info_query(info_query).unwrap();
-    assert_eq!(response.queried_received_requests.len(), 1);
+    assert_eq!(response.queried_received_certificates.len(), 1);
     assert_eq!(
-        response.queried_received_requests[0]
+        response.queried_received_certificates[0]
             .value
             .confirm_request()
             .unwrap()

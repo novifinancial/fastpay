@@ -479,7 +479,7 @@ fn test_open_account() {
         Vec::new(),
         Vec::new(),
         Vec::new(),
-        Balance::from(3),
+        Balance::from(0),
     );
     assert_eq!(
         rt.block_on(client.query_strong_majority_balance()),
@@ -614,12 +614,11 @@ fn test_bidirectional_transfer() {
         rt.block_on(client2.query_strong_majority_balance()),
         Balance::from(3)
     );
+    // But local balance is lagging.
     assert_eq!(client2.balance, Balance::from(0));
-    // Try to confirm again.
-    rt.block_on(client2.receive_from_fastpay(certificate))
-        .unwrap();
+    // Force synchronization of local balance.
     assert_eq!(
-        rt.block_on(client2.query_strong_majority_balance()),
+        rt.block_on(client2.query_safe_balance()).unwrap(),
         Balance::from(3)
     );
     assert_eq!(client2.balance, Balance::from(3));

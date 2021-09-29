@@ -31,8 +31,9 @@ impl AccountState {
             balance: self.balance,
             next_sequence_number: self.next_sequence_number,
             pending: self.pending.clone(),
+            count_received_certificates: self.received_log.len(),
             queried_certificate: None,
-            queried_received_requests: Vec::new(),
+            queried_received_certificates: Vec::new(),
         }
     }
 
