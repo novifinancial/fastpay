@@ -122,6 +122,7 @@ impl AccountState {
         operation: &Operation,
         certificate: Certificate,
     ) -> Result<(), FastPayError> {
+        assert_eq!(&certificate.value.confirm_request().unwrap().operation, operation);
         match operation {
             Operation::OpenAccount { .. } => (),
             Operation::ChangeOwner { new_owner } => {
