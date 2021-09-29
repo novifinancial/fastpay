@@ -299,7 +299,7 @@ where
                     }
                 }
             }
-            Err(FastPayError::ErrorWhileRequestingCertificate)
+            Err(FastPayError::ClientErrorWhileRequestingCertificate)
         })
     }
 }
@@ -464,7 +464,7 @@ where
                         let certificate = handle
                             .query(value)
                             .await
-                            .map_err(|_| FastPayError::ErrorWhileRequestingCertificate)??;
+                            .map_err(|_| FastPayError::ClientErrorWhileRequestingCertificate)??;
                         missing_certificates.push(certificate);
                         number = value.try_sub_one();
                     }
@@ -487,13 +487,13 @@ where
                             }) => {
                                 fp_ensure!(
                                     vote.authority == name,
-                                    FastPayError::ErrorWhileProcessingRequestOrder
+                                    FastPayError::ClientErrorWhileProcessingRequestOrder
                                 );
                                 vote.check(committee)?;
                                 return Ok(Some(vote));
                             }
                             Err(err) => return Err(err),
-                            _ => return Err(FastPayError::ErrorWhileProcessingRequestOrder),
+                            _ => return Err(FastPayError::ClientErrorWhileProcessingRequestOrder),
                         }
                     }
                     Ok(None)
@@ -591,14 +591,14 @@ where
                         let request = certificate
                             .value
                             .confirm_request()
-                            .ok_or(FastPayError::ErrorWhileRequestingCertificate)?;
+                            .ok_or(FastPayError::ClientErrorWhileRequestingCertificate)?;
                         let recipient = request
                             .operation
                             .recipient()
-                            .ok_or(FastPayError::ErrorWhileRequestingCertificate)?;
+                            .ok_or(FastPayError::ClientErrorWhileRequestingCertificate)?;
                         fp_ensure!(
                             recipient == account_id,
-                            FastPayError::ErrorWhileRequestingCertificate
+                            FastPayError::ClientErrorWhileRequestingCertificate
                         );
                     }
                     Ok((name, response))
@@ -832,16 +832,16 @@ where
                     let vector = client.handle_coin_creation_order(order).await?;
                     fp_ensure!(
                         vector.len() == coin_num,
-                        FastPayError::ErrorWhileProcessingRequestOrder // TODO
+                        FastPayError::ClientErrorWhileProcessingCoinCreationOrder
                     );
                     for (i, vote) in vector.iter().enumerate() {
                         fp_ensure!(
                             vote.authority == name,
-                            FastPayError::ErrorWhileProcessingRequestOrder
+                            FastPayError::ClientErrorWhileProcessingCoinCreationOrder
                         );
                         fp_ensure!(
                             matches!(&vote.value, Value::Coin(coin) if coin == &targets[i]),
-                            FastPayError::ErrorWhileProcessingRequestOrder
+                            FastPayError::ClientErrorWhileProcessingCoinCreationOrder
                         );
                         vote.check(&committee)?;
                     }

@@ -48,7 +48,7 @@ pub struct FastPaySmartContractState {
     /// Primary coins in the smart contract.
     total_balance: Amount,
     /// The latest transaction index included in the blockchain.
-    pub last_transaction_index: VersionNumber,
+    pub last_transaction_index: SequenceNumber,
     /// Transactions included in the blockchain.
     pub blockchain: Vec<FundingTransaction>,
 }
@@ -143,7 +143,7 @@ impl FastPaySmartContractState {
         FastPaySmartContractState {
             committee,
             total_balance: Amount::zero(),
-            last_transaction_index: VersionNumber::new(),
+            last_transaction_index: SequenceNumber::new(),
             blockchain: Vec::new(),
             accounts: BTreeMap::new(),
         }

@@ -28,11 +28,11 @@ pub struct Amount(u64);
     Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Default, Debug, Serialize, Deserialize,
 )]
 pub struct Balance(i128);
+
+/// A sequence number to identify commands issued by an account.
 #[derive(
     Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Default, Debug, Serialize, Deserialize,
 )]
-
-/// A sequence number to identify commands issued by an account.
 pub struct SequenceNumber(u64);
 
 /// Optional user message attached to a transfer.
@@ -56,9 +56,6 @@ pub struct HashValue(generic_array::GenericArray<u8, <sha2::Sha512 as sha2::Dige
 
 /// Alias for shard identifiers.
 pub type ShardId = u32;
-
-/// Alias for transaction numbers.
-pub type VersionNumber = SequenceNumber;
 
 /// Alias for addresses on the primary blockchain.
 pub type PrimaryAddress = PublicKeyBytes;
@@ -380,6 +377,12 @@ impl Balance {
 }
 
 impl std::fmt::Display for Balance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for SequenceNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }

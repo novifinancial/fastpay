@@ -15,7 +15,7 @@ use std::collections::HashSet;
 pub struct PrimarySynchronizationOrder {
     pub recipient: AccountId,
     pub amount: Amount,
-    pub transaction_index: VersionNumber,
+    pub transaction_index: SequenceNumber,
 }
 
 /// A recipient's address in FastPay or on the primary chain.
