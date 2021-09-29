@@ -12,7 +12,7 @@ fn test_handle_request_order_bad_signature() {
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
     let request_order =
-        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+        make_transfer_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
     let unknown_key_pair = KeyPair::generate();
     let mut bad_signature_request_order = request_order.clone();
     bad_signature_request_order.signature = Signature::new(&request_order.value, &unknown_key_pair);
@@ -37,7 +37,7 @@ fn test_handle_request_order_zero_amount() {
     ]);
     // test request non-positive amount
     let zero_amount_request_order =
-        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::zero());
+        make_transfer_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::zero());
     assert!(state
         .handle_request_order(zero_amount_request_order)
         .is_err());
@@ -58,7 +58,7 @@ fn test_handle_request_order_unknown_sender() {
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
     let request_order =
-        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+        make_transfer_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
     let unknown_key = KeyPair::generate();
 
     let unknown_sender_request_order =
@@ -83,7 +83,7 @@ fn test_handle_request_order_bad_sequence_number() {
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
     let request_order =
-        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+        make_transfer_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
     let mut sequence_number_state = state;
     let sequence_number_state_sender_account = sequence_number_state
@@ -113,7 +113,7 @@ fn test_handle_request_order_exceed_balance() {
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let request_order = init_request_order(
+    let request_order = make_transfer_request_order(
         dbg_account(1),
         &sender_key_pair,
         recipient,
@@ -137,7 +137,7 @@ fn test_handle_request_order_ok() {
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
     let request_order =
-        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+        make_transfer_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
     let account_info = state.handle_request_order(request_order).unwrap();
     let pending = state
@@ -159,7 +159,7 @@ fn test_handle_request_order_double_spend() {
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
     let request_order =
-        init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
+        make_transfer_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
 
     let vote = state.handle_request_order(request_order.clone()).unwrap();
     let double_spend_vote = state.handle_request_order(request_order).unwrap();
@@ -170,7 +170,7 @@ fn test_handle_request_order_double_spend() {
 fn test_handle_confirmation_order_unknown_sender() {
     let sender_key_pair = KeyPair::generate();
     let mut state = init_state_with_accounts(vec![(dbg_account(2), dbg_addr(2), Balance::from(0))]);
-    let certificate = init_certificate(
+    let certificate = make_transfer_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -207,7 +207,7 @@ fn test_handle_confirmation_order_bad_sequence_number() {
         old_seq_num = old_account.next_sequence_number;
     }
 
-    let certificate = init_certificate(
+    let certificate = make_transfer_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -232,7 +232,7 @@ fn test_handle_confirmation_order_exceed_balance() {
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
 
-    let certificate = init_certificate(
+    let certificate = make_transfer_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -257,7 +257,7 @@ fn test_handle_confirmation_order_receiver_balance_overflow() {
         (dbg_account(2), dbg_addr(2), Balance::max()),
     ]);
 
-    let certificate = init_certificate(
+    let certificate = make_transfer_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -284,7 +284,7 @@ fn test_handle_confirmation_order_receiver_equal_sender() {
     let name = key_pair.public();
     let mut state = init_state_with_account(dbg_account(1), name, Balance::from(1));
 
-    let certificate = init_certificate(
+    let certificate = make_transfer_certificate(
         dbg_account(1),
         &key_pair,
         Address::FastPay(dbg_account(1)),
@@ -305,7 +305,7 @@ fn test_update_recipient_account() {
     let sender_key_pair = KeyPair::generate();
     // Sender has no account on this shard.
     let mut state = init_state_with_accounts(vec![(dbg_account(2), dbg_addr(2), Balance::from(1))]);
-    let certificate = init_certificate(
+    let certificate = make_transfer_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -334,7 +334,7 @@ fn test_handle_confirmation_order_ok() {
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
-    let certificate = init_certificate(
+    let certificate = make_transfer_certificate(
         dbg_account(1),
         &sender_key_pair,
         Address::FastPay(dbg_account(2)),
@@ -508,7 +508,7 @@ fn init_state_with_account(id: AccountId, owner: AccountOwner, balance: Balance)
 }
 
 #[cfg(test)]
-fn init_request_order(
+fn make_transfer_request_order(
     account_id: AccountId,
     secret: &KeyPair,
     recipient: Address,
@@ -527,14 +527,14 @@ fn init_request_order(
 }
 
 #[cfg(test)]
-fn init_certificate(
+fn make_transfer_certificate(
     account_id: AccountId,
     key_pair: &KeyPair,
     recipient: Address,
     amount: Amount,
     state: &AuthorityState,
 ) -> Certificate {
-    let request = init_request_order(account_id, key_pair, recipient, amount)
+    let request = make_transfer_request_order(account_id, key_pair, recipient, amount)
         .value
         .request;
     let value = Value::Confirm(request);
