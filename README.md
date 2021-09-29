@@ -55,10 +55,19 @@ ACCOUNT2="`tail -n -1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 ./client --committee committee.json --accounts accounts.json benchmark
 
 # Create derived account
-./client --committee committee.json --accounts accounts.json open_account --from "$ACCOUNT1"
+ACCOUNT3="`./client --committee committee.json --accounts accounts.json open_account --from "$ACCOUNT1"`"
 
-# Inspect state of first account
-fgrep "$ACCOUNT1" accounts.json
+# Create coins into the derived account
+./client --committee committee.json --accounts accounts.json spend_and_create_coins --from "$ACCOUNT2" --to-coins "$ACCOUNT3:55" "$ACCOUNT3:55"
+
+# Inspect state of derived account
+fgrep '"account_id"':"$ACCOUNT3" accounts.json
+
+# Spend and transfer all the coins back to the first account
+./client --committee committee.json --accounts accounts.json spend_and_transfer --from "$ACCOUNT3" --to "$ACCOUNT1"
+
+# Query the balance of the first account
+./client --committee committee.json --accounts accounts.json query_balance "$ACCOUNT1"
 
 # Kill servers
 kill %1 %2 %3 %4 %5 %6 %7 %8 %9 %10 %11 %12 %13 %14 %15 %16
