@@ -548,7 +548,7 @@ fn make_transfer_certificate(
 
 #[cfg(test)]
 fn init_primary_synchronization_order(recipient: AccountId) -> PrimarySynchronizationOrder {
-    let mut transaction_index = VersionNumber::new();
+    let mut transaction_index = SequenceNumber::new();
     transaction_index.try_add_assign_one().unwrap();
     PrimarySynchronizationOrder {
         recipient,

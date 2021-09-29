@@ -14,7 +14,7 @@ fn test_handle_funding_transaction_zero_amount() {
         .handle_funding_transaction(funding_transaction)
         .is_err());
     assert_eq!(contract_state.total_balance, Amount::zero());
-    assert_eq!(contract_state.last_transaction_index, VersionNumber::new());
+    assert_eq!(contract_state.last_transaction_index, SequenceNumber::new());
     assert!(contract_state.blockchain.is_empty());
     assert!(contract_state.accounts.is_empty());
 }
@@ -31,7 +31,7 @@ fn test_handle_funding_transaction_ok() {
         contract_state.total_balance,
         funding_transaction.primary_coins
     );
-    let mut updated_last_transaction_index = VersionNumber::new();
+    let mut updated_last_transaction_index = SequenceNumber::new();
     updated_last_transaction_index.try_add_assign_one().unwrap();
     assert_eq!(
         contract_state.last_transaction_index,

@@ -106,84 +106,86 @@ CrossShardRequest:
 FastPayError:
   ENUM:
     0:
-      InvalidOwner: UNIT
-    1:
-      InvalidSignature:
-        STRUCT:
-          - error: STR
-          - type_name: STR
-    2:
-      UnknownSigner: UNIT
-    3:
-      CertificateRequiresQuorum: UNIT
-    4:
-      IncorrectTransferAmount: UNIT
-    5:
-      UnexpectedSequenceNumber: UNIT
-    6:
-      InsufficientFunding:
-        STRUCT:
-          - current_balance:
-              TYPENAME: Balance
-    7:
-      InvalidNewAccountId:
+      InactiveAccount:
         NEWTYPE:
           TYPENAME: AccountId
-    8:
+    1:
+      InvalidOwner: UNIT
+    2:
+      UnexpectedSequenceNumber: UNIT
+    3:
+      InvalidSequenceNumber: UNIT
+    4:
       PreviousRequestMustBeConfirmedFirst:
         STRUCT:
           - pending:
               TYPENAME: Value
-    9:
-      ErrorWhileProcessingRequestOrder: UNIT
-    10:
-      ErrorWhileRequestingCertificate: UNIT
-    11:
+    5:
       MissingEarlierConfirmations:
         STRUCT:
           - current_sequence_number:
               TYPENAME: SequenceNumber
-    12:
+    6:
       UnexpectedTransactionIndex: UNIT
+    7:
+      SequenceOverflow: UNIT
+    8:
+      SequenceUnderflow: UNIT
+    9:
+      AmountOverflow: UNIT
+    10:
+      AmountUnderflow: UNIT
+    11:
+      BalanceOverflow: UNIT
+    12:
+      BalanceUnderflow: UNIT
     13:
-      CertificateNotFound: UNIT
+      InvalidSignature:
+        STRUCT:
+          - error: STR
+          - type_name: STR
     14:
-      InactiveAccount:
+      UnknownSigner: UNIT
+    15:
+      CertificateRequiresQuorum: UNIT
+    16:
+      CertificateAuthorityReuse: UNIT
+    17:
+      IncorrectTransferAmount: UNIT
+    18:
+      InsufficientFunding:
+        STRUCT:
+          - current_balance:
+              TYPENAME: Balance
+    19:
+      InvalidNewAccountId:
         NEWTYPE:
           TYPENAME: AccountId
-    15:
-      CertificateAuthorityReuse: UNIT
-    16:
-      InvalidSequenceNumber: UNIT
-    17:
-      SequenceOverflow: UNIT
-    18:
-      SequenceUnderflow: UNIT
-    19:
-      AmountOverflow: UNIT
     20:
-      AmountUnderflow: UNIT
-    21:
-      BalanceOverflow: UNIT
-    22:
-      BalanceUnderflow: UNIT
-    23:
-      WrongShard: UNIT
-    24:
-      InvalidCrossShardRequest: UNIT
-    25:
-      InvalidDecoding: UNIT
-    26:
-      UnexpectedMessage: UNIT
-    27:
-      InvalidRequestOrder: UNIT
-    28:
-      InvalidConfirmationOrder: UNIT
-    29:
-      InvalidCoinCreationOrder: UNIT
-    30:
       InvalidCoin: UNIT
+    21:
+      CertificateNotFound: UNIT
+    22:
+      InvalidCrossShardRequest: UNIT
+    23:
+      InvalidRequestOrder: UNIT
+    24:
+      InvalidConfirmationOrder: UNIT
+    25:
+      InvalidCoinCreationOrder: UNIT
+    26:
+      ClientErrorWhileProcessingRequestOrder: UNIT
+    27:
+      ClientErrorWhileProcessingCoinCreationOrder: UNIT
+    28:
+      ClientErrorWhileRequestingCertificate: UNIT
+    29:
+      WrongShard: UNIT
+    30:
+      InvalidDecoding: UNIT
     31:
+      UnexpectedMessage: UNIT
+    32:
       ClientIoError:
         STRUCT:
           - error: STR
