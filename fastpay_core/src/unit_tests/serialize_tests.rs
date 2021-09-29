@@ -54,7 +54,7 @@ fn test_info_query() {
 
 #[test]
 fn test_order() {
-    let sender_key = get_key_pair();
+    let sender_key = KeyPair::generate();
 
     let request = Request {
         account_id: dbg_account(1),
@@ -76,7 +76,7 @@ fn test_order() {
         panic!()
     }
 
-    let sender_key = get_key_pair();
+    let sender_key = KeyPair::generate();
     let request2 = Request {
         account_id: dbg_account(1),
         operation: Operation::Transfer {
@@ -109,7 +109,7 @@ fn test_vote() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let key = get_key_pair();
+    let key = KeyPair::generate();
     let vote = Vote::new(Value::Confirm(request), &key);
 
     let buf = serialize_vote(&vote);
@@ -139,7 +139,7 @@ fn test_cert() {
     };
 
     for _ in 0..3 {
-        let key = get_key_pair();
+        let key = KeyPair::generate();
         let sig = Signature::new(&cert.value, &key);
 
         cert.signatures.push((key.public(), sig));
@@ -158,7 +158,7 @@ fn test_cert() {
 
 #[test]
 fn test_info_response() {
-    let sender_key = get_key_pair();
+    let sender_key = KeyPair::generate();
     let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Transfer {
@@ -168,7 +168,7 @@ fn test_info_response() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let auth_key = get_key_pair();
+    let auth_key = KeyPair::generate();
     let value = Value::Confirm(request);
     let vote = Vote::new(value.clone(), &auth_key);
 
@@ -178,7 +178,7 @@ fn test_info_response() {
     };
 
     for _ in 0..3 {
-        let key = get_key_pair();
+        let key = KeyPair::generate();
         let sig = Signature::new(&cert.value, &key);
 
         cert.signatures.push((key.public(), sig));
@@ -239,7 +239,7 @@ fn test_info_response() {
 
 #[test]
 fn test_time_order() {
-    let sender_key = get_key_pair();
+    let sender_key = KeyPair::generate();
     let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Transfer {
@@ -286,7 +286,7 @@ fn test_time_vote() {
     };
     let value = Value::Confirm(request);
 
-    let key = get_key_pair();
+    let key = KeyPair::generate();
 
     let mut buf = Vec::new();
     let now = Instant::now();
@@ -329,7 +329,7 @@ fn test_time_cert() {
     };
 
     for _ in 0..7 {
-        let key = get_key_pair();
+        let key = KeyPair::generate();
         let sig = Signature::new(&cert.value, &key);
         cert.signatures.push((key.public(), sig));
     }

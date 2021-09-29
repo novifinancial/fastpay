@@ -112,7 +112,7 @@ impl UserAccount {
     }
 
     pub fn make_initial(account_id: AccountId, balance: Balance) -> Self {
-        let key_pair = get_key_pair();
+        let key_pair = KeyPair::generate();
         Self {
             account_id,
             key_pair: Some(key_pair),

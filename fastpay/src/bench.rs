@@ -102,7 +102,7 @@ impl ClientServerBenchmark {
         info!("Preparing accounts.");
         let mut keys = Vec::new();
         for _ in 0..self.committee_size {
-            keys.push(get_key_pair());
+            keys.push(KeyPair::generate());
         }
         let committee = Committee {
             voting_rights: keys.iter().map(|k| (k.public(), 1)).collect(),
@@ -129,7 +129,7 @@ impl ClientServerBenchmark {
         for i in 0..self.num_accounts {
             // Create user account.
             let id = AccountId::new(vec![(i as u64).into()]);
-            let key_pair = get_key_pair();
+            let key_pair = KeyPair::generate();
             let owner = key_pair.public();
             let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
             assert!(states[shard].in_shard(&id));

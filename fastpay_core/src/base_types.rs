@@ -17,10 +17,13 @@ use crate::error::FastPayError;
 #[path = "unit_tests/base_types_tests.rs"]
 mod base_types_tests;
 
+/// A non-negative amount of money.
 #[derive(
     Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Default, Debug, Serialize, Deserialize,
 )]
 pub struct Amount(u64);
+
+/// The balance of an account (can go negative temporarily).
 #[derive(
     Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Default, Debug, Serialize, Deserialize,
 )]
@@ -28,35 +31,43 @@ pub struct Balance(i128);
 #[derive(
     Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Default, Debug, Serialize, Deserialize,
 )]
+
+/// A sequence number to identify commands issued by an account.
 pub struct SequenceNumber(u64);
 
-pub type ShardId = u32;
-pub type VersionNumber = SequenceNumber;
-
+/// Optional user message attached to a transfer.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Default, Debug, Serialize, Deserialize)]
 pub struct UserData(pub Option<[u8; 32]>);
 
-// TODO: Make sure secrets are not copyable and movable to control where they are in memory
+/// A signature key-pair.
 pub struct KeyPair(dalek::Keypair);
 
+/// A signature public key.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash)]
 pub struct PublicKeyBytes(pub [u8; dalek::PUBLIC_KEY_LENGTH]);
 
+/// The unique identifier (UID) of an account.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Serialize, Deserialize)]
 pub struct AccountId(Vec<SequenceNumber>);
 
+/// A Sha512 value.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Hash, Serialize, Deserialize)]
 pub struct HashValue(generic_array::GenericArray<u8, <sha2::Sha512 as sha2::Digest>::OutputSize>);
 
-pub type PrimaryAddress = PublicKeyBytes;
-pub type AuthorityName = PublicKeyBytes;
-pub type AccountOwner = PublicKeyBytes;
+/// Alias for shard identifiers.
+pub type ShardId = u32;
 
-pub fn get_key_pair() -> KeyPair {
-    let mut csprng = OsRng;
-    let keypair = dalek::Keypair::generate(&mut csprng);
-    KeyPair(keypair)
-}
+/// Alias for transaction numbers.
+pub type VersionNumber = SequenceNumber;
+
+/// Alias for addresses on the primary blockchain.
+pub type PrimaryAddress = PublicKeyBytes;
+
+/// Alias for the identity of an authority.
+pub type AuthorityName = PublicKeyBytes;
+
+/// Alias for the authentication method of an account.
+pub type AccountOwner = PublicKeyBytes;
 
 #[cfg(test)]
 pub fn dbg_account(name: u8) -> AccountId {
@@ -69,10 +80,19 @@ pub fn dbg_addr(name: u8) -> PublicKeyBytes {
     PublicKeyBytes(addr)
 }
 
+/// A signature value.
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub struct Signature(dalek::Signature);
 
 impl KeyPair {
+    /// Generate a new key-pair.
+    pub fn generate() -> Self {
+        let mut csprng = OsRng;
+        let keypair = dalek::Keypair::generate(&mut csprng);
+        KeyPair(keypair)
+    }
+
+    /// Obtain the public key of a key-pair.
     pub fn public(&self) -> PublicKeyBytes {
         PublicKeyBytes(self.0.public.to_bytes())
     }
@@ -269,50 +289,93 @@ impl AccountId {
 }
 
 impl Amount {
+    #[inline]
     pub fn zero() -> Self {
         Amount(0)
     }
 
+    #[inline]
     pub fn try_add(self, other: Self) -> Result<Self, FastPayError> {
-        let val = self.0.checked_add(other.0);
-        match val {
-            None => Err(FastPayError::AmountOverflow),
-            Some(val) => Ok(Self(val)),
-        }
+        let val = self
+            .0
+            .checked_add(other.0)
+            .ok_or(FastPayError::AmountOverflow)?;
+        Ok(Self(val))
     }
 
+    #[inline]
     pub fn try_sub(self, other: Self) -> Result<Self, FastPayError> {
-        let val = self.0.checked_sub(other.0);
-        match val {
-            None => Err(FastPayError::AmountUnderflow),
-            Some(val) => Ok(Self(val)),
-        }
+        let val = self
+            .0
+            .checked_sub(other.0)
+            .ok_or(FastPayError::AmountUnderflow)?;
+        Ok(Self(val))
+    }
+
+    #[inline]
+    pub fn try_add_assign(&mut self, other: Self) -> Result<(), FastPayError> {
+        self.0 = self
+            .0
+            .checked_add(other.0)
+            .ok_or(FastPayError::AmountOverflow)?;
+        Ok(())
+    }
+
+    #[inline]
+    pub fn try_sub_assign(&mut self, other: Self) -> Result<(), FastPayError> {
+        self.0 = self
+            .0
+            .checked_sub(other.0)
+            .ok_or(FastPayError::AmountUnderflow)?;
+        Ok(())
     }
 }
 
 impl Balance {
+    #[inline]
     pub fn zero() -> Self {
         Balance(0)
     }
 
+    #[inline]
     pub fn max() -> Self {
         Balance(std::i128::MAX)
     }
 
-    pub fn try_add(&self, other: Self) -> Result<Self, FastPayError> {
-        let val = self.0.checked_add(other.0);
-        match val {
-            None => Err(FastPayError::BalanceOverflow),
-            Some(val) => Ok(Self(val)),
-        }
+    #[inline]
+    pub fn try_add(self, other: Self) -> Result<Self, FastPayError> {
+        let val = self
+            .0
+            .checked_add(other.0)
+            .ok_or(FastPayError::BalanceOverflow)?;
+        Ok(Self(val))
     }
 
-    pub fn try_sub(&self, other: Self) -> Result<Self, FastPayError> {
-        let val = self.0.checked_sub(other.0);
-        match val {
-            None => Err(FastPayError::BalanceUnderflow),
-            Some(val) => Ok(Self(val)),
-        }
+    #[inline]
+    pub fn try_sub(self, other: Self) -> Result<Self, FastPayError> {
+        let val = self
+            .0
+            .checked_sub(other.0)
+            .ok_or(FastPayError::BalanceUnderflow)?;
+        Ok(Self(val))
+    }
+
+    #[inline]
+    pub fn try_add_assign(&mut self, other: Self) -> Result<(), FastPayError> {
+        self.0 = self
+            .0
+            .checked_add(other.0)
+            .ok_or(FastPayError::BalanceOverflow)?;
+        Ok(())
+    }
+
+    #[inline]
+    pub fn try_sub_assign(&mut self, other: Self) -> Result<(), FastPayError> {
+        self.0 = self
+            .0
+            .checked_sub(other.0)
+            .ok_or(FastPayError::BalanceUnderflow)?;
+        Ok(())
     }
 }
 
@@ -365,28 +428,50 @@ impl TryFrom<Balance> for Amount {
 }
 
 impl SequenceNumber {
+    #[inline]
     pub fn new() -> Self {
         SequenceNumber(0)
     }
 
+    #[inline]
     pub fn max() -> Self {
         SequenceNumber(0x7fff_ffff_ffff_ffff)
     }
 
-    pub fn increment(self) -> Result<SequenceNumber, FastPayError> {
-        let val = self.0.checked_add(1);
-        match val {
-            None => Err(FastPayError::SequenceOverflow),
-            Some(val) => Ok(Self(val)),
-        }
+    #[inline]
+    pub fn try_add_one(self) -> Result<SequenceNumber, FastPayError> {
+        let val = self
+            .0
+            .checked_add(1)
+            .ok_or(FastPayError::SequenceOverflow)?;
+        Ok(Self(val))
     }
 
-    pub fn decrement(self) -> Result<SequenceNumber, FastPayError> {
-        let val = self.0.checked_sub(1);
-        match val {
-            None => Err(FastPayError::SequenceUnderflow),
-            Some(val) => Ok(Self(val)),
-        }
+    #[inline]
+    pub fn try_sub_one(self) -> Result<SequenceNumber, FastPayError> {
+        let val = self
+            .0
+            .checked_sub(1)
+            .ok_or(FastPayError::SequenceUnderflow)?;
+        Ok(Self(val))
+    }
+
+    #[inline]
+    pub fn try_add_assign_one(&mut self) -> Result<(), FastPayError> {
+        self.0 = self
+            .0
+            .checked_add(1)
+            .ok_or(FastPayError::SequenceOverflow)?;
+        Ok(())
+    }
+
+    #[inline]
+    pub fn try_sub_assign_one(&mut self) -> Result<(), FastPayError> {
+        self.0 = self
+            .0
+            .checked_sub(1)
+            .ok_or(FastPayError::SequenceUnderflow)?;
+        Ok(())
     }
 }
 

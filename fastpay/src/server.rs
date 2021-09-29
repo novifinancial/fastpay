@@ -210,7 +210,7 @@ fn main() {
             port,
             shards,
         } => {
-            let key = get_key_pair();
+            let key = KeyPair::generate();
             let name = key.public();
             let authority = AuthorityConfig {
                 network_protocol: protocol,

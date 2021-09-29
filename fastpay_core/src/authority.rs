@@ -191,7 +191,7 @@ impl Authority for AuthorityState {
         // Execute the sender's side of the operation.
         sender_account.apply_operation_as_sender(&request.operation, certificate.clone())?;
         // Advance to next sequence number.
-        sender_account.next_sequence_number = sender_account.next_sequence_number.increment()?;
+        sender_account.next_sequence_number.try_add_assign_one()?;
         sender_account.pending = None;
         // Final touch on the sender's account.
         let info = sender_account.make_account_info(sender.clone());
@@ -267,7 +267,7 @@ impl Authority for AuthorityState {
                         FastPayError::InvalidCoinCreationOrder
                     );
                     // Update source amount.
-                    source_amount = source_amount.try_add(*account_balance)?;
+                    source_amount.try_add_assign(*account_balance)?;
                 }
                 _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
             }
@@ -287,7 +287,7 @@ impl Authority for AuthorityState {
                         // Seeds must be distinct.
                         fp_ensure!(!seeds.contains(seed), FastPayError::InvalidCoin);
                         // Update source amount and seeds.
-                        source_amount = source_amount.try_add(*amount)?;
+                        source_amount.try_add_assign(*amount)?;
                         seeds.insert(*seed);
                     }
                     _ => fp_bail!(FastPayError::InvalidCoin),
@@ -297,7 +297,7 @@ impl Authority for AuthorityState {
         // Verify target amount.
         let mut target_amount = Amount::default();
         for coin in &targets {
-            target_amount = target_amount.try_add(coin.amount)?;
+            target_amount.try_add_assign(coin.amount)?;
         }
         fp_ensure!(
             target_amount <= source_amount,
@@ -340,11 +340,11 @@ impl Authority for AuthorityState {
             return Ok(recipient_account.make_account_info(recipient));
         }
         fp_ensure!(
-            order.transaction_index == self.last_transaction_index.increment()?,
+            order.transaction_index == self.last_transaction_index.try_add_one()?,
             FastPayError::UnexpectedTransactionIndex
         );
         let recipient_balance = recipient_account.balance.try_add(order.amount.into())?;
-        let last_transaction_index = self.last_transaction_index.increment()?;
+        let last_transaction_index = self.last_transaction_index.try_add_one()?;
         recipient_account.balance = recipient_balance;
         recipient_account.synchronization_log.push(order);
         self.last_transaction_index = last_transaction_index;

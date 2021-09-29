@@ -86,7 +86,7 @@ impl AccountState {
                 for coin in assets {
                     match &coin.value {
                         Value::Coin(coin) if coin.account_id == request.account_id => {
-                            amount = amount.try_sub(coin.amount)?;
+                            amount.try_sub_assign(coin.amount)?;
                         }
                         _ => fp_bail!(FastPayError::InvalidCoin),
                     }
@@ -131,7 +131,7 @@ impl AccountState {
                 self.owner = None;
             }
             Operation::Transfer { amount, .. } => {
-                self.balance = self.balance.try_sub((*amount).into())?;
+                self.balance.try_sub_assign((*amount).into())?;
             }
             Operation::Spend { .. } => {
                 // impossible under BFT assumptions.
