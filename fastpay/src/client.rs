@@ -163,7 +163,7 @@ impl ClientContext {
                 sequence_number: account.next_sequence_number,
             };
             debug!("Preparing request order: {:?}", request);
-            account.next_sequence_number = account.next_sequence_number.increment().unwrap();
+            account.next_sequence_number.try_add_assign_one().unwrap();
             let order = RequestOrder::new(request.clone().into(), key_pair, Vec::new());
             orders.push(order.clone());
             let serialized_order = serialize_request_order(&order);
@@ -544,7 +544,7 @@ fn main() {
                 let (new_owner, key_pair) = match owner {
                     Some(key) => (key, None),
                     None => {
-                        let key_pair = get_key_pair();
+                        let key_pair = KeyPair::generate();
                         (key_pair.public(), Some(key_pair))
                     }
                 };

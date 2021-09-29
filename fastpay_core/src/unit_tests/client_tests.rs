@@ -76,7 +76,7 @@ fn init_local_authorities(
     let mut key_pairs = Vec::new();
     let mut voting_rights = BTreeMap::new();
     for _ in 0..count {
-        let key_pair = get_key_pair();
+        let key_pair = KeyPair::generate();
         voting_rights.insert(key_pair.public(), 1);
         key_pairs.push(key_pair);
     }
@@ -97,11 +97,11 @@ fn init_local_authorities_bad_1(
     let mut key_pairs = Vec::new();
     let mut voting_rights = BTreeMap::new();
     for i in 0..count {
-        let key_pair = get_key_pair();
+        let key_pair = KeyPair::generate();
         voting_rights.insert(key_pair.public(), 1);
         if i + 1 < (count + 2) / 3 {
             // init 1 authority with a bad keypair
-            key_pairs.push(get_key_pair());
+            key_pairs.push(KeyPair::generate());
         } else {
             key_pairs.push(key_pair);
         }
@@ -122,7 +122,7 @@ fn make_client(
     authority_clients: HashMap<AuthorityName, LocalAuthorityClient>,
     committee: Committee,
 ) -> AccountClientState<LocalAuthorityClient> {
-    let key_pair = get_key_pair();
+    let key_pair = KeyPair::generate();
     AccountClientState::new(
         account_id,
         Some(key_pair),
@@ -247,7 +247,7 @@ fn test_rotate_key_pair() {
     let mut rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
-    let new_key_pair = get_key_pair();
+    let new_key_pair = KeyPair::generate();
     let new_pubk = new_key_pair.public();
     let certificate = rt.block_on(sender.rotate_key_pair(new_key_pair)).unwrap();
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
@@ -276,7 +276,7 @@ fn test_transfer_ownership() {
     let mut rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
-    let new_key_pair = get_key_pair();
+    let new_key_pair = KeyPair::generate();
     let new_pubk = new_key_pair.public();
     let certificate = rt.block_on(sender.transfer_ownership(new_pubk)).unwrap();
     assert_eq!(sender.next_sequence_number, SequenceNumber::from(1));
@@ -451,7 +451,7 @@ fn test_open_account() {
     let mut rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
-    let new_key_pair = get_key_pair();
+    let new_key_pair = KeyPair::generate();
     let new_pubk = new_key_pair.public();
     let new_id = AccountId::new(vec![SequenceNumber::from(1), SequenceNumber::from(1)]);
     // Transfer before creating the account.

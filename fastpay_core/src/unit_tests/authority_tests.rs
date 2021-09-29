@@ -5,7 +5,7 @@ use super::*;
 
 #[test]
 fn test_handle_request_order_bad_signature() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
@@ -13,7 +13,7 @@ fn test_handle_request_order_bad_signature() {
     ]);
     let request_order =
         init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
-    let unknown_key_pair = get_key_pair();
+    let unknown_key_pair = KeyPair::generate();
     let mut bad_signature_request_order = request_order.clone();
     bad_signature_request_order.signature = Signature::new(&request_order.value, &unknown_key_pair);
     assert!(state
@@ -29,7 +29,7 @@ fn test_handle_request_order_bad_signature() {
 
 #[test]
 fn test_handle_request_order_zero_amount() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
@@ -51,7 +51,7 @@ fn test_handle_request_order_zero_amount() {
 
 #[test]
 fn test_handle_request_order_unknown_sender() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
@@ -59,7 +59,7 @@ fn test_handle_request_order_unknown_sender() {
     ]);
     let request_order =
         init_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
-    let unknown_key = get_key_pair();
+    let unknown_key = KeyPair::generate();
 
     let unknown_sender_request_order =
         RequestOrder::new(request_order.value, &unknown_key, Vec::new());
@@ -76,7 +76,7 @@ fn test_handle_request_order_unknown_sender() {
 
 #[test]
 fn test_handle_request_order_bad_sequence_number() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let recipient = Address::FastPay(dbg_account(2));
     let state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
@@ -90,11 +90,10 @@ fn test_handle_request_order_bad_sequence_number() {
         .accounts
         .get_mut(&dbg_account(1))
         .unwrap();
-    sequence_number_state_sender_account.next_sequence_number =
-        sequence_number_state_sender_account
-            .next_sequence_number
-            .increment()
-            .unwrap();
+    sequence_number_state_sender_account
+        .next_sequence_number
+        .try_add_assign_one()
+        .unwrap();
     assert!(sequence_number_state
         .handle_request_order(request_order)
         .is_err());
@@ -108,7 +107,7 @@ fn test_handle_request_order_bad_sequence_number() {
 
 #[test]
 fn test_handle_request_order_exceed_balance() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
@@ -131,7 +130,7 @@ fn test_handle_request_order_exceed_balance() {
 
 #[test]
 fn test_handle_request_order_ok() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
@@ -153,7 +152,7 @@ fn test_handle_request_order_ok() {
 
 #[test]
 fn test_handle_request_order_double_spend() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let recipient = Address::FastPay(dbg_account(2));
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
@@ -169,7 +168,7 @@ fn test_handle_request_order_double_spend() {
 
 #[test]
 fn test_handle_confirmation_order_unknown_sender() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let mut state = init_state_with_accounts(vec![(dbg_account(2), dbg_addr(2), Balance::from(0))]);
     let certificate = init_certificate(
         dbg_account(1),
@@ -188,13 +187,16 @@ fn test_handle_confirmation_order_unknown_sender() {
 
 #[test]
 fn test_handle_confirmation_order_bad_sequence_number() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
     ]);
     let sender_account = state.accounts.get_mut(&dbg_account(1)).unwrap();
-    sender_account.next_sequence_number = sender_account.next_sequence_number.increment().unwrap();
+    sender_account
+        .next_sequence_number
+        .try_add_assign_one()
+        .unwrap();
     // let old_account = sender_account;
 
     let old_balance;
@@ -224,7 +226,7 @@ fn test_handle_confirmation_order_bad_sequence_number() {
 
 #[test]
 fn test_handle_confirmation_order_exceed_balance() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
@@ -249,7 +251,7 @@ fn test_handle_confirmation_order_exceed_balance() {
 
 #[test]
 fn test_handle_confirmation_order_receiver_balance_overflow() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(1)),
         (dbg_account(2), dbg_addr(2), Balance::max()),
@@ -278,7 +280,7 @@ fn test_handle_confirmation_order_receiver_balance_overflow() {
 
 #[test]
 fn test_handle_confirmation_order_receiver_equal_sender() {
-    let key_pair = get_key_pair();
+    let key_pair = KeyPair::generate();
     let name = key_pair.public();
     let mut state = init_state_with_account(dbg_account(1), name, Balance::from(1));
 
@@ -300,7 +302,7 @@ fn test_handle_confirmation_order_receiver_equal_sender() {
 
 #[test]
 fn test_update_recipient_account() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     // Sender has no account on this shard.
     let mut state = init_state_with_accounts(vec![(dbg_account(2), dbg_addr(2), Balance::from(1))]);
     let certificate = init_certificate(
@@ -327,7 +329,7 @@ fn test_update_recipient_account() {
 
 #[test]
 fn test_handle_confirmation_order_ok() {
-    let sender_key_pair = get_key_pair();
+    let sender_key_pair = KeyPair::generate();
     let mut state = init_state_with_accounts(vec![
         (dbg_account(1), sender_key_pair.public(), Balance::from(5)),
         (dbg_account(2), dbg_addr(2), Balance::from(0)),
@@ -342,10 +344,10 @@ fn test_handle_confirmation_order_ok() {
 
     let old_account = state.accounts.get_mut(&dbg_account(1)).unwrap();
     let mut next_sequence_number = old_account.next_sequence_number;
-    next_sequence_number = next_sequence_number.increment().unwrap();
+    next_sequence_number.try_add_assign_one().unwrap();
     let mut remaining_balance = old_account.balance;
-    remaining_balance = remaining_balance
-        .try_sub(
+    remaining_balance
+        .try_sub_assign(
             certificate
                 .value
                 .confirm_request()
@@ -400,7 +402,7 @@ fn test_handle_confirmation_order_ok() {
 
 #[test]
 fn test_handle_primary_synchronization_order_update() {
-    let owner = get_key_pair().public();
+    let owner = KeyPair::generate().public();
     let account_id = dbg_account(1);
     let mut state = init_state_with_accounts(vec![(account_id.clone(), owner, Balance::from(0))]);
     let mut updated_transaction_index = state.last_transaction_index;
@@ -409,7 +411,7 @@ fn test_handle_primary_synchronization_order_update() {
     assert!(state
         .handle_primary_synchronization_order(order.clone())
         .is_ok());
-    updated_transaction_index = updated_transaction_index.increment().unwrap();
+    updated_transaction_index.try_add_assign_one().unwrap();
     assert_eq!(state.last_transaction_index, updated_transaction_index);
     let account = state.accounts.get(&account_id).unwrap();
     assert_eq!(account.balance, order.amount.into());
@@ -418,7 +420,7 @@ fn test_handle_primary_synchronization_order_update() {
 
 #[test]
 fn test_handle_primary_synchronization_order_double_spend() {
-    let owner = get_key_pair().public();
+    let owner = KeyPair::generate().public();
     let account_id = dbg_account(1);
     let mut state = init_state_with_accounts(vec![(account_id.clone(), owner, Balance::from(0))]);
     let mut updated_transaction_index = state.last_transaction_index;
@@ -427,7 +429,7 @@ fn test_handle_primary_synchronization_order_double_spend() {
     assert!(state
         .handle_primary_synchronization_order(order.clone())
         .is_ok());
-    updated_transaction_index = updated_transaction_index.increment().unwrap();
+    updated_transaction_index.try_add_assign_one().unwrap();
     // Replays are ignored.
     assert!(state
         .handle_primary_synchronization_order(order.clone())
@@ -480,7 +482,7 @@ fn test_get_shards() {
 
 #[cfg(test)]
 fn init_state() -> AuthorityState {
-    let key_pair = get_key_pair();
+    let key_pair = KeyPair::generate();
     let name = key_pair.public();
     let mut authorities = BTreeMap::new();
     authorities.insert(name, /* voting right */ 1);
@@ -547,7 +549,7 @@ fn init_certificate(
 #[cfg(test)]
 fn init_primary_synchronization_order(recipient: AccountId) -> PrimarySynchronizationOrder {
     let mut transaction_index = VersionNumber::new();
-    transaction_index = transaction_index.increment().unwrap();
+    transaction_index.try_add_assign_one().unwrap();
     PrimarySynchronizationOrder {
         recipient,
         amount: Amount::from(5),

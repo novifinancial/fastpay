@@ -7,9 +7,9 @@ use std::collections::BTreeMap;
 #[test]
 fn test_signed_values() {
     let mut authorities = BTreeMap::new();
-    let key1 = get_key_pair();
-    let key2 = get_key_pair();
-    let key3 = get_key_pair();
+    let key1 = KeyPair::generate();
+    let key2 = KeyPair::generate();
+    let key3 = KeyPair::generate();
     let name1 = key1.public();
     let name2 = key2.public();
 
@@ -40,9 +40,9 @@ fn test_signed_values() {
 
 #[test]
 fn test_certificates() {
-    let key1 = get_key_pair();
-    let key2 = get_key_pair();
-    let key3 = get_key_pair();
+    let key1 = KeyPair::generate();
+    let key2 = KeyPair::generate();
+    let key3 = KeyPair::generate();
     let name1 = key1.public();
     let name2 = key2.public();
 

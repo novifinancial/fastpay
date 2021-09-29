@@ -456,7 +456,7 @@ where
                     let current_sequence_number = response.next_sequence_number;
                     // Download each missing certificate in reverse order using the downloader.
                     let mut missing_certificates = Vec::new();
-                    let mut number = target_sequence_number.decrement();
+                    let mut number = target_sequence_number.try_sub_one();
                     while let Ok(value) = number {
                         if value < current_sequence_number {
                             break;
@@ -466,7 +466,7 @@ where
                             .await
                             .map_err(|_| FastPayError::ErrorWhileRequestingCertificate)??;
                         missing_certificates.push(certificate);
-                        number = value.decrement();
+                        number = value.try_sub_one();
                     }
                     // Send all missing confirmation orders.
                     missing_certificates.reverse();
@@ -692,7 +692,7 @@ where
         // Execute operation locally.
         match &request.operation {
             Operation::Transfer { amount, .. } => {
-                self.balance = self.balance.try_sub((*amount).into())?;
+                self.balance.try_sub_assign((*amount).into())?;
             }
             Operation::ChangeOwner { new_owner } => match self.known_key_pairs.entry(*new_owner) {
                 btree_map::Entry::Occupied(kp) => {
@@ -987,7 +987,7 @@ where
                 account_id.clone(),
                 vec![certificate.clone()],
                 CommunicateAction::SynchronizeNextSequenceNumber(
-                    request.sequence_number.increment()?,
+                    request.sequence_number.try_add_one()?,
                 ),
             )
             .await?;
@@ -997,7 +997,7 @@ where
                 .entry(certificate.value.confirm_key().unwrap())
             {
                 if let Some(amount) = request.operation.received_amount() {
-                    self.balance = self.balance.try_add(amount.into())?;
+                    self.balance.try_add_assign(amount.into())?;
                 }
                 entry.insert(certificate);
             }
@@ -1127,8 +1127,8 @@ where
             for coin in &new_coins {
                 ensure!(!seeds.contains(&coin.seed), "Coin seeds must be unique");
                 seeds.insert(coin.seed);
-                amount = amount
-                    .try_sub(coin.amount)
+                amount
+                    .try_sub_assign(coin.amount)
                     .map_err(|_| failure::format_err!("Insufficient balance to create coins"))?;
             }
             let account_balance = Amount::try_from(account_balance)?;
@@ -1154,7 +1154,7 @@ where
                 .value
                 .coin_amount()
                 .ok_or_else(|| failure::format_err!("Client state contains invalid coins"))?;
-            amount = amount.try_add(v)?;
+            amount.try_add_assign(v)?;
         }
         Ok(amount)
     }

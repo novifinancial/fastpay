@@ -80,9 +80,9 @@ impl FastPaySmartContract for FastPaySmartContractState {
             "Transfers must have positive amount",
         );
         // TODO: Make sure that under overflow/underflow we are consistent.
-        self.last_transaction_index = self.last_transaction_index.increment()?;
+        self.last_transaction_index.try_add_assign_one()?;
         self.blockchain.push(transaction);
-        self.total_balance = self.total_balance.try_add(amount)?;
+        self.total_balance.try_add_assign(amount)?;
         Ok(())
     }
 
@@ -124,7 +124,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
             self.total_balance >= amount,
             "The balance on the blockchain cannot be negative",
         );
-        self.total_balance = self.total_balance.try_sub(amount)?;
+        self.total_balance.try_sub_assign(amount)?;
         // Transfer Primary coins to recipient
         Ok(())
     }

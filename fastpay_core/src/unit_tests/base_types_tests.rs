@@ -17,9 +17,9 @@ impl BcsSignable for Bar {}
 
 #[test]
 fn test_signatures() {
-    let key1 = get_key_pair();
+    let key1 = KeyPair::generate();
     let addr1 = key1.public();
-    let key2 = get_key_pair();
+    let key2 = KeyPair::generate();
     let addr2 = key2.public();
 
     let foo = Foo("hello".into());
