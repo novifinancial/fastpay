@@ -24,12 +24,12 @@ fn test_info_query() {
     let query1 = AccountInfoQuery {
         account_id: dbg_account(0x20),
         query_sequence_number: None,
-        query_received_requests_excluding_first_nth: None,
+        query_received_certificates_excluding_first_nth: None,
     };
     let query2 = AccountInfoQuery {
         account_id: dbg_account(0x20),
         query_sequence_number: Some(SequenceNumber::from(129)),
-        query_received_requests_excluding_first_nth: None,
+        query_received_certificates_excluding_first_nth: None,
     };
 
     let buf1 = serialize_info_query(&query1);
@@ -190,35 +190,39 @@ fn test_info_response() {
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending: None,
+        count_received_certificates: 0,
         queried_certificate: None,
-        queried_received_requests: Vec::new(),
+        queried_received_certificates: Vec::new(),
     };
     let resp2 = AccountInfoResponse {
         account_id: dbg_account(0x20),
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
+        count_received_certificates: 0,
         pending: Some(vote.clone()),
         queried_certificate: None,
-        queried_received_requests: Vec::new(),
+        queried_received_certificates: Vec::new(),
     };
     let resp3 = AccountInfoResponse {
         account_id: dbg_account(0x20),
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
+        count_received_certificates: 0,
         pending: None,
         queried_certificate: Some(cert.clone()),
-        queried_received_requests: Vec::new(),
+        queried_received_certificates: Vec::new(),
     };
     let resp4 = AccountInfoResponse {
         account_id: dbg_account(0x20),
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
+        count_received_certificates: 0,
         pending: Some(vote),
         queried_certificate: Some(cert),
-        queried_received_requests: Vec::new(),
+        queried_received_certificates: Vec::new(),
     };
 
     for resp in [resp1, resp2, resp3, resp4].iter() {

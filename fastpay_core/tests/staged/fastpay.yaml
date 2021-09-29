@@ -10,7 +10,7 @@ AccountInfoQuery:
     - query_sequence_number:
         OPTION:
           TYPENAME: SequenceNumber
-    - query_received_requests_excluding_first_nth:
+    - query_received_certificates_excluding_first_nth:
         OPTION: U64
 AccountInfoResponse:
   STRUCT:
@@ -26,10 +26,11 @@ AccountInfoResponse:
     - pending:
         OPTION:
           TYPENAME: Vote
+    - count_received_certificates: U64
     - queried_certificate:
         OPTION:
           TYPENAME: Certificate
-    - queried_received_requests:
+    - queried_received_certificates:
         SEQ:
           TYPENAME: Certificate
 Address:

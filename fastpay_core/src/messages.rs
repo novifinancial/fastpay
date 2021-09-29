@@ -161,7 +161,7 @@ pub struct ConfirmationOrder {
 pub struct AccountInfoQuery {
     pub account_id: AccountId,
     pub query_sequence_number: Option<SequenceNumber>,
-    pub query_received_requests_excluding_first_nth: Option<usize>,
+    pub query_received_certificates_excluding_first_nth: Option<usize>,
 }
 
 /// The response to an `AccountInfoQuery`
@@ -173,8 +173,9 @@ pub struct AccountInfoResponse {
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
     pub pending: Option<Vote>,
+    pub count_received_certificates: usize,
     pub queried_certificate: Option<Certificate>,
-    pub queried_received_requests: Vec<Certificate>,
+    pub queried_received_certificates: Vec<Certificate>,
 }
 
 /// A (trusted) cross-shard request with an authority.

@@ -170,11 +170,12 @@ pub struct AccountClientState<AuthorityClient> {
     /// When no certificate is pending/missing, `sent_certificates` should be of size `next_sequence_number`.
     sent_certificates: Vec<Certificate>,
     /// Known received certificates, indexed by account_id and sequence number.
-    /// TODO: API to search and download yet unknown `received_certificates`.
     received_certificates: BTreeMap<(AccountId, SequenceNumber), Certificate>,
-    /// The known spendable balance (including a possible initial funding, excluding unknown sent
-    /// or received certificates).
+    /// The known spendable balance (including a possible initial funding for testing
+    /// purposes, excluding unknown sent or received certificates).
     balance: Balance,
+    /// Support synchronization of received certificates.
+    received_certificate_trackers: HashMap<AuthorityName, usize>,
 }
 
 impl<A> AccountClientState<A> {
@@ -205,6 +206,7 @@ impl<A> AccountClientState<A> {
                 .into_iter()
                 .filter_map(|cert| Some((cert.value.confirm_key()?, cert)))
                 .collect(),
+            received_certificate_trackers: HashMap::new(),
             balance,
         }
     }
@@ -268,7 +270,7 @@ where
             let query = AccountInfoQuery {
                 account_id: self.account_id.clone(),
                 query_sequence_number: Some(sequence_number),
-                query_received_requests_excluding_first_nth: None,
+                query_received_certificates_excluding_first_nth: None,
             };
             // Sequentially try each authority in random order.
             self.authority_clients.shuffle(&mut rand::thread_rng());
@@ -332,7 +334,7 @@ where
         let query = AccountInfoQuery {
             account_id,
             query_sequence_number: None,
-            query_received_requests_excluding_first_nth: None,
+            query_received_certificates_excluding_first_nth: None,
         };
         let numbers: futures::stream::FuturesUnordered<_> = self
             .authority_clients
@@ -441,7 +443,7 @@ where
                     let query = AccountInfoQuery {
                         account_id,
                         query_sequence_number: None,
-                        query_received_requests_excluding_first_nth: None,
+                        query_received_certificates_excluding_first_nth: None,
                     };
                     let response = client.handle_account_info_query(query).await?;
                     let current_sequence_number = response.next_sequence_number;
@@ -556,6 +558,71 @@ where
                 .await?;
             self.add_sent_certificate(certificate)?;
         }
+        Ok(())
+    }
+
+    /// Attempt to download new received certificates.
+    async fn synchronize_received_certificates(&mut self) -> Result<(), failure::Error> {
+        let account_id = self.account_id.clone();
+        let trackers = self.received_certificate_trackers.clone();
+        let committee = self.committee.clone();
+        let result = self
+            .communicate_with_quorum(|name, client| {
+                let committee = &committee;
+                let account_id = &account_id;
+                let tracker = *trackers.get(&name).unwrap_or(&0);
+                Box::pin(async move {
+                    // Retrieve new received certificates from this authority.
+                    let query = AccountInfoQuery {
+                        account_id: account_id.clone(),
+                        query_sequence_number: None,
+                        query_received_certificates_excluding_first_nth: Some(tracker),
+                    };
+                    let response = client.handle_account_info_query(query).await?;
+                    for certificate in &response.queried_received_certificates {
+                        certificate.check(committee)?;
+                        let request = certificate
+                            .value
+                            .confirm_request()
+                            .ok_or(FastPayError::ErrorWhileRequestingCertificate)?;
+                        let recipient = request
+                            .operation
+                            .recipient()
+                            .ok_or(FastPayError::ErrorWhileRequestingCertificate)?;
+                        fp_ensure!(
+                            recipient == account_id,
+                            FastPayError::ErrorWhileRequestingCertificate
+                        );
+                    }
+                    Ok((name, response))
+                })
+            })
+            .await;
+        match result {
+            Ok(responses) => {
+                for (name, response) in responses {
+                    // Process received certificates.
+                    for certificate in response.queried_received_certificates {
+                        self.receive_from_fastpay(certificate).await.unwrap_or(());
+                    }
+                    // Update tracker.
+                    self.received_certificate_trackers
+                        .insert(name, response.count_received_certificates);
+                }
+            }
+            Err(Some(FastPayError::InactiveAccount(id))) if id == account_id => {
+                // The account is visibly not active (yet or any more) so there is no need
+                // to synchronize received certificates.
+                return Ok(());
+            }
+            Err(Some(err)) => bail!(
+                "Failed to communicate with a quorum of authorities: {}",
+                err
+            ),
+            Err(None) => {
+                bail!("Failed to communicate with a quorum of authorities (multiple errors)")
+            }
+        };
         Ok(())
     }
 
@@ -827,7 +894,7 @@ where
             let query = AccountInfoQuery {
                 account_id: self.account_id.clone(),
                 query_sequence_number: None,
-                query_received_requests_excluding_first_nth: None,
+                query_received_certificates_excluding_first_nth: None,
             };
             let numbers: futures::stream::FuturesUnordered<_> = self
                 .authority_clients
@@ -880,6 +947,7 @@ where
                 }
                 PendingRequest::None => (),
             }
+            self.synchronize_received_certificates().await?;
             self.download_missing_sent_certificates().await?;
             Ok(self.balance)
         })

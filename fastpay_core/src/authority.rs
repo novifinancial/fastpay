@@ -384,8 +384,8 @@ impl Authority for AuthorityState {
                 fp_bail!(FastPayError::CertificateNotFound)
             }
         }
-        if let Some(idx) = query.query_received_requests_excluding_first_nth {
-            response.queried_received_requests = account.received_log[idx..].to_vec();
+        if let Some(idx) = query.query_received_certificates_excluding_first_nth {
+            response.queried_received_certificates = account.received_log[idx..].to_vec();
         }
         Ok(response)
     }
