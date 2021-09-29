@@ -263,7 +263,7 @@ fn test_rotate_key_pair() {
         Balance::from(4)
     );
     assert_eq!(
-        rt.block_on(sender.query_safe_balance()).unwrap(),
+        rt.block_on(sender.synchronize_balance()).unwrap(),
         Balance::from(4)
     );
     // Can still use the account.
@@ -292,7 +292,7 @@ fn test_transfer_ownership() {
         Balance::from(4)
     );
     assert_eq!(
-        rt.block_on(sender.query_safe_balance()).unwrap(),
+        rt.block_on(sender.synchronize_balance()).unwrap(),
         Balance::from(4)
     );
     // Cannot use the account any more.
@@ -415,7 +415,7 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
     }
     assert_eq!(client2.coins.len(), coins.len());
     assert_eq!(
-        rt.block_on(client2.query_safe_balance()).unwrap(),
+        rt.block_on(client2.synchronize_balance()).unwrap(),
         Balance::from(0)
     );
     assert_eq!(client2.get_coins_value().unwrap(), Amount::from(3));
@@ -435,7 +435,7 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
     );
     rt.block_on(client3.receive_from_fastpay(certificate))?;
     assert_eq!(
-        rt.block_on(client3.query_safe_balance()).unwrap(),
+        rt.block_on(client3.synchronize_balance()).unwrap(),
         Balance::from(3)
     );
     Ok(())
@@ -486,7 +486,7 @@ fn test_open_account() {
         Balance::from(3)
     );
     assert_eq!(
-        rt.block_on(client.query_safe_balance()).unwrap(),
+        rt.block_on(client.synchronize_balance()).unwrap(),
         Balance::from(3)
     );
     assert!(rt
@@ -618,7 +618,7 @@ fn test_bidirectional_transfer() {
     assert_eq!(client2.balance, Balance::from(0));
     // Force synchronization of local balance.
     assert_eq!(
-        rt.block_on(client2.query_safe_balance()).unwrap(),
+        rt.block_on(client2.synchronize_balance()).unwrap(),
         Balance::from(3)
     );
     assert_eq!(client2.balance, Balance::from(3));
