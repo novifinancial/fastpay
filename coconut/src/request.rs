@@ -21,6 +21,10 @@ pub struct CoinsRequest {
     pub cms: Vec<G1Projective>,
     /// The blinded output coin values and ids.
     pub cs: Vec<(G1Projective, G1Projective)>,
+    /// Commitments to the input value (used in the ZK proof).
+    pub input_commitments: Vec<G1Projective>,
+    /// Commitments to the output value (used in the ZK proof).
+    pub output_commitments: Vec<G1Projective>,
     /// A ZK-proof asserting correctness of all the other fields and that the sum of the input
     /// coins equals the sum of the output coins.
     proof: RequestCoinsProof,
@@ -64,7 +68,7 @@ impl CoinsRequest {
         #[cfg(test)]
         let rs: Vec<_> = input_attributes.iter().map(|_| Scalar::from(100)).collect();
 
-        // Compute Kappa and Nu for each input credential.
+        // Compute Kappa and Nu for each input coin.
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
         let kappas = input_attributes
@@ -79,7 +83,14 @@ impl CoinsRequest {
             .collect();
 
         // Compute the common commitment Cm for the outputs.
+        #[cfg(not(test))]
         let os = parameters.n_random_scalars(output_attributes.len());
+        #[cfg(test)]
+        let os: Vec<_> = output_attributes
+            .iter()
+            .map(|_| Scalar::from(400))
+            .collect();
+
         let h0 = &parameters.hs[0];
         let h1 = &parameters.hs[1];
         let cms: Vec<_> = output_attributes
@@ -95,7 +106,7 @@ impl CoinsRequest {
             .collect();
 
         // Commit to the output attributes.
-        let cs = output_attributes
+        let cs: Vec<_> = output_attributes
             .iter()
             .zip(blinding_factors.iter())
             .zip(base_hs.iter())
@@ -107,16 +118,41 @@ impl CoinsRequest {
             })
             .collect();
 
+        // Commit to the input coin values to prove that the sum of the inputs equals the sum of the outputs.
+        #[cfg(not(test))]
+        let input_rs = parameters.n_random_scalars(input_attributes.len());
+        #[cfg(test)]
+        let input_rs: Vec<_> = input_attributes.iter().map(|_| Scalar::from(200)).collect();
+
+        #[cfg(not(test))]
+        let output_rs = parameters.n_random_scalars(input_attributes.len());
+        #[cfg(test)]
+        let output_rs: Vec<_> = input_attributes.iter().map(|_| Scalar::from(300)).collect();
+
+        let input_commitments: Vec<_> = input_attributes
+            .iter()
+            .zip(input_rs.iter())
+            .map(|((value, _), r)| parameters.hs[0] * value + parameters.g1 * r)
+            .collect();
+        let output_commitments: Vec<_> = output_attributes
+            .iter()
+            .zip(output_rs.iter())
+            .map(|((value, _), r)| parameters.hs[0] * value + parameters.g1 * r)
+            .collect();
+
         // Compute the ZK proof asserting correctness of the computations above.
         let proof = RequestCoinsProof::new(
             parameters,
-            &input_attributes,
-            &output_attributes,
-            &blinding_factors,
-            &rs,
             &public_key,
             &base_hs,
             &sigmas,
+            &input_attributes,
+            &output_attributes,
+            &blinding_factors,
+            &os,
+            &rs,
+            &input_rs,
+            &output_rs,
         );
 
         Self {
@@ -125,6 +161,8 @@ impl CoinsRequest {
             nus,
             cms,
             cs,
+            input_commitments,
+            output_commitments,
             proof,
         }
     }
@@ -140,6 +178,8 @@ impl CoinsRequest {
             &self.nus,
             &self.cms,
             &self.cs,
+            &self.input_commitments,
+            &self.output_commitments,
         )?;
 
         // Check the pairing equations.
@@ -162,22 +202,32 @@ pub struct RequestCoinsProof {
     input_attributes_responses: Vec<(Scalar, Scalar)>,
     output_attributes_responses: Vec<(Scalar, Scalar)>,
     blinding_factors_responses: Vec<(Scalar, Scalar)>,
+    os_responses: Vec<Scalar>,
     rs_responses: Vec<Scalar>,
+    input_rs_responses: Vec<Scalar>,
+    output_rs_responses: Vec<Scalar>,
+    zero_sum_response: Scalar,
 }
 
 impl RequestCoinsProof {
     fn new(
         parameters: &mut Parameters,
-        input_attributes: &[(Scalar, Scalar)],
-        output_attributes: &[(Scalar, Scalar)],
-        blinding_factors: &[(Scalar, Scalar)],
-        rs: &[Scalar],
         public_key: &PublicKey,
         base_hs: &[G1Projective],
         sigmas: &[Coin],
+        input_attributes: &[(Scalar, Scalar)],
+        output_attributes: &[(Scalar, Scalar)],
+        blinding_factors: &[(Scalar, Scalar)],
+        os: &[Scalar],
+        rs: &[Scalar],
+        input_rs: &[Scalar],
+        output_rs: &[Scalar],
     ) -> Self {
         debug_assert!(rs.len() == input_attributes.len());
+        debug_assert!(input_rs.len() == input_attributes.len());
+        debug_assert!(output_attributes.len() == os.len());
         debug_assert!(output_attributes.len() == blinding_factors.len());
+        debug_assert!(output_attributes.len() == output_rs.len());
         debug_assert!(parameters.max_attributes() >= 2);
         debug_assert!(public_key.max_attributes() >= 2);
 
@@ -194,7 +244,10 @@ impl RequestCoinsProof {
             .iter()
             .map(|_| (parameters.random_scalar(), parameters.random_scalar()))
             .collect();
+        let os_witnesses = parameters.n_random_scalars(os.len());
         let rs_witnesses = parameters.n_random_scalars(rs.len());
+        let input_rs_witnesses = parameters.n_random_scalars(input_rs.len());
+        let output_rs_witnesses = parameters.n_random_scalars(output_rs.len());
 
         // Compute Kappa and Nu from the witnesses.
         let beta0 = &public_key.betas[0];
@@ -211,6 +264,14 @@ impl RequestCoinsProof {
             .collect();
 
         // Compute the commitments to the output attributes from the witnesses.
+        let h0 = &parameters.hs[0];
+        let h1 = &parameters.hs[1];
+        let cms: Vec<_> = output_attributes_witnesses
+            .iter()
+            .zip(os_witnesses.iter())
+            .map(|((value, id), o)| h0 * value + h1 * id + parameters.g1 * o)
+            .collect();
+
         let cs: Vec<_> = output_attributes_witnesses
             .iter()
             .zip(blinding_factors_witnesses.iter())
@@ -223,8 +284,34 @@ impl RequestCoinsProof {
             })
             .collect();
 
+        // Compute the cryptographic material to prove the sum of the input coins equals the output.
+        let input_commitments: Vec<_> = input_attributes_witnesses
+            .iter()
+            .zip(input_rs_witnesses.iter())
+            .map(|((value, _), r)| parameters.hs[0] * value + parameters.g1 * r)
+            .collect();
+        let output_commitments: Vec<_> = output_attributes_witnesses
+            .iter()
+            .zip(output_rs_witnesses.iter())
+            .map(|((value, _), r)| parameters.hs[0] * value + parameters.g1 * r)
+            .collect();
+
+        let zero_sum = output_rs.iter().sum::<Scalar>() - input_rs.iter().sum::<Scalar>();
+        let zero_sum_witness =
+            output_rs_witnesses.iter().sum::<Scalar>() - input_rs_witnesses.iter().sum::<Scalar>();
+
         // Compute the challenge.
-        let challenge = Self::to_challenge(&public_key, &base_hs, &kappas, &nus, &cs);
+        let challenge = Self::to_challenge(
+            &public_key,
+            &base_hs,
+            &kappas,
+            &nus,
+            &cms,
+            &cs,
+            &input_commitments,
+            &output_commitments,
+            &(parameters.g1 * zero_sum_witness),
+        );
 
         // Computes responses.
         let input_attributes_responses = input_attributes
@@ -251,18 +338,38 @@ impl RequestCoinsProof {
                 )
             })
             .collect();
+        let os_responses = os
+            .iter()
+            .zip(os_witnesses.iter())
+            .map(|(o, w)| w - challenge * o)
+            .collect();
         let rs_responses = rs
             .iter()
             .zip(rs_witnesses.iter())
             .map(|(r, w)| w - challenge * r)
             .collect();
+        let input_rs_responses = input_rs
+            .iter()
+            .zip(input_rs_witnesses)
+            .map(|(r, w)| w - challenge * r)
+            .collect();
+        let output_rs_responses = output_rs
+            .iter()
+            .zip(output_rs_witnesses)
+            .map(|(r, w)| w - challenge * r)
+            .collect();
+        let zero_sum_response = zero_sum_witness - challenge * zero_sum;
 
         Self {
             challenge,
             input_attributes_responses,
             output_attributes_responses,
             blinding_factors_responses,
+            os_responses,
             rs_responses,
+            input_rs_responses,
+            output_rs_responses,
+            zero_sum_response,
         }
     }
 
@@ -276,18 +383,21 @@ impl RequestCoinsProof {
         nus: &[G1Projective],
         cms: &[G1Projective],
         cs: &[(G1Projective, G1Projective)],
+        input_commitments: &[G1Projective],
+        output_commitments: &[G1Projective],
     ) -> CoconutResult<()> {
         debug_assert!(sigmas.len() == kappas.len());
         debug_assert!(sigmas.len() == nus.len());
         debug_assert!(sigmas.len() == cms.len());
-        debug_assert!(sigmas.len() == cs.len());
+        debug_assert!(sigmas.len() == input_commitments.len());
+        debug_assert!(output_commitments.len() == cs.len());
         debug_assert!(parameters.max_attributes() >= 2);
         debug_assert!(public_key.max_attributes() >= 2);
 
         // Compute the Kappa and Nu witnesses.
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
-        let kappas: Vec<_> = kappas
+        let kappas_reconstruct: Vec<_> = kappas
             .iter()
             .zip(self.input_attributes_responses.iter())
             .zip(self.rs_responses.iter())
@@ -299,7 +409,7 @@ impl RequestCoinsProof {
                     + parameters.g2 * r
             })
             .collect();
-        let nus: Vec<_> = nus
+        let nus_reconstruct: Vec<_> = nus
             .iter()
             .zip(sigmas.iter())
             .zip(self.rs_responses.iter())
@@ -313,7 +423,18 @@ impl RequestCoinsProof {
             .collect();
 
         // Compute the commitments witnesses.
-        let cs: Vec<_> = cs
+        let h0 = &parameters.hs[0];
+        let h1 = &parameters.hs[1];
+        let cms_reconstruct: Vec<_> = cms
+            .iter()
+            .zip(self.output_attributes_responses.iter())
+            .zip(self.os_responses.iter())
+            .map(|((cm, (value, id)), o)| {
+                cm * self.challenge + h0 * value + h1 * id + parameters.g1 * o
+            })
+            .collect();
+
+        let cs_reconstruct: Vec<_> = cs
             .iter()
             .zip(self.output_attributes_responses.iter())
             .zip(self.blinding_factors_responses.iter())
@@ -326,8 +447,40 @@ impl RequestCoinsProof {
             })
             .collect();
 
+        // Ensure the sum of the input values equals the sum of the output values.
+        let input_commitments_reconstruct: Vec<_> = input_commitments
+            .iter()
+            .zip(self.input_attributes_responses.iter())
+            .zip(self.input_rs_responses.iter())
+            .map(|((c, (value, _)), r)| {
+                c * self.challenge + parameters.hs[0] * value + parameters.g1 * r
+            })
+            .collect();
+        let output_commitments_reconstruct: Vec<_> = output_commitments
+            .iter()
+            .zip(self.output_attributes_responses.iter())
+            .zip(self.output_rs_responses.iter())
+            .map(|((c, (value, _)), r)| {
+                c * self.challenge + parameters.hs[0] * value + parameters.g1 * r
+            })
+            .collect();
+        let zero_sum = output_commitments.iter().sum::<G1Projective>()
+            - input_commitments.iter().sum::<G1Projective>();
+        let zero_sum_reconstruct =
+            zero_sum * self.challenge + parameters.g1 * self.zero_sum_response;
+
         // Check the challenge.
-        let challenge = Self::to_challenge(&public_key, &base_hs, &kappas, &nus, &cs);
+        let challenge = Self::to_challenge(
+            &public_key,
+            &base_hs,
+            &kappas_reconstruct,
+            &nus_reconstruct,
+            &cms_reconstruct,
+            &cs_reconstruct,
+            &input_commitments_reconstruct,
+            &output_commitments_reconstruct,
+            &zero_sum_reconstruct,
+        );
         ensure!(challenge == self.challenge, CoconutError::ZKCheckFailed);
         Ok(())
     }
@@ -338,7 +491,11 @@ impl RequestCoinsProof {
         base_hs: &[G1Projective],
         kappas: &[G2Projective],
         nus: &[G1Projective],
+        cms: &[G1Projective],
         cs: &[(G1Projective, G1Projective)],
+        input_commitments: &[G1Projective],
+        output_commitments: &[G1Projective],
+        zero_sum: &G1Projective,
     ) -> Scalar {
         debug_assert!(public_key.max_attributes() >= 2);
 
@@ -356,10 +513,20 @@ impl RequestCoinsProof {
         for nu in nus {
             hasher.update(nu.to_bytes());
         }
+        for cm in cms {
+            hasher.update(cm.to_bytes());
+        }
         for (part1, part2) in cs {
             hasher.update(part1.to_bytes());
             hasher.update(part2.to_bytes());
         }
+        for c in input_commitments {
+            hasher.update(c.to_bytes());
+        }
+        for c in output_commitments {
+            hasher.update(c.to_bytes());
+        }
+        hasher.update(zero_sum.to_bytes());
 
         let digest = hasher.finalize();
         Scalar::from_bytes_wide(digest.as_slice()[..64].try_into().unwrap())
