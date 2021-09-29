@@ -123,8 +123,7 @@ pub trait AccountClient {
     /// Compute a safe (i.e. pessimistic) balance by synchronizing our "sent" certificates
     /// with authorities, and otherwise using local data on received transfers (i.e.
     /// certificates that were locally processed by `receive_from_fastpay`).
-    /// TODO: automatically synchronize received transfers as well.
-    fn query_safe_balance(&mut self) -> AsyncResult<Balance, failure::Error>;
+    fn synchronize_balance(&mut self) -> AsyncResult<Balance, failure::Error>;
 
     /// Return the value of the known coins attached to this account.
     fn get_coins_value(&self) -> Result<Amount, failure::Error>;
@@ -219,8 +218,16 @@ impl<A> AccountClientState<A> {
         self.key_pair.as_ref().map(|kp| kp.public())
     }
 
+    pub fn key_pair(&self) -> Option<&KeyPair> {
+        self.key_pair.as_ref()
+    }
+
     pub fn next_sequence_number(&self) -> SequenceNumber {
         self.next_sequence_number
+    }
+
+    pub fn coins(&self) -> &Vec<Certificate> {
+        &self.coins
     }
 
     pub fn balance(&self) -> Balance {
@@ -635,12 +642,12 @@ where
     ) -> Result<Certificate, failure::Error> {
         // Trying to overspend may block the account. To prevent this, we compare with
         // the balance as we know it.
-        let safe_balance = self.query_safe_balance().await?;
+        let balance = self.synchronize_balance().await?;
         ensure!(
-            Balance::from(amount) <= safe_balance,
+            Balance::from(amount) <= balance,
             "Requested amount ({}) is not backed by sufficient funds ({})",
             amount,
-            safe_balance
+            balance
         );
         let request = Request {
             account_id: self.account_id.clone(),
@@ -933,7 +940,7 @@ where
         Box::pin(self.transfer(amount, Address::Primary(recipient), user_data))
     }
 
-    fn query_safe_balance(&mut self) -> AsyncResult<Balance, failure::Error> {
+    fn synchronize_balance(&mut self) -> AsyncResult<Balance, failure::Error> {
         Box::pin(async move {
             match self.pending_request.clone() {
                 PendingRequest::Confirming(order) => {
@@ -1075,12 +1082,12 @@ where
         contract_hash: HashValue,
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
-            let safe_balance = self.query_safe_balance().await?;
+            let balance = self.synchronize_balance().await?;
             ensure!(
-                Balance::from(account_balance) <= safe_balance,
+                Balance::from(account_balance) <= balance,
                 "Suggested balance ({}) does not match available funds ({})",
                 account_balance,
-                safe_balance
+                balance
             );
             let request = Request {
                 account_id: self.account_id.clone(),
@@ -1113,7 +1120,7 @@ where
         new_coins: Vec<Coin>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error> {
         Box::pin(async move {
-            let account_balance = self.query_safe_balance().await?;
+            let account_balance = self.synchronize_balance().await?;
             let mut amount =
                 Amount::try_from(account_balance.try_add(self.get_coins_value()?.into())?)?;
             let mut seeds = BTreeSet::new();
@@ -1159,7 +1166,7 @@ where
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
             let amount = {
-                let balance = self.query_safe_balance().await?;
+                let balance = self.synchronize_balance().await?;
                 Amount::try_from(balance.try_add(self.get_coins_value()?.into())?)?
             };
             let request = Request {

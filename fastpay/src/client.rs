@@ -346,18 +346,17 @@ enum ClientCommands {
         owner: Option<AccountOwner>,
     },
 
-    /// Obtain the balance of the account directly from a quorum of authorities. WARNING:
-    /// the result may be over/under-estimated if the network timeout is too short and some
-    /// authorities are malicious.
-    #[structopt(name = "query_raw_balance")]
-    QueryRawBalance {
+    /// Obtain the balance of the account directly from a quorum of authorities.
+    #[structopt(name = "query_balance")]
+    QueryBalance {
         /// Account id
         account_id: AccountId,
     },
 
-    /// Obtain a safe balance value guaranteed by the client.
-    #[structopt(name = "query_balance")]
-    QueryBalance {
+    /// Synchronize the local state of the account (including a conservative estimation of
+    /// the available balance) with a quorum authorities.
+    #[structopt(name = "sync_balance")]
+    SynchronizeBalance {
         /// Account id
         account_id: AccountId,
     },
@@ -505,7 +504,7 @@ fn main() {
             });
         }
 
-        ClientCommands::QueryRawBalance { account_id } => {
+        ClientCommands::QueryBalance { account_id } => {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
                 let mut client_state = make_account_client_state(
@@ -530,7 +529,7 @@ fn main() {
             });
         }
 
-        ClientCommands::QueryBalance { account_id } => {
+        ClientCommands::SynchronizeBalance { account_id } => {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
                 let mut client_state = make_account_client_state(
@@ -543,7 +542,7 @@ fn main() {
                 );
                 info!("Query safe balance using client information");
                 let time_start = Instant::now();
-                let balance = client_state.query_safe_balance().await.unwrap();
+                let balance = client_state.synchronize_balance().await.unwrap();
                 let time_total = time_start.elapsed().as_micros();
                 info!("Safe balance obtained after {} us", time_total);
                 println!("{}", balance);
