@@ -397,6 +397,7 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
         client2.owner().unwrap(),
         vec![0; 4],
     );
+    let backup_key = client2.key_pair().unwrap().copy();
     let mut client3 = make_client(dbg_account(3), authority_clients.clone(), committee);
     fund_account(
         &mut authority_clients,
@@ -429,6 +430,10 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
             ..
         }) if id == &dbg_account(3) && *amount == Amount::from(3)
     ));
+    client2.key_pair = Some(backup_key);
+    assert!(rt
+        .block_on(client2.spend_and_transfer(Address::FastPay(dbg_account(3)), UserData::default()))
+        .is_err());
     assert_eq!(
         rt.block_on(client3.query_strong_majority_balance()),
         Balance::from(3)

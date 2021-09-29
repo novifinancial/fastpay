@@ -307,12 +307,14 @@ impl Authority for AuthorityState {
         let mut votes = Vec::new();
         let mut continuations = Vec::new();
         for coin in targets {
-            let account_id = coin.account_id.clone();
             // Create vote.
             let value = Value::Coin(coin);
             let vote = Vote::new(value, &self.key_pair);
             votes.push(vote);
-            // Send cross shard request to delete source accounts (if needed).
+        }
+        for account_id in source_accounts {
+            // Send cross shard request to delete source account (if needed). This is a
+            // best effort to quickly save storage.
             let shard_id = self.which_shard(&account_id);
             let cont = CrossShardContinuation::Request {
                 shard_id,
