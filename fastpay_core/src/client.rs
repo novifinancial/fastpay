@@ -133,10 +133,14 @@ pub trait AccountClient {
     fn query_strong_majority_balance(&mut self) -> future::BoxFuture<Balance>;
 }
 
+/// The status of the last request order that we have sent, if any.
 #[derive(Debug, Clone)]
 pub enum PendingRequest {
+    /// No request.
     None,
-    Confirming(RequestOrder),
+    /// A "regular" request meant to be confirmed.
+    Regular(RequestOrder),
+    /// A "locking" request that cannot be confirmed.
     Locking(RequestOrder),
 }
 
@@ -660,7 +664,7 @@ where
         };
         let order = self.make_request_order(request)?;
         let certificate = self
-            .execute_confirming_request(order, /* with_confirmation */ true)
+            .execute_regular_request(order, /* with_confirmation */ true)
             .await?;
         Ok(certificate)
     }
@@ -725,15 +729,15 @@ where
         Ok(())
     }
 
-    /// Execute (or retry) a confirming request order. Update local balance.
-    async fn execute_confirming_request(
+    /// Execute (or retry) a regular request order. Update local balance.
+    async fn execute_regular_request(
         &mut self,
         order: RequestOrder,
         with_confirmation: bool,
     ) -> Result<Certificate, failure::Error> {
         ensure!(
             matches!(&self.pending_request, PendingRequest::None)
-                || matches!(&self.pending_request, PendingRequest::Confirming(o) if o.value.request == order.value.request),
+                || matches!(&self.pending_request, PendingRequest::Regular(o) if o.value.request == order.value.request),
             "Client state has a different pending request",
         );
         ensure!(
@@ -741,7 +745,7 @@ where
             "Unexpected sequence number"
         );
         self.download_missing_sent_certificates().await?;
-        self.pending_request = PendingRequest::Confirming(order.clone());
+        self.pending_request = PendingRequest::Regular(order.clone());
         let certificates = self
             .communicate_requests(
                 self.account_id.clone(),
@@ -943,9 +947,9 @@ where
     fn synchronize_balance(&mut self) -> AsyncResult<Balance, failure::Error> {
         Box::pin(async move {
             match self.pending_request.clone() {
-                PendingRequest::Confirming(order) => {
+                PendingRequest::Regular(order) => {
                     // Finish executing the previous request.
-                    self.execute_confirming_request(order, /* with_confirmation */ false)
+                    self.execute_regular_request(order, /* with_confirmation */ false)
                         .await?;
                 }
                 PendingRequest::Locking(order) => {
@@ -1017,7 +1021,7 @@ where
             let order = self.make_request_order(request)?;
 
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1035,7 +1039,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1054,7 +1058,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1069,7 +1073,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1180,7 +1184,7 @@ where
             };
             let order = self.make_request_order_with_assets(request, self.coins.clone())?;
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1204,7 +1208,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let new_certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ false)
+                .execute_regular_request(order, /* with_confirmation */ false)
                 .await?;
             Ok(new_certificate)
         })
