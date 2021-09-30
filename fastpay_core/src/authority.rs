@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 #[path = "unit_tests/authority_tests.rs"]
 mod authority_tests;
 
+/// State of an authority.
 pub struct AuthorityState {
     /// The name of this autority.
     pub name: AuthorityName,
@@ -17,7 +18,7 @@ pub struct AuthorityState {
     pub committee: Committee,
     /// The signature key pair of the authority.
     pub key_pair: KeyPair,
-    /// Offchain states of FastPay accounts.
+    /// States of FastPay accounts.
     pub accounts: BTreeMap<AccountId, AccountState>,
     /// The latest transaction index of the blockchain that the authority has seen.
     pub last_transaction_index: SequenceNumber,
@@ -79,7 +80,69 @@ pub trait Authority {
 }
 
 impl AuthorityState {
-    /// (Trusted) Try to update the recipient account(s) in a confirmation order.
+    /// (Trusted) Process a confirmed request issued from an account.
+    fn process_confirmed_request(
+        &mut self,
+        request: Request,
+        certificate: Certificate, // For logging purpose
+    ) -> Result<(AccountInfoResponse, CrossShardContinuation), FastPayError> {
+        // Verify sharding.
+        fp_ensure!(self.in_shard(&request.account_id), FastPayError::WrongShard);
+        // Obtain the sender's account.
+        let sender = request.account_id.clone();
+        let account = self
+            .accounts
+            .get_mut(&sender)
+            .ok_or_else(|| FastPayError::InactiveAccount(sender.clone()))?;
+        // Check that the account is active and ready for this confirmation.
+        fp_ensure!(
+            account.owner.is_some(),
+            FastPayError::InactiveAccount(sender.clone())
+        );
+        if account.next_sequence_number < request.sequence_number {
+            fp_bail!(FastPayError::MissingEarlierConfirmations {
+                current_sequence_number: account.next_sequence_number
+            });
+        }
+        if account.next_sequence_number > request.sequence_number {
+            // Request was already confirmed.
+            let info = account.make_account_info(sender.clone());
+            return Ok((info, CrossShardContinuation::Done));
+        }
+
+        // Execute the sender's side of the operation.
+        account.apply_operation_as_sender(&request.operation, certificate.clone())?;
+        // Advance to next sequence number.
+        account.next_sequence_number.try_add_assign_one()?;
+        account.pending = None;
+        // Final touch on the sender's account.
+        let info = account.make_account_info(sender.clone());
+        if account.owner.is_none() {
+            // Tentatively remove inactive account. (It might be created again as a
+            // recipient, though. To solve this, we may implement additional cleanups in
+            // the future.)
+            self.accounts.remove(&sender);
+        }
+
+        if let Some(recipient) = request.operation.recipient() {
+            // Update recipient.
+            if self.in_shard(recipient) {
+                // Execute the operation locally.
+                self.update_recipient_account(request.operation.clone(), certificate)?;
+            } else {
+                // Initiate a cross-shard request.
+                let shard_id = self.which_shard(recipient);
+                let cont = CrossShardContinuation::Request {
+                    shard_id,
+                    request: Box::new(CrossShardRequest::UpdateRecipient { certificate }),
+                };
+                return Ok((info, cont));
+            }
+        }
+        Ok((info, CrossShardContinuation::Done))
+    }
+
+    /// (Trusted) Try to update the recipient account in a confirmed request.
     fn update_recipient_account(
         &mut self,
         operation: Operation,
@@ -166,62 +229,10 @@ impl Authority for AuthorityState {
             .value
             .confirm_request()
             .ok_or(FastPayError::InvalidConfirmationOrder)?;
-        // Verify sharding.
-        fp_ensure!(self.in_shard(&request.account_id), FastPayError::WrongShard);
-        // Check the certificate and retrieve the request data.
+        // Verify the certificate.
         certificate.check(&self.committee)?;
-        // Obtain the sender's account.
-        let sender = request.account_id.clone();
-        let account = self
-            .accounts
-            .get_mut(&sender)
-            .ok_or_else(|| FastPayError::InactiveAccount(sender.clone()))?;
-        // Check that the account is active and ready for this confirmation.
-        fp_ensure!(
-            account.owner.is_some(),
-            FastPayError::InactiveAccount(sender.clone())
-        );
-        if account.next_sequence_number < request.sequence_number {
-            fp_bail!(FastPayError::MissingEarlierConfirmations {
-                current_sequence_number: account.next_sequence_number
-            });
-        }
-        if account.next_sequence_number > request.sequence_number {
-            // Request was already confirmed.
-            let info = account.make_account_info(sender.clone());
-            return Ok((info, CrossShardContinuation::Done));
-        }
-
-        // Execute the sender's side of the operation.
-        account.apply_operation_as_sender(&request.operation, certificate.clone())?;
-        // Advance to next sequence number.
-        account.next_sequence_number.try_add_assign_one()?;
-        account.pending = None;
-        // Final touch on the sender's account.
-        let info = account.make_account_info(sender.clone());
-        if account.owner.is_none() {
-            // Tentatively remove inactive account. (It might be created again as a
-            // recipient, though. To solve this, we may implement additional cleanups in
-            // the future.)
-            self.accounts.remove(&sender);
-        }
-
-        if let Some(recipient) = request.operation.recipient() {
-            // Update recipient.
-            if self.in_shard(recipient) {
-                // Execute the operation locally.
-                self.update_recipient_account(request.operation.clone(), certificate)?;
-            } else {
-                // Initiate a cross-shard request.
-                let shard_id = self.which_shard(recipient);
-                let cont = CrossShardContinuation::Request {
-                    shard_id,
-                    request: Box::new(CrossShardRequest::UpdateRecipient { certificate }),
-                };
-                return Ok((info, cont));
-            }
-        }
-        Ok((info, CrossShardContinuation::Done))
+        // Process the request.
+        self.process_confirmed_request(request.clone(), certificate)
     }
 
     fn handle_coin_creation_order(
