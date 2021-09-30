@@ -9,6 +9,7 @@ edition = "2018"
 bcs = "0.1.3"
 bincode = "1.3.3"
 coconut = { version = "0.1.0", path = "../coconut", features = ["with_serde"] }
+either = "1.6.1"
 failure = "0.1.8"
 ff = "0.11.0"
 futures = "0.3.17"

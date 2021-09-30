@@ -122,4 +122,21 @@ pub enum FastPayError {
     UnexpectedMessage,
     #[fail(display = "Network error while querying service: {:?}.", error)]
     ClientIoError { error: String },
+
+    // Consensus
+    #[fail(display = "Unknown consensus instance {:?}", 0)]
+    UnknownConsensusInstance(AccountId),
+    #[fail(display = "Invalid consensus order.")]
+    InvalidConsensusOrder,
+    #[fail(display = "Unsafe consensus proposal.")]
+    UnsafeConsensusProposal,
+    #[fail(
+        display = "The following account has not been locked yet: {}",
+        account_id
+    )]
+    MissingConsensusLock { account_id: AccountId },
+    #[fail(display = "Invalid consensus proposal.")]
+    InvalidConsensusProposal,
+    #[fail(display = "Unsafe consensus pre-commit.")]
+    UnsafeConsensusPreCommit,
 }

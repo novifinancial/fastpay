@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transport::*;
+use either::Either;
 use fastpay_core::{authority::*, base_types::*, client::*, error::*, messages::*, serialize::*};
 
 #[cfg(feature = "benchmark")]
@@ -212,6 +213,23 @@ impl MessageHandler for RunningServerState {
                                     }
                                     // Response
                                     Ok(Some(serialize_coin_creation_response(&response)))
+                                }
+                                Err(error) => Err(error),
+                            }
+                        }
+                        SerializedMessage::ConsensusOrder(message) => {
+                            match self.server.state.handle_consensus_order(*message) {
+                                Ok(Either::Left(vote)) => {
+                                    // Response
+                                    Ok(Some(serialize_vote(&vote)))
+                                }
+                                Ok(Either::Right(continuations)) => {
+                                    // Cross-shard requests
+                                    for continuation in continuations {
+                                        self.handle_continuation(continuation).await;
+                                    }
+                                    // No response. (TODO: this is a bit rough)
+                                    Ok(None)
                                 }
                                 Err(error) => Err(error),
                             }

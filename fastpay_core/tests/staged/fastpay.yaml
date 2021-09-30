@@ -152,6 +152,47 @@ ConfirmationOrder:
   STRUCT:
     - certificate:
         TYPENAME: Certificate
+ConsensusDecision:
+  ENUM:
+    0:
+      Abort: UNIT
+    1:
+      Confirm: UNIT
+ConsensusOrder:
+  ENUM:
+    0:
+      Propose:
+        STRUCT:
+          - proposal:
+              TYPENAME: ConsensusProposal
+          - owner:
+              TYPENAME: PublicKeyBytes
+          - signature:
+              TYPENAME: Signature
+          - locks:
+              SEQ:
+                TYPENAME: Certificate
+    1:
+      HandlePreCommit:
+        STRUCT:
+          - certificate:
+              TYPENAME: Certificate
+    2:
+      HandleCommit:
+        STRUCT:
+          - certificate:
+              TYPENAME: Certificate
+          - locks:
+              SEQ:
+                TYPENAME: Certificate
+ConsensusProposal:
+  STRUCT:
+    - instance_id:
+        TYPENAME: AccountId
+    - round:
+        TYPENAME: SequenceNumber
+    - decision:
+        TYPENAME: ConsensusDecision
 CrossShardRequest:
   ENUM:
     0:
@@ -164,6 +205,13 @@ CrossShardRequest:
         STRUCT:
           - account_id:
               TYPENAME: AccountId
+    2:
+      ProcessConfirmedRequest:
+        STRUCT:
+          - request:
+              TYPENAME: Request
+          - certificate:
+              TYPENAME: Certificate
 FastPayError:
   ENUM:
     0:
@@ -252,6 +300,27 @@ FastPayError:
       ClientIoError:
         STRUCT:
           - error: STR
+    34:
+      UnknownConsensusInstance:
+        NEWTYPE:
+          TYPENAME: AccountId
+    35:
+      InvalidConsensusOrder: UNIT
+    36:
+      UnsafeConsensusProposal: UNIT
+    37:
+      MissingConsensusLock:
+        STRUCT:
+          - account_id:
+              TYPENAME: AccountId
+    38:
+      InvalidConsensusProposal: UNIT
+    39:
+      UnsafeConsensusPreCommit: UNIT
+Functionality:
+  ENUM:
+    0:
+      AtomicSwap: UNIT
 G1:
   TUPLESTRUCT:
     - U8
@@ -440,20 +509,22 @@ Operation:
           - new_owner:
               TYPENAME: PublicKeyBytes
     2:
-      CloseAccount: UNIT
+      Skip: UNIT
     3:
+      CloseAccount: UNIT
+    4:
       ChangeOwner:
         STRUCT:
           - new_owner:
               TYPENAME: PublicKeyBytes
-    4:
+    5:
       Spend:
         STRUCT:
           - account_balance:
               TYPENAME: Amount
           - description_hash:
               TYPENAME: HashValue
-    5:
+    6:
       SpendAndTransfer:
         STRUCT:
           - recipient:
@@ -462,6 +533,25 @@ Operation:
               TYPENAME: Amount
           - user_data:
               TYPENAME: UserData
+    7:
+      StartConsensusInstance:
+        STRUCT:
+          - new_id:
+              TYPENAME: AccountId
+          - functionality:
+              TYPENAME: Functionality
+          - accounts:
+              SEQ:
+                TUPLE:
+                  - TYPENAME: AccountId
+                  - TYPENAME: SequenceNumber
+    8:
+      LockInto:
+        STRUCT:
+          - instance_id:
+              TYPENAME: AccountId
+          - owner:
+              TYPENAME: PublicKeyBytes
 OutputAttribute:
   STRUCT:
     - seed:
@@ -589,26 +679,30 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: CoinCreationOrder
     3:
+      ConsensusOrder:
+        NEWTYPE:
+          TYPENAME: ConsensusOrder
+    4:
       InfoQuery:
         NEWTYPE:
           TYPENAME: AccountInfoQuery
-    4:
+    5:
       Vote:
         NEWTYPE:
           TYPENAME: Vote
-    5:
+    6:
       InfoResponse:
         NEWTYPE:
           TYPENAME: AccountInfoResponse
-    6:
+    7:
       CoinCreationResponse:
         NEWTYPE:
           TYPENAME: CoinCreationResponse
-    7:
+    8:
       Error:
         NEWTYPE:
           TYPENAME: FastPayError
-    8:
+    9:
       CrossShardRequest:
         NEWTYPE:
           TYPENAME: CrossShardRequest
@@ -644,6 +738,22 @@ Value:
       Coin:
         NEWTYPE:
           TYPENAME: TransparentCoin
+    3:
+      PreCommit:
+        STRUCT:
+          - proposal:
+              TYPENAME: ConsensusProposal
+          - requests:
+              SEQ:
+                TYPENAME: Request
+    4:
+      Commit:
+        STRUCT:
+          - proposal:
+              TYPENAME: ConsensusProposal
+          - requests:
+              SEQ:
+                TYPENAME: Request
 Vote:
   STRUCT:
     - value:

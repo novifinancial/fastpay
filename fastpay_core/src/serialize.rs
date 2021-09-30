@@ -17,6 +17,7 @@ pub enum SerializedMessage {
     RequestOrder(Box<RequestOrder>),
     ConfirmationOrder(Box<ConfirmationOrder>),
     CoinCreationOrder(Box<CoinCreationOrder>),
+    ConsensusOrder(Box<ConsensusOrder>),
     InfoQuery(Box<AccountInfoQuery>),
     // Outbound
     Vote(Box<Vote>),
@@ -36,6 +37,7 @@ enum ShallowSerializedMessage<'a> {
     RequestOrder(&'a RequestOrder),
     ConfirmationOrder(&'a ConfirmationOrder),
     CoinCreationOrder(&'a CoinCreationOrder),
+    ConsensusOrder(&'a ConsensusOrder),
     InfoQuery(&'a AccountInfoQuery),
     // Outbound
     Vote(&'a Vote),
@@ -118,6 +120,10 @@ pub fn serialize_coin_creation_order(value: &CoinCreationOrder) -> Vec<u8> {
 
 pub fn serialize_coin_creation_response(value: &CoinCreationResponse) -> Vec<u8> {
     serialize(&ShallowSerializedMessage::CoinCreationResponse(value))
+}
+
+pub fn serialize_consensus_order(value: &ConsensusOrder) -> Vec<u8> {
+    serialize(&ShallowSerializedMessage::ConsensusOrder(value))
 }
 
 pub fn serialize_vote(value: &Vote) -> Vec<u8> {

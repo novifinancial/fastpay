@@ -39,6 +39,8 @@ pub enum Operation {
         new_id: AccountId,
         new_owner: AccountOwner,
     },
+    /// Do nothing. (This can be used for testing or to unlock accounts after a consensus decisions.)
+    Skip,
     /// Close the account.
     CloseAccount,
     /// Change the authentication key of the account.
@@ -56,6 +58,23 @@ pub enum Operation {
         amount: Amount,
         user_data: UserData,
     },
+    /// Start a consensus protocol `new_id` to manage the given `accounts`.
+    StartConsensusInstance {
+        new_id: AccountId,
+        functionality: Functionality,
+        accounts: Vec<(AccountId, SequenceNumber)>,
+    },
+    /// Lock the account into the given consensus instance, managed by the given key.
+    LockInto {
+        instance_id: AccountId,
+        owner: AccountOwner,
+    },
+}
+
+/// A one-shot funtionality implemented in a consensus instance.
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, Serialize, Deserialize)]
+pub enum Functionality {
+    AtomicSwap,
 }
 
 /// A request containing an account operation.
@@ -118,13 +137,42 @@ pub struct TransparentCoin {
     pub seed: u128,
 }
 
+/// Functionality-dependent consensus decision.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize)]
+pub enum ConsensusDecision {
+    Abort,
+    Confirm,
+}
+
+/// The proposal of a particular decision during consensus.
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct ConsensusProposal {
+    pub instance_id: AccountId,
+    pub round: SequenceNumber,
+    pub decision: ConsensusDecision,
+}
+
 /// A statement to be certified by the authorities.
 // TODO: decide if we split Vote & Certificate in one type per kind of value.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Value {
+    // -- Account management --
+    /// The request was validated but confirmation will require additional steps.
     Lock(Request),
+    /// The request is ready to be confirmed (i.e. executed).
     Confirm(Request),
+    /// This coin is ready to be spent.
     Coin(TransparentCoin),
+    /// The proposal was validated but confirmation will require additional steps.
+    PreCommit {
+        proposal: ConsensusProposal,
+        requests: Vec<Request>,
+    },
+    /// The proposal is ready to be committed, thus confirming a number of requests.
+    Commit {
+        proposal: ConsensusProposal,
+        requests: Vec<Request>,
+    },
 }
 
 /// The balance of an account plus linked coins to be used in a coin creation description.
@@ -174,6 +222,25 @@ pub struct CoinCreationResponse {
     pub blinded_coins: Option<coconut::BlindedCoins>,
     /// Id used to track the response during benchmarks.
     pub tracking_id: AccountId,
+}
+
+/// Same as RequestOrder but meant for a consensus instance.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub enum ConsensusOrder {
+    Propose {
+        proposal: ConsensusProposal,
+        owner: AccountOwner,
+        signature: Signature,
+        locks: Vec<Certificate>,
+    },
+    HandlePreCommit {
+        certificate: Certificate,
+    },
+    HandleCommit {
+        certificate: Certificate,
+        locks: Vec<Certificate>,
+    },
 }
 
 /// A vote on a statement from an authority.
@@ -228,8 +295,16 @@ pub struct AccountInfoResponse {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum CrossShardRequest {
-    UpdateRecipient { certificate: Certificate },
-    DestroyAccount { account_id: AccountId },
+    UpdateRecipient {
+        certificate: Certificate,
+    },
+    DestroyAccount {
+        account_id: AccountId,
+    },
+    ProcessConfirmedRequest {
+        request: Request,
+        certificate: Certificate,
+    },
 }
 
 #[cfg(test)]
@@ -365,12 +440,7 @@ impl Operation {
                 ..
             }
             | OpenAccount { new_id: id, .. } => Some(id),
-
-            Operation::Spend { .. }
-            | Operation::SpendAndTransfer { .. }
-            | Operation::CloseAccount
-            | Transfer { .. }
-            | ChangeOwner { .. } => None,
+            _ => None,
         }
     }
 
@@ -600,3 +670,4 @@ impl BcsSignable for RequestValue {}
 impl BcsSignable for Value {}
 impl BcsSignable for CoconutKey {}
 impl BcsSignable for CoinCreationDescription {}
+impl BcsSignable for ConsensusProposal {}
