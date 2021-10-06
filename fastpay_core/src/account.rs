@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{base_types::*, error::FastPayError, messages::*};
+use std::collections::BTreeSet;
 
 /// State of a FastPay account.
 #[derive(Debug, Default)]
@@ -49,11 +50,38 @@ impl AccountState {
         }
     }
 
+    pub(crate) fn verify_linked_coins(
+        id: &AccountId,
+        coins: &[&Value],
+    ) -> Result<Amount, FastPayError> {
+        let mut total = Amount::zero();
+        let mut seeds = BTreeSet::new();
+        for coin in coins {
+            match coin {
+                Value::Coin(Coin {
+                    account_id,
+                    amount,
+                    seed,
+                }) => {
+                    // Verify linked account.
+                    fp_ensure!(account_id == id, FastPayError::InvalidCoin);
+                    // Seeds must be distinct.
+                    fp_ensure!(!seeds.contains(seed), FastPayError::InvalidCoin);
+                    // Update source amount and seeds.
+                    total.try_add_assign(*amount)?;
+                    seeds.insert(*seed);
+                }
+                _ => fp_bail!(FastPayError::InvalidCoin),
+            }
+        }
+        Ok(total)
+    }
+
     /// Verify that the operation is valid and return the value to certify.
     pub(crate) fn validate_operation(
         &self,
         request: Request,
-        assets: &[Certificate],
+        assets: &[&Value],
     ) -> Result<Value, FastPayError> {
         let value = match &request.operation {
             Operation::Transfer { amount, .. } => {
@@ -81,19 +109,12 @@ impl AccountState {
                 Value::Lock(request)
             }
             Operation::SpendAndTransfer { amount, .. } => {
-                let mut amount = *amount;
                 // Verify source coins.
-                for coin in assets {
-                    match &coin.value {
-                        Value::Coin(coin) if coin.account_id == request.account_id => {
-                            amount.try_sub_assign(coin.amount)?;
-                        }
-                        _ => fp_bail!(FastPayError::InvalidCoin),
-                    }
-                }
+                let coin_total = Self::verify_linked_coins(&request.account_id, assets)?;
                 // Verify balance.
+                let public_amount = amount.try_sub(coin_total)?;
                 fp_ensure!(
-                    self.balance >= amount.into(),
+                    self.balance >= public_amount.into(),
                     FastPayError::InsufficientFunding {
                         current_balance: self.balance
                     }
