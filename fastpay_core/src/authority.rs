@@ -4,7 +4,7 @@
 use crate::{
     account::AccountState, base_types::*, committee::Committee, error::FastPayError, messages::*,
 };
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 #[cfg(test)]
 #[path = "unit_tests/authority_tests.rs"]
@@ -176,8 +176,9 @@ impl Authority for AuthorityState {
             fp_ensure!(self.name == *authority, FastPayError::InvalidRequestOrder);
         }
         // Verify additional certificates in the order.
+        let mut checked_assets = Vec::new();
         for asset in &order.assets {
-            asset.check(&self.committee)?;
+            checked_assets.push(asset.check(&self.committee)?);
         }
         // Obtain the sender's account.
         let sender = order.value.request.account_id.clone();
@@ -212,7 +213,7 @@ impl Authority for AuthorityState {
             return Ok(account.make_account_info(sender));
         }
         // Verify that the request is safe, and return the value of the vote.
-        let value = account.validate_operation(request, &order.assets)?;
+        let value = account.validate_operation(request, &checked_assets)?;
         let vote = Vote::new(value, &self.key_pair);
         account.pending = Some(vote);
         Ok(account.make_account_info(sender))
@@ -286,27 +287,13 @@ impl Authority for AuthorityState {
                 _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
             }
             // Verify source coins.
-            let mut seeds = BTreeSet::new();
+            let mut checked_assets = Vec::new();
             for coin in &source.coins {
-                // Verify coin certificate.
-                coin.check(&self.committee)?;
-                match &coin.value {
-                    Value::Coin(Coin {
-                        account_id,
-                        amount,
-                        seed,
-                    }) => {
-                        // Verify locked account.
-                        fp_ensure!(account_id == &source.account_id, FastPayError::InvalidCoin);
-                        // Seeds must be distinct.
-                        fp_ensure!(!seeds.contains(seed), FastPayError::InvalidCoin);
-                        // Update source amount and seeds.
-                        source_amount.try_add_assign(*amount)?;
-                        seeds.insert(*seed);
-                    }
-                    _ => fp_bail!(FastPayError::InvalidCoin),
-                }
+                checked_assets.push(coin.check(&self.committee)?);
             }
+            let coin_amount =
+                AccountState::verify_linked_coins(&source.account_id, &checked_assets)?;
+            source_amount.try_add_assign(coin_amount)?;
         }
         // Verify target amount.
         let mut target_amount = Amount::zero();

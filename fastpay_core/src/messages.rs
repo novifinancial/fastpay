@@ -390,7 +390,7 @@ impl<'a> SignatureAggregator<'a> {
 
 impl Certificate {
     /// Verify the certificate.
-    pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
+    pub fn check<'a>(&'a self, committee: &Committee) -> Result<&'a Value, FastPayError> {
         // Check the quorum.
         let mut weight = 0;
         let mut used_authorities = HashSet::new();
@@ -411,7 +411,8 @@ impl Certificate {
             FastPayError::CertificateRequiresQuorum
         );
         // All what is left is checking signatures!
-        Signature::verify_batch(&self.value, &self.signatures)
+        Signature::verify_batch(&self.value, &self.signatures)?;
+        Ok(&self.value)
     }
 }
 
