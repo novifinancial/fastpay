@@ -63,7 +63,7 @@ Coin:
     - amount:
         TYPENAME: Amount
     - seed: U128
-CoinCreationContract:
+CoinCreationDescription:
   STRUCT:
     - sources:
         SEQ:
@@ -73,8 +73,8 @@ CoinCreationContract:
           TYPENAME: Coin
 CoinCreationOrder:
   STRUCT:
-    - contract:
-        TYPENAME: CoinCreationContract
+    - description:
+        TYPENAME: CoinCreationDescription
     - locks:
         SEQ:
           TYPENAME: Certificate
@@ -224,7 +224,7 @@ Operation:
         STRUCT:
           - account_balance:
               TYPENAME: Amount
-          - contract_hash:
+          - description_hash:
               TYPENAME: HashValue
     5:
       SpendAndTransfer:
