@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 //! This module is sketching a FastPay smart contract on a primary chain.
