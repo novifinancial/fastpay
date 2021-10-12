@@ -369,7 +369,7 @@ impl AuthorityClient for Client {
             let shard = AuthorityState::get_shard(
                 self.num_shards,
                 &order
-                    .contract
+                    .description
                     .targets
                     .first()
                     .ok_or(FastPayError::InvalidCoinCreationOrder)?

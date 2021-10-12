@@ -506,25 +506,25 @@ fn test_handle_coin_creation_order_ok() {
             seed: 2,
         },
     ];
-    let contract = CoinCreationContract {
+    let description = CoinCreationDescription {
         sources,
         targets: targets.clone(),
     };
-    let contract_hash = HashValue::new(&contract);
+    let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
         Value::Lock(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
                 account_balance: Amount::from(5),
-                contract_hash,
+                description_hash,
             },
             sequence_number: SequenceNumber::default(),
         }),
     )];
 
     let (votes, continuations) = state
-        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .unwrap();
     assert_eq!(votes.len(), 2);
     for i in 0..2 {
@@ -561,25 +561,25 @@ fn test_handle_coin_creation_order_no_source_coin_ok() {
             seed: 2,
         },
     ];
-    let contract = CoinCreationContract {
+    let description = CoinCreationDescription {
         sources,
         targets: targets.clone(),
     };
-    let contract_hash = HashValue::new(&contract);
+    let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
         Value::Lock(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
                 account_balance: Amount::from(15),
-                contract_hash,
+                description_hash,
             },
             sequence_number: SequenceNumber::default(),
         }),
     )];
 
     let (votes, continuations) = state
-        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .unwrap();
     assert_eq!(votes.len(), 2);
     for i in 0..2 {
@@ -621,22 +621,22 @@ fn test_handle_coin_creation_order_empty_target_coin() {
             seed: 3,
         },
     ];
-    let contract = CoinCreationContract { sources, targets };
-    let contract_hash = HashValue::new(&contract);
+    let description = CoinCreationDescription { sources, targets };
+    let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
         Value::Lock(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
                 account_balance: Amount::from(15),
-                contract_hash,
+                description_hash,
             },
             sequence_number: SequenceNumber::default(),
         }),
     )];
 
     assert!(state
-        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .is_err());
 }
 
@@ -678,22 +678,22 @@ fn test_handle_coin_creation_order_insufficient_funds() {
             seed: 2,
         },
     ];
-    let contract = CoinCreationContract { sources, targets };
-    let contract_hash = HashValue::new(&contract);
+    let description = CoinCreationDescription { sources, targets };
+    let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
         Value::Lock(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
                 account_balance: Amount::from(5),
-                contract_hash,
+                description_hash,
             },
             sequence_number: SequenceNumber::default(),
         }),
     )];
 
     assert!(state
-        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .is_err());
 }
 
@@ -735,22 +735,22 @@ fn test_handle_coin_creation_order_replayed_seed() {
             seed: 2,
         },
     ];
-    let contract = CoinCreationContract { sources, targets };
-    let contract_hash = HashValue::new(&contract);
+    let description = CoinCreationDescription { sources, targets };
+    let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
         Value::Lock(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
                 account_balance: Amount::from(5),
-                contract_hash,
+                description_hash,
             },
             sequence_number: SequenceNumber::default(),
         }),
     )];
 
     assert!(state
-        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .is_err());
 }
 
@@ -792,22 +792,22 @@ fn test_handle_coin_creation_order_incorrect_source() {
             seed: 2,
         },
     ];
-    let contract = CoinCreationContract { sources, targets };
-    let contract_hash = HashValue::new(&contract);
+    let description = CoinCreationDescription { sources, targets };
+    let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
         Value::Lock(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
                 account_balance: Amount::from(5),
-                contract_hash,
+                description_hash,
             },
             sequence_number: SequenceNumber::default(),
         }),
     )];
 
     assert!(state
-        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .is_err());
 }
 
@@ -850,22 +850,22 @@ fn test_handle_coin_creation_order_repeated_source() {
             seed: 2,
         },
     ];
-    let contract = CoinCreationContract { sources, targets };
-    let contract_hash = HashValue::new(&contract);
+    let description = CoinCreationDescription { sources, targets };
+    let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
         Value::Lock(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
                 account_balance: Amount::from(5),
-                contract_hash,
+                description_hash,
             },
             sequence_number: SequenceNumber::default(),
         }),
     )];
 
     assert!(state
-        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .is_err());
 }
 
@@ -907,22 +907,22 @@ fn test_handle_coin_creation_order_invalid_balance() {
             seed: 2,
         },
     ];
-    let contract = CoinCreationContract { sources, targets };
-    let contract_hash = HashValue::new(&contract);
+    let description = CoinCreationDescription { sources, targets };
+    let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
         Value::Lock(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
                 account_balance: Amount::from(5),
-                contract_hash,
+                description_hash,
             },
             sequence_number: SequenceNumber::default(),
         }),
     )];
 
     assert!(state
-        .handle_coin_creation_order(CoinCreationOrder { locks, contract })
+        .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .is_err());
 }
 

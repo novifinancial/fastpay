@@ -242,11 +242,11 @@ impl Authority for AuthorityState {
     ) -> Result<(Vec<Vote>, Vec<CrossShardContinuation>), FastPayError> {
         // No sharding is currently enforced for coin creation orders.
         let locks = order.locks;
-        let contract = order.contract;
-        let hash = HashValue::new(&contract);
+        let description = order.description;
+        let hash = HashValue::new(&description);
 
-        let sources = contract.sources;
-        let targets = contract.targets;
+        let sources = description.sources;
+        let targets = description.targets;
         fp_ensure!(
             locks.len() == sources.len(),
             FastPayError::InvalidCoinCreationOrder
@@ -270,7 +270,7 @@ impl Authority for AuthorityState {
                     operation:
                         Operation::Spend {
                             account_balance,
-                            contract_hash,
+                            description_hash,
                         },
                     ..
                 }) => {
@@ -278,7 +278,7 @@ impl Authority for AuthorityState {
                     fp_ensure!(
                         account_id == &source.account_id
                             && account_balance == &source.account_balance
-                            && contract_hash == &hash,
+                            && description_hash == &hash,
                         FastPayError::InvalidCoinCreationOrder
                     );
                     // Update source amount.

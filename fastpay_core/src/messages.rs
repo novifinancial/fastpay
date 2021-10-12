@@ -44,10 +44,10 @@ pub enum Operation {
     /// Change the authentication key of the account.
     ChangeOwner { new_owner: AccountOwner },
     /// Lock the account so that the balance and linked coins may be eventually transfered
-    /// to new coins (according to the "coin creation contract" behind `contract_hash`).
+    /// to new coins (according to the "coin creation description" behind `description_hash`).
     Spend {
         account_balance: Amount,
-        contract_hash: HashValue,
+        description_hash: HashValue,
     },
     /// Close the account (and spend a number of linked coins) to transfer the given total
     /// amount to the recipient.
@@ -101,7 +101,7 @@ pub enum Value {
     Coin(Coin),
 }
 
-/// The balance of an account plus linked coins to be used in a coin creation contract.
+/// The balance of an account plus linked coins to be used in a coin creation description.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CoinCreationSource {
@@ -113,7 +113,7 @@ pub struct CoinCreationSource {
 /// Instructions to create a number of coins during a CoinCreationOrder.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct CoinCreationContract {
+pub struct CoinCreationDescription {
     /// The sources to be used for coin creation.
     pub sources: Vec<CoinCreationSource>,
     /// The coins to be created.
@@ -125,7 +125,7 @@ pub struct CoinCreationContract {
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CoinCreationOrder {
     /// Instructions to create the coins.
-    pub contract: CoinCreationContract,
+    pub description: CoinCreationDescription,
     /// Proof that the source accounts have been locked with a suitable "Spend" operation
     /// and the account balances are correct.
     pub locks: Vec<Certificate>,
@@ -424,4 +424,4 @@ impl ConfirmationOrder {
 
 impl BcsSignable for RequestValue {}
 impl BcsSignable for Value {}
-impl BcsSignable for CoinCreationContract {}
+impl BcsSignable for CoinCreationDescription {}

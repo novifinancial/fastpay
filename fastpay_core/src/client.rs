@@ -83,17 +83,17 @@ pub trait AccountClient {
     /// Close the account (and lose everything in it!!)
     fn close_account(&mut self) -> AsyncResult<Certificate, failure::Error>;
 
-    /// Spend (i.e. lock) the account in order to execute a contract later.
+    /// Spend (i.e. lock) the account in order to create coins later.
     fn spend_unsafe(
         &mut self,
         account_balance: Amount,
-        contract_hash: HashValue,
+        description_hash: HashValue,
     ) -> AsyncResult<Certificate, failure::Error>;
 
     /// Create new coins using previously spent (i.e. locked) accounts.
     fn create_coins(
         &mut self,
-        contract: CoinCreationContract,
+        description: CoinCreationDescription,
         locked_accounts: Vec<Certificate>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error>;
 
@@ -825,13 +825,13 @@ where
         &mut self,
         order: CoinCreationOrder,
     ) -> Result<Vec<Certificate>, failure::Error> {
-        let coin_num = order.contract.targets.len();
+        let coin_num = order.description.targets.len();
         let committee = self.committee.clone();
         let result = self
             .communicate_with_quorum(|name, client| {
                 let order = order.clone();
                 let committee = committee.clone();
-                let targets = order.contract.targets.clone();
+                let targets = order.description.targets.clone();
                 Box::pin(async move {
                     let vector = client.handle_coin_creation_order(order).await?;
                     fp_ensure!(
@@ -864,7 +864,7 @@ where
             }
         };
         let mut builders = order
-            .contract
+            .description
             .targets
             .into_iter()
             .map(|coin| SignatureAggregator::new(Value::Coin(coin), &committee))
@@ -1083,7 +1083,7 @@ where
     fn spend_unsafe(
         &mut self,
         account_balance: Amount,
-        contract_hash: HashValue,
+        description_hash: HashValue,
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
             let balance = self.synchronize_balance().await?;
@@ -1097,7 +1097,7 @@ where
                 account_id: self.account_id.clone(),
                 operation: Operation::Spend {
                     account_balance,
-                    contract_hash,
+                    description_hash,
                 },
                 sequence_number: self.next_sequence_number,
             };
@@ -1109,11 +1109,11 @@ where
     /// Spend the account and create new coins.
     fn create_coins(
         &mut self,
-        contract: CoinCreationContract,
+        description: CoinCreationDescription,
         locks: Vec<Certificate>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error> {
         Box::pin(async move {
-            let creation_order = CoinCreationOrder { contract, locks };
+            let creation_order = CoinCreationOrder { description, locks };
             let coin_certificates = self.execute_coin_creation(creation_order).await?;
             Ok(coin_certificates)
         })
@@ -1141,13 +1141,13 @@ where
                 account_balance,
                 coins: self.coins.clone(),
             };
-            let contract = CoinCreationContract {
+            let description = CoinCreationDescription {
                 sources: vec![source],
                 targets: new_coins,
             };
-            let contract_hash = HashValue::new(&contract);
-            let lock_certificate = self.spend_unsafe(account_balance, contract_hash).await?;
-            self.create_coins(contract, vec![lock_certificate]).await
+            let description_hash = HashValue::new(&description);
+            let lock_certificate = self.spend_unsafe(account_balance, description_hash).await?;
+            self.create_coins(description, vec![lock_certificate]).await
         })
     }
 
