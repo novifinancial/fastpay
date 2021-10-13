@@ -4,7 +4,9 @@
 #![deny(warnings)]
 
 use fastpay::{network, transport};
-use fastpay_core::{authority::*, base_types::*, committee::*, messages::*, serialize::*};
+use fastpay_core::{
+    account::AccountState, authority::*, base_types::*, committee::*, messages::*, serialize::*,
+};
 
 use bytes::Bytes;
 use futures::stream::StreamExt;
@@ -131,15 +133,7 @@ impl ClientServerBenchmark {
             let owner = key_pair.public();
             let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
             assert!(states[shard].in_shard(&id));
-            let client = AccountState {
-                owner: Some(owner),
-                balance: Balance::from(Amount::from(100)),
-                next_sequence_number: SequenceNumber::from(0),
-                pending: None,
-                confirmed_log: Vec::new(),
-                synchronization_log: Vec::new(),
-                received_log: Vec::new(),
-            };
+            let client = AccountState::new(owner, Balance::from(Amount::from(100)));
             states[shard].accounts.insert(id.clone(), client);
 
             let request = Request {
@@ -170,7 +164,8 @@ impl ClientServerBenchmark {
                 certificate.signatures.push((key.public(), sig));
             }
 
-            let bufx2 = serialize_cert(&certificate);
+            let order = ConfirmationOrder { certificate };
+            let bufx2 = serialize_confirmation_order(&order);
             assert!(!bufx2.is_empty());
 
             orders.push((shard, bufx2.into()));
@@ -240,7 +235,7 @@ impl ClientServerBenchmark {
                     info!("Process message {}...", orders.len());
                 }
                 let (shard, order) = orders.pop().unwrap();
-                let status = client.send_recv_bytes(shard, order.to_vec()).await;
+                let status = client.send_recv_info_bytes(shard, order.to_vec()).await;
                 match status {
                     Ok(info) => {
                         debug!("Query response: {:?}", info);

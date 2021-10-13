@@ -310,7 +310,15 @@ fn test_update_recipient_account() {
         Amount::from(10),
         &state,
     );
-    assert!(state.update_recipient_account(certificate).is_ok());
+    let operation = certificate
+        .value
+        .confirm_request()
+        .unwrap()
+        .operation
+        .clone();
+    assert!(state
+        .update_recipient_account(operation, certificate)
+        .is_ok());
     let account = state.accounts.get(&dbg_account(2)).unwrap();
     assert_eq!(Balance::from(11), account.balance);
     assert_eq!(SequenceNumber::from(0), account.next_sequence_number);
@@ -486,7 +494,7 @@ fn init_state_with_accounts<I: IntoIterator<Item = (AccountId, AccountOwner, Bal
 ) -> AuthorityState {
     let mut state = init_state();
     for (id, owner, balance) in balances {
-        let account = AccountState::new_with_balance(owner, balance, Vec::new());
+        let account = AccountState::new(owner, balance);
         state.accounts.insert(id, account);
     }
     state

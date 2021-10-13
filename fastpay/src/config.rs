@@ -4,7 +4,7 @@
 use crate::transport::NetworkProtocol;
 use fastpay_core::{
     base_types::*,
-    client::ClientState,
+    client::AccountClientState,
     messages::{Address, Certificate, Operation, Value},
 };
 
@@ -92,6 +92,7 @@ pub struct UserAccount {
     pub key_pair: KeyPair,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
+    pub coins: Vec<Certificate>,
     pub sent_certificates: Vec<Certificate>,
     pub received_certificates: Vec<Certificate>,
 }
@@ -104,6 +105,7 @@ impl UserAccount {
             key_pair,
             next_sequence_number: SequenceNumber::new(),
             balance,
+            coins: Vec::new(),
             sent_certificates: Vec::new(),
             received_certificates: Vec::new(),
         }
@@ -135,7 +137,7 @@ impl AccountsConfig {
         self.accounts.values_mut()
     }
 
-    pub fn update_from_state<A>(&mut self, state: &ClientState<A>) {
+    pub fn update_from_state<A>(&mut self, state: &AccountClientState<A>) {
         let account = self
             .accounts
             .get_mut(state.account_id())
@@ -149,7 +151,7 @@ impl AccountsConfig {
     pub fn update_for_received_request(&mut self, certificate: Certificate) {
         let request = match &certificate.value {
             Value::Confirm(r) => r,
-            Value::Coin(_) | Value::Lock(_) => return,
+            _ => return,
         };
         if let Operation::Transfer {
             recipient: Address::FastPay(recipient),
