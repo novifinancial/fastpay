@@ -1,6 +1,9 @@
-use crate::error::{CoconutError, CoconutResult};
-use crate::issuance::Coin;
-use crate::setup::{Parameters, PublicKey};
+use crate::{
+    ensure,
+    error::{CoconutError, CoconutResult},
+    issuance::Coin,
+    setup::{Parameters, PublicKey},
+};
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::GroupEncoding as _;
 use sha2::{Digest as _, Sha512};
@@ -47,10 +50,10 @@ impl CoinsRequest {
         // as many blinding factors as output attributes.
         blinding_factors: &[(Scalar, Scalar)],
     ) -> Self {
-        debug_assert!(sigmas.len() == input_attributes.len());
-        debug_assert!(output_attributes.len() == blinding_factors.len());
-        debug_assert!(parameters.max_attributes() >= 2);
-        debug_assert!(public_key.max_attributes() >= 2);
+        assert!(sigmas.len() == input_attributes.len());
+        assert!(output_attributes.len() == blinding_factors.len());
+        assert!(parameters.max_attributes() >= 2);
+        assert!(public_key.max_attributes() >= 2);
 
         // Randomize the input credentials; each credential represents an input coin.
         let sigmas: Vec<_> = sigmas
@@ -223,13 +226,13 @@ impl RequestCoinsProof {
         input_rs: &[Scalar],
         output_rs: &[Scalar],
     ) -> Self {
-        debug_assert!(rs.len() == input_attributes.len());
-        debug_assert!(input_rs.len() == input_attributes.len());
-        debug_assert!(output_attributes.len() == os.len());
-        debug_assert!(output_attributes.len() == blinding_factors.len());
-        debug_assert!(output_attributes.len() == output_rs.len());
-        debug_assert!(parameters.max_attributes() >= 2);
-        debug_assert!(public_key.max_attributes() >= 2);
+        assert!(rs.len() == input_attributes.len());
+        assert!(input_rs.len() == input_attributes.len());
+        assert!(output_attributes.len() == os.len());
+        assert!(output_attributes.len() == blinding_factors.len());
+        assert!(output_attributes.len() == output_rs.len());
+        assert!(parameters.max_attributes() >= 2);
+        assert!(public_key.max_attributes() >= 2);
 
         // Compute the witnesses.
         let input_attributes_witnesses: Vec<_> = input_attributes
@@ -386,13 +389,13 @@ impl RequestCoinsProof {
         input_commitments: &[G1Projective],
         output_commitments: &[G1Projective],
     ) -> CoconutResult<()> {
-        debug_assert!(sigmas.len() == kappas.len());
-        debug_assert!(sigmas.len() == nus.len());
-        debug_assert!(sigmas.len() == cms.len());
-        debug_assert!(sigmas.len() == input_commitments.len());
-        debug_assert!(output_commitments.len() == cs.len());
-        debug_assert!(parameters.max_attributes() >= 2);
-        debug_assert!(public_key.max_attributes() >= 2);
+        assert!(sigmas.len() == kappas.len());
+        assert!(sigmas.len() == nus.len());
+        assert!(sigmas.len() == cms.len());
+        assert!(sigmas.len() == input_commitments.len());
+        assert!(output_commitments.len() == cs.len());
+        assert!(parameters.max_attributes() >= 2);
+        assert!(public_key.max_attributes() >= 2);
 
         // Compute the Kappa and Nu witnesses.
         let beta0 = &public_key.betas[0];
@@ -497,7 +500,7 @@ impl RequestCoinsProof {
         output_commitments: &[G1Projective],
         zero_sum: &G1Projective,
     ) -> Scalar {
-        debug_assert!(public_key.max_attributes() >= 2);
+        assert!(public_key.max_attributes() >= 2);
 
         let mut hasher = Sha512::new();
         hasher.update(b"RequestCoinsProof");

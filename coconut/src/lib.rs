@@ -1,4 +1,3 @@
-#[macro_use]
 mod error;
 pub mod issuance;
 pub mod lagrange;
@@ -8,7 +7,3 @@ pub mod setup;
 #[cfg(test)]
 #[path = "tests/fixtures.rs"]
 mod fixtures;
-
-#[cfg(test)]
-#[path = "tests/integration_tests.rs"]
-mod integration_tests;

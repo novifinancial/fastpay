@@ -1,7 +1,6 @@
 use crate::setup::Parameters;
 use bls12_381::Scalar;
-use core::iter::Sum;
-use core::ops::Mul;
+use core::{iter::Sum, ops::Mul};
 use ff::Field as _;
 
 #[cfg(test)]

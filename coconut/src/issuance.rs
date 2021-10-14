@@ -1,11 +1,13 @@
-use crate::lagrange::Polynomial;
-use crate::setup::{Parameters, PublicKey, SecretKey};
+use crate::{
+    lagrange::Polynomial,
+    setup::{Parameters, PublicKey, SecretKey},
+};
 use bls12_381::{G1Projective, Scalar};
 use group::GroupEncoding as _;
 
 #[cfg(test)]
-#[path = "tests/issue_tests.rs"]
-pub mod issue_tests;
+#[path = "tests/issuance_tests.rs"]
+pub mod issuance_tests;
 
 #[derive(Clone)]
 pub struct Coin(pub G1Projective, pub G1Projective);
@@ -33,7 +35,7 @@ impl Coin {
 
     /// Aggregates multiple shares of coins into a single coin.
     pub fn aggregate(shares: &[(Self, u64)]) -> Self {
-        debug_assert!(!shares.is_empty());
+        assert!(!shares.is_empty());
         let (coin, _) = &shares[0];
         let shares: Vec<_> = shares.iter().map(|(coin, i)| (coin.1, *i)).collect();
         let s = Polynomial::lagrange_interpolate(&shares);
@@ -57,8 +59,8 @@ impl BlindedCoins {
         // The blinded output coin values and ids.
         cs: &[(G1Projective, G1Projective)],
     ) -> Self {
-        debug_assert!(cms.len() == cs.len());
-        debug_assert!(parameters.max_attributes() >= 2);
+        assert!(cms.len() == cs.len());
+        assert!(parameters.max_attributes() >= 2);
 
         // Compute the base group element h.
         let base_hs = cms.iter().map(|cm| Parameters::hash_to_g1(cm.to_bytes()));

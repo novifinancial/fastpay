@@ -1,10 +1,11 @@
 use crate::lagrange::Polynomial;
-use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
-use bls12_381::{G1Projective, G2Prepared, G2Projective, Scalar};
+use bls12_381::{
+    hash_to_curve::{ExpandMsgXmd, HashToCurve},
+    G1Projective, G2Prepared, G2Projective, Scalar,
+};
 use ff::Field as _;
 use group::{Curve as _, Group as _};
-use rand::rngs::ThreadRng;
-use rand::thread_rng;
+use rand::{rngs::ThreadRng, thread_rng};
 use sha2::Sha512;
 
 #[cfg(test)]
@@ -30,7 +31,7 @@ pub struct Parameters {
 
 impl Parameters {
     pub fn new(max_attributes: usize) -> Parameters {
-        debug_assert!(max_attributes > 0);
+        assert!(max_attributes > 0);
 
         Self {
             g1: G1Projective::generator(),
@@ -129,7 +130,7 @@ impl KeyPair {
         threshold: usize,
         committee: usize,
     ) -> (PublicKey, Vec<KeyPair>) {
-        debug_assert!(threshold <= committee && threshold > 0);
+        assert!(threshold <= committee && threshold > 0);
 
         let v = Polynomial::random(parameters, threshold - 1);
         let ws: Vec<_> = (0..parameters.max_attributes())

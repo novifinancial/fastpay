@@ -1,6 +1,8 @@
-use crate::issuance::Coin;
-use crate::request::CoinsRequest;
-use crate::setup::{KeyPair, Parameters, PublicKey};
+use crate::{
+    issuance::Coin,
+    request::CoinsRequest,
+    setup::{KeyPair, Parameters, PublicKey},
+};
 use bls12_381::Scalar;
 
 // Fixture
