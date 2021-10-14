@@ -19,10 +19,7 @@ pub struct RequestCoinsProof {
     challenge: Scalar,
     input_attributes_responses: Vec<InputAttribute>,
     output_attributes_responses: Vec<OutputAttribute>,
-    rs_responses: Vec<Scalar>,
-    os_responses: Vec<Scalar>,
-    input_rs_responses: Vec<Scalar>,
-    output_rs_responses: Vec<Scalar>,
+    randomness_responses: Randomness,
     zero_sum_response: Scalar,
 }
 
@@ -145,40 +142,40 @@ impl RequestCoinsProof {
                     - challenge * attribute.id_blinding_factor,
             })
             .collect();
-        let rs_responses = randomness
-            .rs
-            .iter()
-            .zip(randomness_witnesses.rs.iter())
-            .map(|(r, w)| w - challenge * r)
-            .collect();
-        let os_responses = randomness
-            .os
-            .iter()
-            .zip(randomness_witnesses.os.iter())
-            .map(|(o, w)| w - challenge * o)
-            .collect();
-        let input_rs_responses = randomness
-            .input_rs
-            .iter()
-            .zip(randomness_witnesses.input_rs)
-            .map(|(r, w)| w - challenge * r)
-            .collect();
-        let output_rs_responses = randomness
-            .output_rs
-            .iter()
-            .zip(randomness_witnesses.output_rs)
-            .map(|(r, w)| w - challenge * r)
-            .collect();
+
+        let randomness_responses = Randomness {
+            rs: randomness
+                .rs
+                .iter()
+                .zip(randomness_witnesses.rs.iter())
+                .map(|(r, w)| w - challenge * r)
+                .collect(),
+            os: randomness
+                .os
+                .iter()
+                .zip(randomness_witnesses.os.iter())
+                .map(|(o, w)| w - challenge * o)
+                .collect(),
+            input_rs: randomness
+                .input_rs
+                .iter()
+                .zip(randomness_witnesses.input_rs)
+                .map(|(r, w)| w - challenge * r)
+                .collect(),
+            output_rs: randomness
+                .output_rs
+                .iter()
+                .zip(randomness_witnesses.output_rs)
+                .map(|(r, w)| w - challenge * r)
+                .collect(),
+        };
         let zero_sum_response = zero_sum_witness - challenge * zero_sum;
 
         Self {
             challenge,
             input_attributes_responses,
             output_attributes_responses,
-            rs_responses,
-            os_responses,
-            input_rs_responses,
-            output_rs_responses,
+            randomness_responses,
             zero_sum_response,
         }
     }
@@ -211,7 +208,7 @@ impl RequestCoinsProof {
         let kappas_reconstruct: Vec<_> = kappas
             .iter()
             .zip(self.input_attributes_responses.iter())
-            .zip(self.rs_responses.iter())
+            .zip(self.randomness_responses.rs.iter())
             .map(|((kappa, attribute), r)| {
                 kappa * self.challenge
                     + public_key.alpha * (Scalar::one() - self.challenge)
@@ -223,7 +220,7 @@ impl RequestCoinsProof {
         let nus_reconstruct: Vec<_> = nus
             .iter()
             .zip(sigmas.iter())
-            .zip(self.rs_responses.iter())
+            .zip(self.randomness_responses.rs.iter())
             .map(|((nu, sigma), r)| nu * self.challenge + sigma.0 * r)
             .collect();
 
@@ -239,7 +236,7 @@ impl RequestCoinsProof {
         let cms_reconstruct: Vec<_> = cms
             .iter()
             .zip(self.output_attributes_responses.iter())
-            .zip(self.os_responses.iter())
+            .zip(self.randomness_responses.os.iter())
             .map(|((cm, attribute), o)| {
                 cm * self.challenge + h0 * attribute.value + h1 * attribute.id + parameters.g1 * o
             })
@@ -265,7 +262,7 @@ impl RequestCoinsProof {
         let input_commitments_reconstruct: Vec<_> = input_commitments
             .iter()
             .zip(self.input_attributes_responses.iter())
-            .zip(self.input_rs_responses.iter())
+            .zip(self.randomness_responses.input_rs.iter())
             .map(|((c, attribute), r)| {
                 c * self.challenge + parameters.hs[0] * attribute.value + parameters.g1 * r
             })
@@ -273,7 +270,7 @@ impl RequestCoinsProof {
         let output_commitments_reconstruct: Vec<_> = output_commitments
             .iter()
             .zip(self.output_attributes_responses.iter())
-            .zip(self.output_rs_responses.iter())
+            .zip(self.randomness_responses.output_rs.iter())
             .map(|((c, attribute), r)| {
                 c * self.challenge + parameters.hs[0] * attribute.value + parameters.g1 * r
             })
