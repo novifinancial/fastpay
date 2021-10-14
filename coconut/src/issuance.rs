@@ -1,5 +1,6 @@
 use crate::{
     lagrange::Polynomial,
+    request::OutputAttribute,
     setup::{Parameters, PublicKey, SecretKey},
 };
 use bls12_381::{G1Projective, Scalar};
@@ -45,7 +46,7 @@ impl Coin {
 
 pub struct BlindedCoins {
     /// A vector of blinded coins.
-    blind: Vec<(G1Projective, G1Projective)>,
+    coins: Vec<(G1Projective, G1Projective)>,
 }
 
 impl BlindedCoins {
@@ -68,13 +69,13 @@ impl BlindedCoins {
         // Homomorphically computes the blinded credential.
         let y0 = &secret.ys[0];
         let y1 = &secret.ys[1];
-        let blind = cs
+        let coins = cs
             .iter()
             .zip(base_hs.into_iter())
             .map(|((v, id), h)| (h, v * y0 + id * y1 + h * secret.x))
             .collect();
 
-        Self { blind }
+        Self { coins }
     }
 
     /// Unblinds the coins.
@@ -83,14 +84,20 @@ impl BlindedCoins {
         // The public key of the authority.
         public_key: &PublicKey,
         // The blinding factors used to produce the coin requests.
-        blinding_factors: &[(Scalar, Scalar)],
+        output_attributes: &[OutputAttribute],
     ) -> Vec<Coin> {
         let gamma_0 = &public_key.gammas[0];
         let gamma_1 = &public_key.gammas[1];
-        self.blind
+        self.coins
             .iter()
-            .zip(blinding_factors.iter())
-            .map(|((h, b), (k_value, k_id))| Coin(*h, b + gamma_0 * (-k_value) + gamma_1 * (-k_id)))
+            .zip(output_attributes.iter())
+            .map(|((h, b), attribute)| {
+                Coin(
+                    *h,
+                    b + gamma_0 * (-attribute.value_blinding_factor)
+                        + gamma_1 * (-attribute.id_blinding_factor),
+                )
+            })
             .collect()
     }
 }
