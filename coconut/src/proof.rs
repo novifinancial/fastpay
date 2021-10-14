@@ -130,6 +130,7 @@ impl RequestCoinsProof {
                 id: witness.id - challenge * attribute.id,
             })
             .collect();
+
         let output_attributes_responses = output_attributes
             .iter()
             .zip(output_attributes_witnesses.iter())
@@ -169,6 +170,7 @@ impl RequestCoinsProof {
                 .map(|(r, w)| w - challenge * r)
                 .collect(),
         };
+        
         let zero_sum_response = zero_sum_witness - challenge * zero_sum;
 
         Self {
