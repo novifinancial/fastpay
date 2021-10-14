@@ -3,12 +3,8 @@ use crate::fixtures::{input_attributes, keypair, output_attributes, parameters, 
 
 #[test]
 fn verify_zk_proof() {
-    let rs = vec![Scalar::from(100), Scalar::from(100)];
-    let os = vec![Scalar::from(200), Scalar::from(200)];
-    let input_rs = vec![Scalar::from(300), Scalar::from(300)];
-    let output_rs = vec![Scalar::from(400), Scalar::from(400)];
-
     let coin_request = request();
+    let randomness = Randomness::test(/* input_len */ 2, /* output_len */ 2);
 
     let base_hs: Vec<_> = coin_request
         .cms
@@ -23,10 +19,7 @@ fn verify_zk_proof() {
         &coin_request.sigmas,
         &input_attributes(),
         &output_attributes(),
-        &os,
-        &rs,
-        &input_rs,
-        &output_rs,
+        &randomness,
     );
 
     let result = proof.verify(

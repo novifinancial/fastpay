@@ -2,7 +2,7 @@ use crate::{
     ensure,
     error::{CoconutError, CoconutResult},
     issuance::Coin,
-    request::{InputAttribute, OutputAttribute},
+    request::{InputAttribute, OutputAttribute, Randomness},
     setup::{Parameters, PublicKey},
 };
 use bls12_381::{G1Projective, G2Projective, Scalar};
@@ -19,8 +19,8 @@ pub struct RequestCoinsProof {
     challenge: Scalar,
     input_attributes_responses: Vec<InputAttribute>,
     output_attributes_responses: Vec<OutputAttribute>,
-    os_responses: Vec<Scalar>,
     rs_responses: Vec<Scalar>,
+    os_responses: Vec<Scalar>,
     input_rs_responses: Vec<Scalar>,
     output_rs_responses: Vec<Scalar>,
     zero_sum_response: Scalar,
@@ -34,15 +34,8 @@ impl RequestCoinsProof {
         sigmas: &[Coin],
         input_attributes: &[InputAttribute],
         output_attributes: &[OutputAttribute],
-        os: &[Scalar],
-        rs: &[Scalar],
-        input_rs: &[Scalar],
-        output_rs: &[Scalar],
+        randomness: &Randomness,
     ) -> Self {
-        assert!(rs.len() == input_attributes.len());
-        assert!(input_rs.len() == input_attributes.len());
-        assert!(output_attributes.len() == os.len());
-        assert!(output_attributes.len() == output_rs.len());
         assert!(parameters.max_attributes() >= 2);
         assert!(public_key.max_attributes() >= 2);
 
@@ -63,20 +56,19 @@ impl RequestCoinsProof {
                 id_blinding_factor: parameters.random_scalar(),
             })
             .collect();
-        let os_witnesses = parameters.n_random_scalars(os.len());
-        let rs_witnesses = parameters.n_random_scalars(rs.len());
-        let input_rs_witnesses = parameters.n_random_scalars(input_rs.len());
-        let output_rs_witnesses = parameters.n_random_scalars(output_rs.len());
+        let randomness_witnesses =
+            Randomness::new(parameters, input_attributes.len(), output_attributes.len());
 
         // Compute Kappa and Nu from the witnesses.
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
         let kappas: Vec<_> = input_attributes_witnesses
             .iter()
-            .zip(rs_witnesses.iter())
+            .zip(randomness_witnesses.rs.iter())
             .map(|(x, r)| public_key.alpha + beta0 * x.value + beta1 * x.id + parameters.g2 * r)
             .collect();
-        let nus: Vec<_> = rs_witnesses
+        let nus: Vec<_> = randomness_witnesses
+            .rs
             .iter()
             .zip(sigmas.iter())
             .map(|(r, sigma)| sigma.0 * r)
@@ -87,7 +79,7 @@ impl RequestCoinsProof {
         let h1 = &parameters.hs[1];
         let cms: Vec<_> = output_attributes_witnesses
             .iter()
-            .zip(os_witnesses.iter())
+            .zip(randomness_witnesses.os.iter())
             .map(|(x, o)| h0 * x.value + h1 * x.id + parameters.g1 * o)
             .collect();
 
@@ -105,30 +97,31 @@ impl RequestCoinsProof {
         // Compute the cryptographic material to prove the sum of the input coins equals the output.
         let input_commitments: Vec<_> = input_attributes_witnesses
             .iter()
-            .zip(input_rs_witnesses.iter())
+            .zip(randomness_witnesses.input_rs.iter())
             .map(|(x, r)| parameters.hs[0] * x.value + parameters.g1 * r)
             .collect();
         let output_commitments: Vec<_> = output_attributes_witnesses
             .iter()
-            .zip(output_rs_witnesses.iter())
+            .zip(randomness_witnesses.output_rs.iter())
             .map(|(x, r)| parameters.hs[0] * x.value + parameters.g1 * r)
             .collect();
 
-        let zero_sum = output_rs.iter().sum::<Scalar>() - input_rs.iter().sum::<Scalar>();
-        let zero_sum_witness =
-            output_rs_witnesses.iter().sum::<Scalar>() - input_rs_witnesses.iter().sum::<Scalar>();
+        let zero_sum = randomness.output_rs.iter().sum::<Scalar>()
+            - randomness.input_rs.iter().sum::<Scalar>();
+        let zero_sum_witness = randomness_witnesses.output_rs.iter().sum::<Scalar>()
+            - randomness_witnesses.input_rs.iter().sum::<Scalar>();
 
         // Compute the challenge.
         let challenge = Self::to_challenge(
-            &public_key,
-            &base_hs,
+            public_key,
+            base_hs,
             &kappas,
             &nus,
             &cms,
             &cs,
             &input_commitments,
             &output_commitments,
-            &(parameters.g1 * zero_sum_witness),
+            /* zero_sum */ &(parameters.g1 * zero_sum_witness),
         );
 
         // Computes responses.
@@ -152,24 +145,28 @@ impl RequestCoinsProof {
                     - challenge * attribute.id_blinding_factor,
             })
             .collect();
-        let os_responses = os
+        let rs_responses = randomness
+            .rs
             .iter()
-            .zip(os_witnesses.iter())
+            .zip(randomness_witnesses.rs.iter())
+            .map(|(r, w)| w - challenge * r)
+            .collect();
+        let os_responses = randomness
+            .os
+            .iter()
+            .zip(randomness_witnesses.os.iter())
             .map(|(o, w)| w - challenge * o)
             .collect();
-        let rs_responses = rs
+        let input_rs_responses = randomness
+            .input_rs
             .iter()
-            .zip(rs_witnesses.iter())
+            .zip(randomness_witnesses.input_rs)
             .map(|(r, w)| w - challenge * r)
             .collect();
-        let input_rs_responses = input_rs
+        let output_rs_responses = randomness
+            .output_rs
             .iter()
-            .zip(input_rs_witnesses)
-            .map(|(r, w)| w - challenge * r)
-            .collect();
-        let output_rs_responses = output_rs
-            .iter()
-            .zip(output_rs_witnesses)
+            .zip(randomness_witnesses.output_rs)
             .map(|(r, w)| w - challenge * r)
             .collect();
         let zero_sum_response = zero_sum_witness - challenge * zero_sum;
@@ -178,8 +175,8 @@ impl RequestCoinsProof {
             challenge,
             input_attributes_responses,
             output_attributes_responses,
-            os_responses,
             rs_responses,
+            os_responses,
             input_rs_responses,
             output_rs_responses,
             zero_sum_response,
@@ -187,6 +184,7 @@ impl RequestCoinsProof {
     }
 
     /// Verify the ZK proof of coins request.
+    #[allow(clippy::too_many_arguments)]
     pub fn verify(
         &self,
         parameters: &Parameters,
@@ -287,7 +285,7 @@ impl RequestCoinsProof {
 
         // Check the challenge.
         let challenge = Self::to_challenge(
-            &public_key,
+            public_key,
             &base_hs,
             &kappas_reconstruct,
             &nus_reconstruct,
@@ -302,6 +300,7 @@ impl RequestCoinsProof {
     }
 
     /// Helper function to calculate the challenge of the ZK proof (Fiat-Shamir heuristic).
+    #[allow(clippy::too_many_arguments)]
     fn to_challenge(
         public_key: &PublicKey,
         base_hs: &[G1Projective],

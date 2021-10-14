@@ -31,6 +31,25 @@ pub struct OutputAttribute {
     pub value_blinding_factor: Scalar,
 }
 
+/// The randomness used in the coin request.
+pub struct Randomness {
+    pub rs: Vec<Scalar>,
+    pub os: Vec<Scalar>,
+    pub input_rs: Vec<Scalar>,
+    pub output_rs: Vec<Scalar>,
+}
+
+impl Randomness {
+    pub fn new(parameters: &mut Parameters, input_len: usize, output_len: usize) -> Self {
+        Self {
+            rs: parameters.n_random_scalars(input_len),
+            os: parameters.n_random_scalars(output_len),
+            input_rs: parameters.n_random_scalars(input_len),
+            output_rs: parameters.n_random_scalars(output_len),
+        }
+    }
+}
+
 pub struct CoinsRequest {
     /// Input credentials representing coins.
     pub sigmas: Vec<Coin>,
@@ -79,40 +98,34 @@ impl CoinsRequest {
             })
             .collect();
 
-        // Pick a random scalar for each value to blind (ie. each input coin value and id).
+        // Generate all random values for the commitments.
         #[cfg(not(test))]
-        let rs = parameters.n_random_scalars(input_attributes.len());
+        let randomness =
+            Randomness::new(parameters, input_attributes.len(), output_attributes.len());
         #[cfg(test)]
-        let rs: Vec<_> = input_attributes.iter().map(|_| Scalar::from(100)).collect();
+        let randomness = Randomness::test(input_attributes.len(), output_attributes.len());
 
         // Compute Kappa and Nu for each input coin.
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
         let kappas = input_attributes
             .iter()
-            .zip(rs.iter())
+            .zip(randomness.rs.iter())
             .map(|(x, r)| public_key.alpha + beta0 * x.value + beta1 * x.id + parameters.g2 * r)
             .collect();
-        let nus = rs
+        let nus = randomness
+            .rs
             .iter()
             .zip(sigmas.iter())
             .map(|(r, sigma)| sigma.0 * r)
             .collect();
 
         // Compute the common commitment Cm for the outputs.
-        #[cfg(not(test))]
-        let os = parameters.n_random_scalars(output_attributes.len());
-        #[cfg(test)]
-        let os: Vec<_> = output_attributes
-            .iter()
-            .map(|_| Scalar::from(200))
-            .collect();
-
         let h0 = &parameters.hs[0];
         let h1 = &parameters.hs[1];
         let cms: Vec<_> = output_attributes
             .iter()
-            .zip(os.iter())
+            .zip(randomness.os.iter())
             .map(|(x, o)| h0 * x.value + h1 * x.id + parameters.g1 * o)
             .collect();
 
@@ -135,39 +148,26 @@ impl CoinsRequest {
             .collect();
 
         // Commit to the input coin values to prove that the sum of the inputs equals the sum of the outputs.
-        #[cfg(not(test))]
-        let input_rs = parameters.n_random_scalars(input_attributes.len());
-        #[cfg(test)]
-        let input_rs: Vec<_> = input_attributes.iter().map(|_| Scalar::from(300)).collect();
-
-        #[cfg(not(test))]
-        let output_rs = parameters.n_random_scalars(input_attributes.len());
-        #[cfg(test)]
-        let output_rs: Vec<_> = input_attributes.iter().map(|_| Scalar::from(400)).collect();
-
         let input_commitments: Vec<_> = input_attributes
             .iter()
-            .zip(input_rs.iter())
+            .zip(randomness.input_rs.iter())
             .map(|(x, r)| parameters.hs[0] * x.value + parameters.g1 * r)
             .collect();
         let output_commitments: Vec<_> = output_attributes
             .iter()
-            .zip(output_rs.iter())
+            .zip(randomness.output_rs.iter())
             .map(|(x, r)| parameters.hs[0] * x.value + parameters.g1 * r)
             .collect();
 
         // Compute the ZK proof asserting correctness of the computations above.
         let proof = RequestCoinsProof::new(
             parameters,
-            &public_key,
+            public_key,
             &base_hs,
             &sigmas,
-            &input_attributes,
-            &output_attributes,
-            &os,
-            &rs,
-            &input_rs,
-            &output_rs,
+            input_attributes,
+            output_attributes,
+            &randomness,
         );
 
         Self {
