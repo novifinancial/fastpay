@@ -3,7 +3,7 @@
 
 #![deny(warnings)]
 
-use fastpay::{network, transport};
+use fastpay::{network, network::CrossShardConfig, transport};
 use fastpay_core::{
     account::AccountState, authority::*, base_types::*, committee::*, messages::*, serialize::*,
 };
@@ -56,9 +56,9 @@ struct ClientServerBenchmark {
     /// Maximum size of datagrams received and sent (bytes)
     #[structopt(long, default_value = transport::DEFAULT_MAX_DATAGRAM_SIZE)]
     buffer_size: usize,
-    /// Number of cross shards messages allowed before blocking the main server loop
-    #[structopt(long, default_value = "1")]
-    cross_shard_queue_size: usize,
+    /// Configuration for cross shard requests
+    #[structopt(flatten)]
+    cross_shard_config: CrossShardConfig,
 }
 
 fn main() {
@@ -182,7 +182,7 @@ impl ClientServerBenchmark {
             self.port,
             state,
             self.buffer_size,
-            self.cross_shard_queue_size,
+            self.cross_shard_config.clone(),
         );
         server.spawn().await.unwrap()
     }

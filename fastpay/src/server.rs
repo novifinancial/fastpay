@@ -19,7 +19,7 @@ fn make_shard_server(
     committee_config_path: &Path,
     initial_accounts_config_path: &Path,
     buffer_size: usize,
-    cross_shard_queue_size: usize,
+    cross_shard_config: network::CrossShardConfig,
     shard: u32,
 ) -> network::Server {
     let server_config =
@@ -50,7 +50,7 @@ fn make_shard_server(
         server_config.authority.base_port,
         state,
         buffer_size,
-        cross_shard_queue_size,
+        cross_shard_config,
     )
 }
 
@@ -60,7 +60,7 @@ fn make_servers(
     committee_config_path: &Path,
     initial_accounts_config_path: &Path,
     buffer_size: usize,
-    cross_shard_queue_size: usize,
+    cross_shard_config: network::CrossShardConfig,
 ) -> Vec<network::Server> {
     let server_config =
         AuthorityServerConfig::read(server_config_path).expect("Fail to read server config");
@@ -74,7 +74,7 @@ fn make_servers(
             committee_config_path,
             initial_accounts_config_path,
             buffer_size,
-            cross_shard_queue_size,
+            cross_shard_config.clone(),
             shard,
         ))
     }
@@ -105,9 +105,9 @@ enum ServerCommands {
         #[structopt(long, default_value = transport::DEFAULT_MAX_DATAGRAM_SIZE)]
         buffer_size: usize,
 
-        /// Number of cross shards messages allowed before blocking the main server loop
-        #[structopt(long, default_value = "1000")]
-        cross_shard_queue_size: usize,
+        /// Configuration for cross shard requests
+        #[structopt(flatten)]
+        cross_shard_config: network::CrossShardConfig,
 
         /// Path to the file containing the public description of all authorities in this FastPay committee
         #[structopt(long)]
@@ -152,7 +152,7 @@ fn main() {
     match options.cmd {
         ServerCommands::Run {
             buffer_size,
-            cross_shard_queue_size,
+            cross_shard_config,
             committee,
             initial_accounts,
             shard,
@@ -167,7 +167,7 @@ fn main() {
                         &committee,
                         &initial_accounts,
                         buffer_size,
-                        cross_shard_queue_size,
+                        cross_shard_config,
                         shard,
                     );
                     vec![server]
@@ -180,7 +180,7 @@ fn main() {
                         &committee,
                         &initial_accounts,
                         buffer_size,
-                        cross_shard_queue_size,
+                        cross_shard_config,
                     )
                 }
             };
