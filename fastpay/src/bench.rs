@@ -62,7 +62,7 @@ struct ClientServerBenchmark {
 }
 
 fn main() {
-    env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let benchmark = ClientServerBenchmark::from_args();
 
     let (states, orders) = benchmark.make_structures();
