@@ -509,7 +509,7 @@ fn main() {
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let options = ClientOptions::from_args();
     let mut context = ClientContext::from_options(&options);
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     match options.cmd {
         ClientCommands::Transfer {
             sender,

@@ -195,7 +195,7 @@ fn init_local_client_state_with_bad_authority(
 
 #[test]
 fn test_get_strong_majority_balance() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     rt.block_on(async {
         let mut client = init_local_client_state(vec![3, 4, 4, 4]);
         assert_eq!(
@@ -219,7 +219,7 @@ fn test_get_strong_majority_balance() {
 
 #[test]
 fn test_initiating_valid_transfer() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
     let certificate = rt
@@ -244,7 +244,7 @@ fn test_initiating_valid_transfer() {
 
 #[test]
 fn test_rotate_key_pair() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
     let new_key_pair = KeyPair::generate();
@@ -273,7 +273,7 @@ fn test_rotate_key_pair() {
 
 #[test]
 fn test_transfer_ownership() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
     let new_key_pair = KeyPair::generate();
@@ -380,7 +380,7 @@ fn test_create_multiple_coins_balance_exceeded() {
 }
 
 fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
     let mut client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
     fund_account(
@@ -448,7 +448,7 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
 
 #[test]
 fn test_open_account() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
     let new_key_pair = KeyPair::generate();
@@ -501,7 +501,7 @@ fn test_open_account() {
 
 #[test]
 fn test_close_account() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 4, 4, 4]);
     sender.balance = Balance::from(4);
     let certificate = rt.block_on(sender.close_account()).unwrap();
@@ -527,7 +527,7 @@ fn test_close_account() {
 
 #[test]
 fn test_initiating_valid_transfer_despite_bad_authority() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state_with_bad_authority(vec![4, 4, 4, 4]);
     sender.balance = Balance::from(4);
     let certificate = rt
@@ -552,7 +552,7 @@ fn test_initiating_valid_transfer_despite_bad_authority() {
 
 #[test]
 fn test_initiating_transfer_low_funds() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let mut sender = init_local_client_state(vec![2, 2, 4, 4]);
     sender.balance = Balance::from(2);
     assert!(rt
@@ -569,7 +569,7 @@ fn test_initiating_transfer_low_funds() {
 
 #[test]
 fn test_bidirectional_transfer() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
     let mut client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
     let mut client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
@@ -654,7 +654,7 @@ fn test_bidirectional_transfer() {
 
 #[test]
 fn test_receiving_unconfirmed_transfer() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
     let mut client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
     let mut client2 = make_client(dbg_account(2), authority_clients.clone(), committee);
@@ -702,7 +702,7 @@ fn test_receiving_unconfirmed_transfer() {
 
 #[test]
 fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
     let mut client0 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
     let mut client1 = make_client(dbg_account(2), authority_clients.clone(), committee.clone());
