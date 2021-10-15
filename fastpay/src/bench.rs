@@ -72,9 +72,8 @@ fn main() {
         // Make special single-core runtime for each server
         let b = benchmark.clone();
         thread::spawn(move || {
-            let mut runtime = Builder::new()
+            let runtime = Builder::new_current_thread()
                 .enable_all()
-                .basic_scheduler()
                 .thread_stack_size(15 * 1024 * 1024)
                 .build()
                 .unwrap();
@@ -88,9 +87,8 @@ fn main() {
         });
     }
 
-    let mut runtime = Builder::new()
+    let runtime = Builder::new_current_thread()
         .enable_all()
-        .basic_scheduler()
         .thread_stack_size(15 * 1024 * 1024)
         .build()
         .unwrap();
@@ -190,7 +188,7 @@ impl ClientServerBenchmark {
     }
 
     async fn launch_client(&self, mut orders: Vec<(u32, Bytes)>) {
-        time::delay_for(Duration::from_millis(1000)).await;
+        time::sleep(Duration::from_millis(1000)).await;
 
         let items_number = orders.len() / 2;
         let time_start = Instant::now();

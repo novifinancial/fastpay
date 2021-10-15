@@ -185,7 +185,7 @@ fn main() {
                 }
             };
 
-            let mut rt = Runtime::new().unwrap();
+            let rt = Runtime::new().unwrap();
             let mut handles = Vec::new();
             for server in servers {
                 handles.push(async move {
