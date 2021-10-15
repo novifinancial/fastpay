@@ -20,6 +20,8 @@ pub struct AccountState {
     pub confirmed_log: Vec<Certificate>,
     /// All confirmed certificates as a receiver.
     pub received_log: Vec<Certificate>,
+    /// The indexing keys of all confirmed certificates as a receiver.
+    pub received_keys: BTreeSet<(AccountId, SequenceNumber)>,
     /// All executed Primary synchronization orders for this recipient.
     pub synchronization_log: Vec<PrimarySynchronizationOrder>,
 }
@@ -46,6 +48,7 @@ impl AccountState {
             pending: None,
             confirmed_log: Vec::new(),
             synchronization_log: Vec::new(),
+            received_keys: BTreeSet::new(),
             received_log: Vec::new(),
         }
     }
@@ -177,6 +180,11 @@ impl AccountState {
             &certificate.value.confirm_request().unwrap().operation,
             operation
         );
+        let key = certificate.value.confirm_key().unwrap();
+        if self.received_keys.contains(&key) {
+            // Confirmation already happened.
+            return Ok(());
+        }
         match operation {
             Operation::Transfer { amount, .. } | Operation::SpendAndTransfer { amount, .. } => {
                 self.balance = self
@@ -190,6 +198,7 @@ impl AccountState {
             }
             _ => unreachable!("Not an operation with recipients"),
         }
+        self.received_keys.insert(key);
         self.received_log.push(certificate);
         Ok(())
     }
