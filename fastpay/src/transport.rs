@@ -313,7 +313,11 @@ impl DataStreamPool for TcpDataStreamPool {
     ) -> future::BoxFuture<'a, Result<(), std::io::Error>> {
         Box::pin(async move {
             let stream = self.get_stream(address).await?;
-            TcpDataStream::tcp_write_data(stream, buffer).await
+            let result = TcpDataStream::tcp_write_data(stream, buffer).await;
+            if result.is_err() {
+                self.streams.remove(address);
+            }
+            result
         })
     }
 }
@@ -346,8 +350,10 @@ impl NetworkProtocol {
                     {
                         Ok(buffer) => buffer,
                         Err(err) => {
-                            // We expect an EOF error at the end.
-                            if err.kind() != io::ErrorKind::UnexpectedEof {
+                            // We expect some EOF or disconnect error at the end.
+                            if err.kind() != io::ErrorKind::UnexpectedEof
+                                && err.kind() != io::ErrorKind::ConnectionReset
+                            {
                                 error!("Error while reading TCP stream: {}", err);
                             }
                             break;
