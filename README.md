@@ -27,7 +27,7 @@ done
 # Create configuration files for 1000 user accounts.
 # * Private account states are stored in one local wallet `accounts.json`.
 # * `initial_accounts.txt` is used to mint the corresponding initial balances at startup on the server side.
-./client --committee committee.json --accounts accounts.json create_accounts 1000 --initial-funding 100 >> initial_accounts.txt
+./client --committee committee.json --accounts accounts.json create_initial_accounts 1000 --initial-funding 100 >> initial_accounts.txt
 
 # Start servers
 for I in 1 2 3 4
@@ -38,7 +38,7 @@ do
     done
  done
 
-# Query (locally cached) balance for first and last user account
+# Query balance for first and last user account
 ACCOUNT1="`head -n 1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 ACCOUNT2="`tail -n -1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 ./client --committee committee.json --accounts accounts.json query_balance "$ACCOUNT1"
@@ -54,8 +54,20 @@ ACCOUNT2="`tail -n -1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 # Launch local benchmark using all user accounts
 ./client --committee committee.json --accounts accounts.json benchmark
 
-# Inspect state of first account
-fgrep "$ACCOUNT1" accounts.json
+# Create derived account
+ACCOUNT3="`./client --committee committee.json --accounts accounts.json open_account --from "$ACCOUNT1"`"
+
+# Create coins into the derived account
+./client --committee committee.json --accounts accounts.json spend_and_create_coins --from "$ACCOUNT2" --to-coins "$ACCOUNT3:55" "$ACCOUNT3:55"
+
+# Inspect state of derived account
+fgrep '"account_id"':"$ACCOUNT3" accounts.json
+
+# Spend and transfer all the coins back to the first account
+./client --committee committee.json --accounts accounts.json spend_and_transfer --from "$ACCOUNT3" --to "$ACCOUNT1"
+
+# Query the balance of the first account
+./client --committee committee.json --accounts accounts.json query_balance "$ACCOUNT1"
 
 # Kill servers
 kill %1 %2 %3 %4 %5 %6 %7 %8 %9 %10 %11 %12 %13 %14 %15 %16
@@ -76,4 +88,4 @@ Read our [Contributing guide](https://developers.libra.org/docs/community/contri
 
 ## License
 
-The content of this repository is licensed as [Apache 2.0](https://github.com/novifinancial/research/blob/master/LICENSE)
+The content of this repository is licensed as [Apache 2.0](https://github.com/novifinancial/fastpay/blob/main/LICENSE)

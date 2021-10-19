@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
@@ -14,7 +14,7 @@ fn test_handle_funding_transaction_zero_amount() {
         .handle_funding_transaction(funding_transaction)
         .is_err());
     assert_eq!(contract_state.total_balance, Amount::zero());
-    assert_eq!(contract_state.last_transaction_index, VersionNumber::new());
+    assert_eq!(contract_state.last_transaction_index, SequenceNumber::new());
     assert!(contract_state.blockchain.is_empty());
     assert!(contract_state.accounts.is_empty());
 }
@@ -31,8 +31,8 @@ fn test_handle_funding_transaction_ok() {
         contract_state.total_balance,
         funding_transaction.primary_coins
     );
-    let mut updated_last_transaction_index = VersionNumber::new();
-    updated_last_transaction_index = updated_last_transaction_index.increment().unwrap();
+    let mut updated_last_transaction_index = SequenceNumber::new();
+    updated_last_transaction_index.try_add_assign_one().unwrap();
     assert_eq!(
         contract_state.last_transaction_index,
         updated_last_transaction_index
@@ -79,7 +79,7 @@ fn test_handle_redeem_transaction_ok() {
         .unwrap()
         .sequence_number;
     assert_eq!(account.last_redeemed, Some(sequence_number));
-    old_total_balance = old_total_balance.try_sub(amount).unwrap();
+    old_total_balance.try_sub_assign(amount).unwrap();
     assert_eq!(contract_state.total_balance, old_total_balance);
 }
 
@@ -101,7 +101,7 @@ fn test_handle_redeem_transaction_negative_balance() {
         .unwrap()
         .amount_mut()
         .unwrap();
-    *amount = amount.try_add(too_much_money).unwrap();
+    amount.try_add_assign(too_much_money).unwrap();
     assert!(contract_state
         .handle_redeem_transaction(redeem_transaction)
         .is_err());
@@ -131,7 +131,7 @@ fn test_handle_redeem_transaction_double_spend() {
 // helpers
 #[cfg(test)]
 fn init_contract() -> (FastPaySmartContractState, KeyPair) {
-    let key_pair = get_key_pair();
+    let key_pair = KeyPair::generate();
     let name = key_pair.public();
     let mut authorities = BTreeMap::new();
     authorities.insert(name, /* voting right */ 1);

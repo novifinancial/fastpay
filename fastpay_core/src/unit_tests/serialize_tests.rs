@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 #![allow(clippy::same_item_push)] // get_key_pair returns random elements
 
@@ -24,12 +24,12 @@ fn test_info_query() {
     let query1 = AccountInfoQuery {
         account_id: dbg_account(0x20),
         query_sequence_number: None,
-        query_received_requests_excluding_first_nth: None,
+        query_received_certificates_excluding_first_nth: None,
     };
     let query2 = AccountInfoQuery {
         account_id: dbg_account(0x20),
         query_sequence_number: Some(SequenceNumber::from(129)),
-        query_received_requests_excluding_first_nth: None,
+        query_received_certificates_excluding_first_nth: None,
     };
 
     let buf1 = serialize_info_query(&query1);
@@ -54,7 +54,7 @@ fn test_info_query() {
 
 #[test]
 fn test_order() {
-    let sender_key = get_key_pair();
+    let sender_key = KeyPair::generate();
 
     let request = Request {
         account_id: dbg_account(1),
@@ -76,7 +76,7 @@ fn test_order() {
         panic!()
     }
 
-    let sender_key = get_key_pair();
+    let sender_key = KeyPair::generate();
     let request2 = Request {
         account_id: dbg_account(1),
         operation: Operation::Transfer {
@@ -109,7 +109,7 @@ fn test_vote() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let key = get_key_pair();
+    let key = KeyPair::generate();
     let vote = Vote::new(Value::Confirm(request), &key);
 
     let buf = serialize_vote(&vote);
@@ -139,7 +139,7 @@ fn test_cert() {
     };
 
     for _ in 0..3 {
-        let key = get_key_pair();
+        let key = KeyPair::generate();
         let sig = Signature::new(&cert.value, &key);
 
         cert.signatures.push((key.public(), sig));
@@ -158,7 +158,7 @@ fn test_cert() {
 
 #[test]
 fn test_info_response() {
-    let sender_key = get_key_pair();
+    let sender_key = KeyPair::generate();
     let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Transfer {
@@ -168,7 +168,7 @@ fn test_info_response() {
         },
         sequence_number: SequenceNumber::new(),
     };
-    let auth_key = get_key_pair();
+    let auth_key = KeyPair::generate();
     let value = Value::Confirm(request);
     let vote = Vote::new(value.clone(), &auth_key);
 
@@ -178,7 +178,7 @@ fn test_info_response() {
     };
 
     for _ in 0..3 {
-        let key = get_key_pair();
+        let key = KeyPair::generate();
         let sig = Signature::new(&cert.value, &key);
 
         cert.signatures.push((key.public(), sig));
@@ -190,35 +190,39 @@ fn test_info_response() {
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
         pending: None,
+        count_received_certificates: 0,
         queried_certificate: None,
-        queried_received_requests: Vec::new(),
+        queried_received_certificates: Vec::new(),
     };
     let resp2 = AccountInfoResponse {
         account_id: dbg_account(0x20),
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
+        count_received_certificates: 0,
         pending: Some(vote.clone()),
         queried_certificate: None,
-        queried_received_requests: Vec::new(),
+        queried_received_certificates: Vec::new(),
     };
     let resp3 = AccountInfoResponse {
         account_id: dbg_account(0x20),
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
+        count_received_certificates: 0,
         pending: None,
         queried_certificate: Some(cert.clone()),
-        queried_received_requests: Vec::new(),
+        queried_received_certificates: Vec::new(),
     };
     let resp4 = AccountInfoResponse {
         account_id: dbg_account(0x20),
         owner: None,
         balance: Balance::from(50),
         next_sequence_number: SequenceNumber::new(),
+        count_received_certificates: 0,
         pending: Some(vote),
         queried_certificate: Some(cert),
-        queried_received_requests: Vec::new(),
+        queried_received_certificates: Vec::new(),
     };
 
     for resp in [resp1, resp2, resp3, resp4].iter() {
@@ -235,7 +239,7 @@ fn test_info_response() {
 
 #[test]
 fn test_time_order() {
-    let sender_key = get_key_pair();
+    let sender_key = KeyPair::generate();
     let request = Request {
         account_id: dbg_account(1),
         operation: Operation::Transfer {
@@ -282,7 +286,7 @@ fn test_time_vote() {
     };
     let value = Value::Confirm(request);
 
-    let key = get_key_pair();
+    let key = KeyPair::generate();
 
     let mut buf = Vec::new();
     let now = Instant::now();
@@ -325,7 +329,7 @@ fn test_time_cert() {
     };
 
     for _ in 0..7 {
-        let key = get_key_pair();
+        let key = KeyPair::generate();
         let sig = Signature::new(&cert.value, &key);
         cert.signatures.push((key.public(), sig));
     }

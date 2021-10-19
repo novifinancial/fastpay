@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{base_types::*, committee::Committee, downloader::*, error::FastPayError, messages::*};
@@ -83,17 +83,17 @@ pub trait AccountClient {
     /// Close the account (and lose everything in it!!)
     fn close_account(&mut self) -> AsyncResult<Certificate, failure::Error>;
 
-    /// Spend (i.e. lock) the account in order to execute a contract later.
+    /// Spend (i.e. lock) the account in order to create coins later.
     fn spend_unsafe(
         &mut self,
         account_balance: Amount,
-        contract_hash: HashValue,
+        description_hash: HashValue,
     ) -> AsyncResult<Certificate, failure::Error>;
 
     /// Create new coins using previously spent (i.e. locked) accounts.
     fn create_coins(
         &mut self,
-        contract: CoinCreationContract,
+        description: CoinCreationDescription,
         locked_accounts: Vec<Certificate>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error>;
 
@@ -123,8 +123,7 @@ pub trait AccountClient {
     /// Compute a safe (i.e. pessimistic) balance by synchronizing our "sent" certificates
     /// with authorities, and otherwise using local data on received transfers (i.e.
     /// certificates that were locally processed by `receive_from_fastpay`).
-    /// TODO: automatically synchronize received transfers as well.
-    fn query_safe_balance(&mut self) -> AsyncResult<Balance, failure::Error>;
+    fn synchronize_balance(&mut self) -> AsyncResult<Balance, failure::Error>;
 
     /// Return the value of the known coins attached to this account.
     fn get_coins_value(&self) -> Result<Amount, failure::Error>;
@@ -134,10 +133,14 @@ pub trait AccountClient {
     fn query_strong_majority_balance(&mut self) -> future::BoxFuture<Balance>;
 }
 
+/// The status of the last request order that we have sent, if any.
 #[derive(Debug, Clone)]
 pub enum PendingRequest {
+    /// No request.
     None,
-    Confirming(RequestOrder),
+    /// A "regular" request meant to be confirmed.
+    Regular(RequestOrder),
+    /// A "locking" request that cannot be confirmed.
     Locking(RequestOrder),
 }
 
@@ -165,15 +168,17 @@ pub struct AccountClientState<AuthorityClient> {
     coins: Vec<Certificate>,
 
     // The remaining fields are used to minimize networking, and may not always be persisted locally.
-    /// Confirmed requests that we have created ("sent").
-    /// Normally, `sent_certificates` should contain one certificate for each index in `0..next_sequence_number`.
+    /// Confirmed requests that we have created ("sent") and already included in the state
+    /// of this account client. Certificate at index `i` should have sequence number `i`.
+    /// When no certificate is pending/missing, `sent_certificates` should be of size `next_sequence_number`.
     sent_certificates: Vec<Certificate>,
     /// Known received certificates, indexed by account_id and sequence number.
-    /// TODO: API to search and download yet unknown `received_certificates`.
     received_certificates: BTreeMap<(AccountId, SequenceNumber), Certificate>,
-    /// The known spendable balance (including a possible initial funding, excluding unknown sent
-    /// or received certificates).
+    /// The known spendable balance (including a possible initial funding for testing
+    /// purposes, excluding unknown sent or received certificates).
     balance: Balance,
+    /// Support synchronization of received certificates.
+    received_certificate_trackers: HashMap<AuthorityName, usize>,
 }
 
 impl<A> AccountClientState<A> {
@@ -204,6 +209,7 @@ impl<A> AccountClientState<A> {
                 .into_iter()
                 .filter_map(|cert| Some((cert.value.confirm_key()?, cert)))
                 .collect(),
+            received_certificate_trackers: HashMap::new(),
             balance,
         }
     }
@@ -216,8 +222,16 @@ impl<A> AccountClientState<A> {
         self.key_pair.as_ref().map(|kp| kp.public())
     }
 
+    pub fn key_pair(&self) -> Option<&KeyPair> {
+        self.key_pair.as_ref()
+    }
+
     pub fn next_sequence_number(&self) -> SequenceNumber {
         self.next_sequence_number
+    }
+
+    pub fn coins(&self) -> &Vec<Certificate> {
+        &self.coins
     }
 
     pub fn balance(&self) -> Balance {
@@ -261,13 +275,13 @@ where
     type Key = SequenceNumber;
     type Value = Result<Certificate, FastPayError>;
 
-    /// Try to find a certificate for the given account_id and sequence number.
+    /// Try to find a (confirmation) certificate for the given account_id and sequence number.
     fn query(&mut self, sequence_number: SequenceNumber) -> AsyncResult<Certificate, FastPayError> {
         Box::pin(async move {
             let query = AccountInfoQuery {
                 account_id: self.account_id.clone(),
                 query_sequence_number: Some(sequence_number),
-                query_received_requests_excluding_first_nth: None,
+                query_received_certificates_excluding_first_nth: None,
             };
             // Sequentially try each authority in random order.
             self.authority_clients.shuffle(&mut rand::thread_rng());
@@ -289,7 +303,7 @@ where
                     }
                 }
             }
-            Err(FastPayError::ErrorWhileRequestingCertificate)
+            Err(FastPayError::ClientErrorWhileRequestingCertificate)
         })
     }
 }
@@ -331,7 +345,7 @@ where
         let query = AccountInfoQuery {
             account_id,
             query_sequence_number: None,
-            query_received_requests_excluding_first_nth: None,
+            query_received_certificates_excluding_first_nth: None,
         };
         let numbers: futures::stream::FuturesUnordered<_> = self
             .authority_clients
@@ -440,13 +454,13 @@ where
                     let query = AccountInfoQuery {
                         account_id,
                         query_sequence_number: None,
-                        query_received_requests_excluding_first_nth: None,
+                        query_received_certificates_excluding_first_nth: None,
                     };
                     let response = client.handle_account_info_query(query).await?;
                     let current_sequence_number = response.next_sequence_number;
                     // Download each missing certificate in reverse order using the downloader.
                     let mut missing_certificates = Vec::new();
-                    let mut number = target_sequence_number.decrement();
+                    let mut number = target_sequence_number.try_sub_one();
                     while let Ok(value) = number {
                         if value < current_sequence_number {
                             break;
@@ -454,9 +468,9 @@ where
                         let certificate = handle
                             .query(value)
                             .await
-                            .map_err(|_| FastPayError::ErrorWhileRequestingCertificate)??;
+                            .map_err(|_| FastPayError::ClientErrorWhileRequestingCertificate)??;
                         missing_certificates.push(certificate);
-                        number = value.decrement();
+                        number = value.try_sub_one();
                     }
                     // Send all missing confirmation orders.
                     missing_certificates.reverse();
@@ -477,13 +491,13 @@ where
                             }) => {
                                 fp_ensure!(
                                     vote.authority == name,
-                                    FastPayError::ErrorWhileProcessingRequestOrder
+                                    FastPayError::ClientErrorWhileProcessingRequestOrder
                                 );
                                 vote.check(committee)?;
                                 return Ok(Some(vote));
                             }
                             Err(err) => return Err(err),
-                            _ => return Err(FastPayError::ErrorWhileProcessingRequestOrder),
+                            _ => return Err(FastPayError::ClientErrorWhileProcessingRequestOrder),
                         }
                     }
                     Ok(None)
@@ -543,28 +557,84 @@ where
 
     /// Make sure we have all our certificates with sequence number
     /// in the range 0..self.next_sequence_number
-    async fn download_sent_certificates(&self) -> Result<Vec<Certificate>, FastPayError> {
+    async fn download_missing_sent_certificates(&mut self) -> Result<(), FastPayError> {
         let mut requester = CertificateRequester::new(
             self.committee.clone(),
             self.authority_clients.values().cloned().collect(),
             self.account_id.clone(),
         );
-        let known_sequence_numbers: BTreeSet<_> = self
-            .sent_certificates
-            .iter()
-            .filter_map(|cert| cert.value.confirm_sequence_number())
-            .collect();
-        let mut sent_certificates = self.sent_certificates.clone();
-        let mut number = SequenceNumber::from(0);
-        while number < self.next_sequence_number {
-            if !known_sequence_numbers.contains(&number) {
-                let certificate = requester.query(number).await?;
-                sent_certificates.push(certificate);
-            }
-            number = number.increment().unwrap_or_else(|_| SequenceNumber::max());
+        while self.sent_certificates.len() < self.next_sequence_number.into() {
+            let certificate = requester
+                .query(SequenceNumber::from(self.sent_certificates.len() as u64))
+                .await?;
+            self.add_sent_certificate(certificate)?;
         }
-        sent_certificates.sort_by_key(|cert| cert.value.confirm_sequence_number().unwrap());
-        Ok(sent_certificates)
+        Ok(())
+    }
+
+    /// Attempt to download new received certificates.
+    async fn synchronize_received_certificates(&mut self) -> Result<(), failure::Error> {
+        let account_id = self.account_id.clone();
+        let trackers = self.received_certificate_trackers.clone();
+        let committee = self.committee.clone();
+        let result = self
+            .communicate_with_quorum(|name, client| {
+                let committee = &committee;
+                let account_id = &account_id;
+                let tracker = *trackers.get(&name).unwrap_or(&0);
+                Box::pin(async move {
+                    // Retrieve new received certificates from this authority.
+                    let query = AccountInfoQuery {
+                        account_id: account_id.clone(),
+                        query_sequence_number: None,
+                        query_received_certificates_excluding_first_nth: Some(tracker),
+                    };
+                    let response = client.handle_account_info_query(query).await?;
+                    for certificate in &response.queried_received_certificates {
+                        certificate.check(committee)?;
+                        let request = certificate
+                            .value
+                            .confirm_request()
+                            .ok_or(FastPayError::ClientErrorWhileRequestingCertificate)?;
+                        let recipient = request
+                            .operation
+                            .recipient()
+                            .ok_or(FastPayError::ClientErrorWhileRequestingCertificate)?;
+                        fp_ensure!(
+                            recipient == account_id,
+                            FastPayError::ClientErrorWhileRequestingCertificate
+                        );
+                    }
+                    Ok((name, response))
+                })
+            })
+            .await;
+        match result {
+            Ok(responses) => {
+                for (name, response) in responses {
+                    // Process received certificates.
+                    for certificate in response.queried_received_certificates {
+                        self.receive_from_fastpay(certificate).await.unwrap_or(());
+                    }
+                    // Update tracker.
+                    self.received_certificate_trackers
+                        .insert(name, response.count_received_certificates);
+                }
+            }
+            Err(Some(FastPayError::InactiveAccount(id))) if id == account_id => {
+                // The account is visibly not active (yet or any more) so there is no need
+                // to synchronize received certificates.
+                return Ok(());
+            }
+            Err(Some(err)) => bail!(
+                "Failed to communicate with a quorum of authorities: {}",
+                err
+            ),
+            Err(None) => {
+                bail!("Failed to communicate with a quorum of authorities (multiple errors)")
+            }
+        };
+        Ok(())
     }
 
     /// Send money to a FastPay or Primary recipient.
@@ -576,12 +646,12 @@ where
     ) -> Result<Certificate, failure::Error> {
         // Trying to overspend may block the account. To prevent this, we compare with
         // the balance as we know it.
-        let safe_balance = self.query_safe_balance().await?;
+        let balance = self.synchronize_balance().await?;
         ensure!(
-            Balance::from(amount) <= safe_balance,
+            Balance::from(amount) <= balance,
             "Requested amount ({}) is not backed by sufficient funds ({})",
             amount,
-            safe_balance
+            balance
         );
         let request = Request {
             account_id: self.account_id.clone(),
@@ -594,117 +664,104 @@ where
         };
         let order = self.make_request_order(request)?;
         let certificate = self
-            .execute_confirming_request(order, /* with_confirmation */ true)
+            .execute_regular_request(order, /* with_confirmation */ true)
             .await?;
         Ok(certificate)
     }
 
-    /// Update our view of sent certificates. Adjust the local balance and the next sequence number accordingly.
-    /// NOTE: This is only useful in the eventuality of missing local data.
-    /// We assume certificates to be valid and sent by us, and their sequence numbers to be unique.
     fn update_sent_certificates(
         &mut self,
         sent_certificates: Vec<Certificate>,
     ) -> Result<(), FastPayError> {
-        let mut new_balance = self.balance;
-        let mut new_next_sequence_number = self.next_sequence_number;
-        for old_cert in &self.sent_certificates {
-            let request = match &old_cert.value {
-                Value::Confirm(r) => r,
-                _ => continue,
-            };
-            if let Operation::Transfer { amount, .. } = &request.operation {
-                new_balance = new_balance.try_add((*amount).into())?;
+        let n = self.sent_certificates.len();
+        for (i, certificate) in sent_certificates.into_iter().enumerate() {
+            if i < n {
+                assert_eq!(certificate.value, self.sent_certificates[i].value);
+            } else {
+                self.add_sent_certificate(certificate)?;
             }
         }
-        for new_cert in &sent_certificates {
-            let request = match &new_cert.value {
-                Value::Confirm(r) => r,
-                _ => continue,
-            };
-            if let Operation::Transfer { amount, .. } = &request.operation {
-                new_balance = new_balance.try_sub((*amount).into())?;
-            }
-            if request.sequence_number >= new_next_sequence_number {
-                assert_eq!(
-                    request.sequence_number, new_next_sequence_number,
-                    "New certificates should be given in order"
-                );
-                match &request.operation {
-                    Operation::ChangeOwner { new_owner } => {
-                        match self.known_key_pairs.entry(*new_owner) {
-                            btree_map::Entry::Occupied(kp) => {
-                                let old = std::mem::take(&mut self.key_pair);
-                                self.key_pair = Some(kp.remove());
-                                if let Some(kp) = old {
-                                    self.known_key_pairs.insert(kp.public(), kp);
-                                }
-                            }
-                            btree_map::Entry::Vacant(_) => {
-                                let old = std::mem::take(&mut self.key_pair);
-                                if let Some(kp) = old {
-                                    self.known_key_pairs.insert(kp.public(), kp);
-                                }
-                            }
-                        }
-                    }
-                    Operation::CloseAccount
-                    | Operation::Spend { .. }
-                    | Operation::SpendAndTransfer { .. } => {
-                        self.key_pair = None;
-                    }
-                    Operation::OpenAccount { .. } | Operation::Transfer { .. } => (),
-                }
-                new_next_sequence_number = request
-                    .sequence_number
-                    .increment()
-                    .unwrap_or_else(|_| SequenceNumber::max());
-            }
-        }
-        // Atomic update
-        self.sent_certificates = sent_certificates;
-        self.balance = new_balance;
-        self.next_sequence_number = new_next_sequence_number;
-        // Sanity check
-        assert_eq!(
-            self.sent_certificates.len() as u64,
-            u64::from(self.next_sequence_number),
-        );
         Ok(())
     }
 
-    /// Execute (or retry) a confirming request order. Update local balance.
-    async fn execute_confirming_request(
+    fn add_sent_certificate(&mut self, certificate: Certificate) -> Result<(), FastPayError> {
+        let request = certificate
+            .value
+            .confirm_request()
+            .expect("was expecting a confirmation certificate");
+        assert_eq!(
+            u64::from(request.sequence_number),
+            self.sent_certificates.len() as u64
+        );
+        // Execute operation locally.
+        match &request.operation {
+            Operation::Transfer { amount, .. } => {
+                self.balance.try_sub_assign((*amount).into())?;
+            }
+            Operation::ChangeOwner { new_owner } => match self.known_key_pairs.entry(*new_owner) {
+                btree_map::Entry::Occupied(kp) => {
+                    let old = std::mem::take(&mut self.key_pair);
+                    self.key_pair = Some(kp.remove());
+                    if let Some(kp) = old {
+                        self.known_key_pairs.insert(kp.public(), kp);
+                    }
+                }
+                btree_map::Entry::Vacant(_) => {
+                    let old = std::mem::take(&mut self.key_pair);
+                    if let Some(kp) = old {
+                        self.known_key_pairs.insert(kp.public(), kp);
+                    }
+                }
+            },
+            Operation::CloseAccount
+            | Operation::Spend { .. }
+            | Operation::SpendAndTransfer { .. } => {
+                self.key_pair = None;
+            }
+            Operation::OpenAccount { .. } => (),
+        }
+        // Record certificate.
+        self.sent_certificates.push(certificate);
+        let next_sequence_number = SequenceNumber::from(self.sent_certificates.len() as u64);
+        if self.next_sequence_number < next_sequence_number {
+            self.next_sequence_number = next_sequence_number;
+        }
+        Ok(())
+    }
+
+    /// Execute (or retry) a regular request order. Update local balance.
+    async fn execute_regular_request(
         &mut self,
         order: RequestOrder,
         with_confirmation: bool,
     ) -> Result<Certificate, failure::Error> {
         ensure!(
             matches!(&self.pending_request, PendingRequest::None)
-                || matches!(&self.pending_request, PendingRequest::Confirming(o) if o.value.request == order.value.request),
+                || matches!(&self.pending_request, PendingRequest::Regular(o) if o.value.request == order.value.request),
             "Client state has a different pending request",
         );
         ensure!(
             order.value.request.sequence_number == self.next_sequence_number,
             "Unexpected sequence number"
         );
-        self.pending_request = PendingRequest::Confirming(order.clone());
-        let new_sent_certificates = self
+        self.download_missing_sent_certificates().await?;
+        self.pending_request = PendingRequest::Regular(order.clone());
+        let certificates = self
             .communicate_requests(
                 self.account_id.clone(),
                 self.sent_certificates.clone(),
                 CommunicateAction::ConfirmOrder(order.clone()),
             )
             .await?;
+        self.update_sent_certificates(certificates)?;
         assert_eq!(
-            new_sent_certificates.last().unwrap().value,
+            self.sent_certificates
+                .last()
+                .expect("last order should be confirmed now")
+                .value,
             Value::Confirm(order.value.request)
         );
-        // Clear `pending_request` and update `sent_certificates`,
-        // `balance`, and `next_sequence_number`. (Note that if we were using persistent
-        // storage, we should ensure update atomicity in the eventuality of a crash.)
         self.pending_request = PendingRequest::None;
-        self.update_sent_certificates(new_sent_certificates)?;
         // Confirm last request certificate if needed.
         if with_confirmation {
             self.communicate_requests(
@@ -722,13 +779,7 @@ where
         &mut self,
         order: RequestOrder,
     ) -> Result<Certificate, failure::Error> {
-        ensure!(
-            matches!(&self.pending_request, PendingRequest::None)
-                || matches!(&self.pending_request, PendingRequest::Locking(o) if o.value.request == order.value.request),
-            "Client state has a different pending request",
-        );
         match &self.lock_certificate {
-            None => (),
             Some(certificate) => {
                 ensure!(
                     matches!(&certificate.value, Value::Lock(r) if &order.value.request == r),
@@ -736,30 +787,37 @@ where
                 );
                 return Ok(certificate.clone());
             }
+            None => (),
         }
-
+        ensure!(
+            matches!(&self.pending_request, PendingRequest::None)
+                || matches!(&self.pending_request, PendingRequest::Locking(o) if o.value.request == order.value.request),
+            "Client state has a different pending request",
+        );
         ensure!(
             order.value.request.sequence_number == self.next_sequence_number,
             "Unexpected sequence number"
         );
+        self.download_missing_sent_certificates().await?;
         self.pending_request = PendingRequest::Locking(order.clone());
-        let mut new_sent_certificates = self
+        let mut certificates = self
             .communicate_requests(
                 self.account_id.clone(),
                 self.sent_certificates.clone(),
                 CommunicateAction::LockOrder(order.clone()),
             )
             .await?;
-        let certificate = new_sent_certificates.pop().unwrap();
-        assert_eq!(certificate.value, Value::Lock(order.value.request));
-        // Store the precious locking certificate for future uses.
-        self.lock_certificate = Some(certificate.clone());
-        // Clear `pending_request` and update `sent_certificates`,
-        // `balance`, and `next_sequence_number`. (Note that if we were using persistent
-        // storage, we should ensure update atomicity in the eventuality of a crash.)
+        self.lock_certificate = certificates.pop();
+        self.update_sent_certificates(certificates)?;
+        assert_eq!(
+            self.lock_certificate
+                .as_ref()
+                .expect("last order should be locked now")
+                .value,
+            Value::Lock(order.value.request)
+        );
         self.pending_request = PendingRequest::None;
-        self.update_sent_certificates(new_sent_certificates)?;
-        Ok(certificate)
+        Ok(self.lock_certificate.as_ref().unwrap().clone())
     }
 
     /// Execute (or retry) a coin creation order.
@@ -767,27 +825,27 @@ where
         &mut self,
         order: CoinCreationOrder,
     ) -> Result<Vec<Certificate>, failure::Error> {
-        let coin_num = order.contract.targets.len();
+        let coin_num = order.description.targets.len();
         let committee = self.committee.clone();
         let result = self
             .communicate_with_quorum(|name, client| {
                 let order = order.clone();
                 let committee = committee.clone();
-                let targets = order.contract.targets.clone();
+                let targets = order.description.targets.clone();
                 Box::pin(async move {
                     let vector = client.handle_coin_creation_order(order).await?;
                     fp_ensure!(
                         vector.len() == coin_num,
-                        FastPayError::ErrorWhileProcessingRequestOrder // TODO
+                        FastPayError::ClientErrorWhileProcessingCoinCreationOrder
                     );
                     for (i, vote) in vector.iter().enumerate() {
                         fp_ensure!(
                             vote.authority == name,
-                            FastPayError::ErrorWhileProcessingRequestOrder
+                            FastPayError::ClientErrorWhileProcessingCoinCreationOrder
                         );
                         fp_ensure!(
                             matches!(&vote.value, Value::Coin(coin) if coin == &targets[i]),
-                            FastPayError::ErrorWhileProcessingRequestOrder
+                            FastPayError::ClientErrorWhileProcessingCoinCreationOrder
                         );
                         vote.check(&committee)?;
                     }
@@ -806,7 +864,7 @@ where
             }
         };
         let mut builders = order
-            .contract
+            .description
             .targets
             .into_iter()
             .map(|coin| SignatureAggregator::new(Value::Coin(coin), &committee))
@@ -847,7 +905,7 @@ where
             let query = AccountInfoQuery {
                 account_id: self.account_id.clone(),
                 query_sequence_number: None,
-                query_received_requests_excluding_first_nth: None,
+                query_received_certificates_excluding_first_nth: None,
             };
             let numbers: futures::stream::FuturesUnordered<_> = self
                 .authority_clients
@@ -886,12 +944,12 @@ where
         Box::pin(self.transfer(amount, Address::Primary(recipient), user_data))
     }
 
-    fn query_safe_balance(&mut self) -> AsyncResult<Balance, failure::Error> {
+    fn synchronize_balance(&mut self) -> AsyncResult<Balance, failure::Error> {
         Box::pin(async move {
             match self.pending_request.clone() {
-                PendingRequest::Confirming(order) => {
+                PendingRequest::Regular(order) => {
                     // Finish executing the previous request.
-                    self.execute_confirming_request(order, /* with_confirmation */ false)
+                    self.execute_regular_request(order, /* with_confirmation */ false)
                         .await?;
                 }
                 PendingRequest::Locking(order) => {
@@ -900,11 +958,8 @@ where
                 }
                 PendingRequest::None => (),
             }
-            if self.sent_certificates.len() < self.next_sequence_number.into() {
-                // Recover missing sent certificates.
-                let new_sent_certificates = self.download_sent_certificates().await?;
-                self.update_sent_certificates(new_sent_certificates)?;
-            }
+            self.synchronize_received_certificates().await?;
+            self.download_missing_sent_certificates().await?;
             Ok(self.balance)
         })
     }
@@ -936,7 +991,7 @@ where
                 account_id.clone(),
                 vec![certificate.clone()],
                 CommunicateAction::SynchronizeNextSequenceNumber(
-                    request.sequence_number.increment()?,
+                    request.sequence_number.try_add_one()?,
                 ),
             )
             .await?;
@@ -946,7 +1001,7 @@ where
                 .entry(certificate.value.confirm_key().unwrap())
             {
                 if let Some(amount) = request.operation.received_amount() {
-                    self.balance = self.balance.try_add(amount.into())?;
+                    self.balance.try_add_assign(amount.into())?;
                 }
                 entry.insert(certificate);
             }
@@ -966,7 +1021,7 @@ where
             let order = self.make_request_order(request)?;
 
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -984,7 +1039,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1003,7 +1058,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1018,7 +1073,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1028,21 +1083,21 @@ where
     fn spend_unsafe(
         &mut self,
         account_balance: Amount,
-        contract_hash: HashValue,
+        description_hash: HashValue,
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
-            let safe_balance = self.query_safe_balance().await?;
+            let balance = self.synchronize_balance().await?;
             ensure!(
-                Balance::from(account_balance) <= safe_balance,
+                Balance::from(account_balance) <= balance,
                 "Suggested balance ({}) does not match available funds ({})",
                 account_balance,
-                safe_balance
+                balance
             );
             let request = Request {
                 account_id: self.account_id.clone(),
                 operation: Operation::Spend {
                     account_balance,
-                    contract_hash,
+                    description_hash,
                 },
                 sequence_number: self.next_sequence_number,
             };
@@ -1054,11 +1109,11 @@ where
     /// Spend the account and create new coins.
     fn create_coins(
         &mut self,
-        contract: CoinCreationContract,
+        description: CoinCreationDescription,
         locks: Vec<Certificate>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error> {
         Box::pin(async move {
-            let creation_order = CoinCreationOrder { contract, locks };
+            let creation_order = CoinCreationOrder { description, locks };
             let coin_certificates = self.execute_coin_creation(creation_order).await?;
             Ok(coin_certificates)
         })
@@ -1069,15 +1124,15 @@ where
         new_coins: Vec<Coin>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error> {
         Box::pin(async move {
-            let account_balance = self.query_safe_balance().await?;
+            let account_balance = self.synchronize_balance().await?;
             let mut amount =
                 Amount::try_from(account_balance.try_add(self.get_coins_value()?.into())?)?;
             let mut seeds = BTreeSet::new();
             for coin in &new_coins {
                 ensure!(!seeds.contains(&coin.seed), "Coin seeds must be unique");
                 seeds.insert(coin.seed);
-                amount = amount
-                    .try_sub(coin.amount)
+                amount
+                    .try_sub_assign(coin.amount)
                     .map_err(|_| failure::format_err!("Insufficient balance to create coins"))?;
             }
             let account_balance = Amount::try_from(account_balance)?;
@@ -1086,13 +1141,13 @@ where
                 account_balance,
                 coins: self.coins.clone(),
             };
-            let contract = CoinCreationContract {
+            let description = CoinCreationDescription {
                 sources: vec![source],
                 targets: new_coins,
             };
-            let contract_hash = HashValue::new(&contract);
-            let lock_certificate = self.spend_unsafe(account_balance, contract_hash).await?;
-            self.create_coins(contract, vec![lock_certificate]).await
+            let description_hash = HashValue::new(&description);
+            let lock_certificate = self.spend_unsafe(account_balance, description_hash).await?;
+            self.create_coins(description, vec![lock_certificate]).await
         })
     }
 
@@ -1103,7 +1158,7 @@ where
                 .value
                 .coin_amount()
                 .ok_or_else(|| failure::format_err!("Client state contains invalid coins"))?;
-            amount = amount.try_add(v)?;
+            amount.try_add_assign(v)?;
         }
         Ok(amount)
     }
@@ -1115,7 +1170,7 @@ where
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
             let amount = {
-                let balance = self.query_safe_balance().await?;
+                let balance = self.synchronize_balance().await?;
                 Amount::try_from(balance.try_add(self.get_coins_value()?.into())?)?
             };
             let request = Request {
@@ -1129,7 +1184,7 @@ where
             };
             let order = self.make_request_order_with_assets(request, self.coins.clone())?;
             let certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ true)
+                .execute_regular_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1153,7 +1208,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let new_certificate = self
-                .execute_confirming_request(order, /* with_confirmation */ false)
+                .execute_regular_request(order, /* with_confirmation */ false)
                 .await?;
             Ok(new_certificate)
         })

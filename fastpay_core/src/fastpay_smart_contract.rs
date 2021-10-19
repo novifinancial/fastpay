@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 //! This module is sketching a FastPay smart contract on a primary chain.
@@ -48,7 +48,7 @@ pub struct FastPaySmartContractState {
     /// Primary coins in the smart contract.
     total_balance: Amount,
     /// The latest transaction index included in the blockchain.
-    pub last_transaction_index: VersionNumber,
+    pub last_transaction_index: SequenceNumber,
     /// Transactions included in the blockchain.
     pub blockchain: Vec<FundingTransaction>,
 }
@@ -80,9 +80,9 @@ impl FastPaySmartContract for FastPaySmartContractState {
             "Transfers must have positive amount",
         );
         // TODO: Make sure that under overflow/underflow we are consistent.
-        self.last_transaction_index = self.last_transaction_index.increment()?;
+        self.last_transaction_index.try_add_assign_one()?;
         self.blockchain.push(transaction);
-        self.total_balance = self.total_balance.try_add(amount)?;
+        self.total_balance.try_add_assign(amount)?;
         Ok(())
     }
 
@@ -124,7 +124,7 @@ impl FastPaySmartContract for FastPaySmartContractState {
             self.total_balance >= amount,
             "The balance on the blockchain cannot be negative",
         );
-        self.total_balance = self.total_balance.try_sub(amount)?;
+        self.total_balance.try_sub_assign(amount)?;
         // Transfer Primary coins to recipient
         Ok(())
     }
@@ -143,7 +143,7 @@ impl FastPaySmartContractState {
         FastPaySmartContractState {
             committee,
             total_balance: Amount::zero(),
-            last_transaction_index: VersionNumber::new(),
+            last_transaction_index: SequenceNumber::new(),
             blockchain: Vec::new(),
             accounts: BTreeMap::new(),
         }

@@ -1,15 +1,16 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
     account::AccountState, base_types::*, committee::Committee, error::FastPayError, messages::*,
 };
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 #[cfg(test)]
 #[path = "unit_tests/authority_tests.rs"]
 mod authority_tests;
 
+/// State of an authority.
 pub struct AuthorityState {
     /// The name of this autority.
     pub name: AuthorityName,
@@ -17,10 +18,10 @@ pub struct AuthorityState {
     pub committee: Committee,
     /// The signature key pair of the authority.
     pub key_pair: KeyPair,
-    /// Offchain states of FastPay accounts.
+    /// States of FastPay accounts.
     pub accounts: BTreeMap<AccountId, AccountState>,
     /// The latest transaction index of the blockchain that the authority has seen.
-    pub last_transaction_index: VersionNumber,
+    pub last_transaction_index: SequenceNumber,
     /// The sharding ID of this authority shard. 0 if one shard.
     pub shard_id: ShardId,
     /// The number of shards. 1 if single shard.
@@ -79,126 +80,47 @@ pub trait Authority {
 }
 
 impl AuthorityState {
-    /// (Trusted) Try to update the recipient account(s) in a confirmation order.
-    fn update_recipient_account(
+    /// (Trusted) Process a confirmed request issued from an account.
+    fn process_confirmed_request(
         &mut self,
-        operation: Operation,
-        certificate: Certificate,
-    ) -> Result<(), FastPayError> {
-        let recipient = operation
-            .recipient()
-            .ok_or(FastPayError::InvalidCrossShardRequest)?;
-        fp_ensure!(self.in_shard(recipient), FastPayError::WrongShard);
-        // Execute the recipient's side of the operation.
-        let account = self.accounts.entry(recipient.clone()).or_default();
-        account.apply_operation_as_recipient(&operation, certificate)?;
-        // This concludes the confirmation of `certificate`.
-        Ok(())
-    }
-}
-
-impl Authority for AuthorityState {
-    /// Initiate a new request.
-    fn handle_request_order(
-        &mut self,
-        order: RequestOrder,
-    ) -> Result<AccountInfoResponse, FastPayError> {
-        fp_ensure!(
-            self.in_shard(&order.value.request.account_id),
-            FastPayError::WrongShard
-        );
-        // Verify that is the order was meant for this authority.
-        if let Some(authority) = &order.value.limited_to {
-            fp_ensure!(self.name == *authority, FastPayError::InvalidRequestOrder);
-        }
-        // Verify additional certificates in the order.
-        for asset in &order.assets {
-            asset.check(&self.committee)?;
-        }
-        let account_id = order.value.request.account_id.clone();
-        match self.accounts.get_mut(&account_id) {
-            None => fp_bail!(FastPayError::InactiveAccount(account_id)),
-            Some(account) => {
-                fp_ensure!(
-                    account.owner.is_some(),
-                    FastPayError::InactiveAccount(account_id)
-                );
-                // Check authentication of the request.
-                order.check(&account.owner)?;
-                let request = order.value.request;
-                fp_ensure!(
-                    request.sequence_number <= SequenceNumber::max(),
-                    FastPayError::InvalidSequenceNumber
-                );
-                if let Some(pending) = &account.pending {
-                    fp_ensure!(
-                        matches!(&pending.value, Value::Confirm(r) if r == &request),
-                        FastPayError::PreviousRequestMustBeConfirmedFirst {
-                            pending: pending.value.clone()
-                        }
-                    );
-                    // This exact request was already signed. Return the previous value.
-                    return Ok(account.make_account_info(account_id));
-                }
-                fp_ensure!(
-                    account.next_sequence_number == request.sequence_number,
-                    FastPayError::UnexpectedSequenceNumber
-                );
-                // Verify that the request is safe, and return the value of the vote.
-                let value = account.validate_operation(request, &order.assets)?;
-                let vote = Vote::new(value, &self.key_pair);
-                account.pending = Some(vote);
-                Ok(account.make_account_info(account_id))
-            }
-        }
-    }
-
-    /// Confirm a request.
-    fn handle_confirmation_order(
-        &mut self,
-        confirmation_order: ConfirmationOrder,
+        request: Request,
+        certificate: Certificate, // For logging purpose
     ) -> Result<(AccountInfoResponse, CrossShardContinuation), FastPayError> {
-        let certificate = confirmation_order.certificate;
-        // Verify that the certified value is a confirmation.
-        let request = certificate
-            .value
-            .confirm_request()
-            .ok_or(FastPayError::InvalidConfirmationOrder)?;
-        // Check the certificate and retrieve the request data.
+        // Verify sharding.
         fp_ensure!(self.in_shard(&request.account_id), FastPayError::WrongShard);
-        certificate.check(&self.committee)?;
+        // Obtain the sender's account.
         let sender = request.account_id.clone();
-
-        let mut sender_account = self
+        let account = self
             .accounts
             .get_mut(&sender)
             .ok_or_else(|| FastPayError::InactiveAccount(sender.clone()))?;
+        // Check that the account is active and ready for this confirmation.
         fp_ensure!(
-            sender_account.owner.is_some(),
+            account.owner.is_some(),
             FastPayError::InactiveAccount(sender.clone())
         );
-        if sender_account.next_sequence_number < request.sequence_number {
+        if account.next_sequence_number < request.sequence_number {
             fp_bail!(FastPayError::MissingEarlierConfirmations {
-                current_sequence_number: sender_account.next_sequence_number
+                current_sequence_number: account.next_sequence_number
             });
         }
-        if sender_account.next_sequence_number > request.sequence_number {
+        if account.next_sequence_number > request.sequence_number {
             // Request was already confirmed.
-            let info = sender_account.make_account_info(sender.clone());
+            let info = account.make_account_info(sender.clone());
             return Ok((info, CrossShardContinuation::Done));
         }
 
         // Execute the sender's side of the operation.
-        sender_account.apply_operation_as_sender(&request.operation, certificate.clone())?;
+        account.apply_operation_as_sender(&request.operation, certificate.clone())?;
         // Advance to next sequence number.
-        sender_account.next_sequence_number = sender_account.next_sequence_number.increment()?;
-        sender_account.pending = None;
+        account.next_sequence_number.try_add_assign_one()?;
+        account.pending = None;
         // Final touch on the sender's account.
-        let info = sender_account.make_account_info(sender.clone());
-        if sender_account.owner.is_none() {
+        let info = account.make_account_info(sender.clone());
+        if account.owner.is_none() {
             // Tentatively remove inactive account. (It might be created again as a
-            // recipient, though. To solve this, regular cleanups should be scheduled in
-            // background.)
+            // recipient, though. To solve this, we may implement additional cleanups in
+            // the future.)
             self.accounts.remove(&sender);
         }
 
@@ -220,18 +142,111 @@ impl Authority for AuthorityState {
         Ok((info, CrossShardContinuation::Done))
     }
 
-    /// Initiate the creation of coin objects.
+    /// (Trusted) Try to update the recipient account in a confirmed request.
+    fn update_recipient_account(
+        &mut self,
+        operation: Operation,
+        certificate: Certificate,
+    ) -> Result<(), FastPayError> {
+        let recipient = operation
+            .recipient()
+            .ok_or(FastPayError::InvalidCrossShardRequest)?;
+        // Verify sharding.
+        fp_ensure!(self.in_shard(recipient), FastPayError::WrongShard);
+        // Execute the recipient's side of the operation.
+        let account = self.accounts.entry(recipient.clone()).or_default();
+        account.apply_operation_as_recipient(&operation, certificate)?;
+        // This concludes the confirmation of `certificate`.
+        Ok(())
+    }
+}
+
+impl Authority for AuthorityState {
+    fn handle_request_order(
+        &mut self,
+        order: RequestOrder,
+    ) -> Result<AccountInfoResponse, FastPayError> {
+        // Verify sharding.
+        fp_ensure!(
+            self.in_shard(&order.value.request.account_id),
+            FastPayError::WrongShard
+        );
+        // Verify that is the order was meant for this authority.
+        if let Some(authority) = &order.value.limited_to {
+            fp_ensure!(self.name == *authority, FastPayError::InvalidRequestOrder);
+        }
+        // Verify additional certificates in the order.
+        let mut checked_assets = Vec::new();
+        for asset in &order.assets {
+            checked_assets.push(asset.check(&self.committee)?);
+        }
+        // Obtain the sender's account.
+        let sender = order.value.request.account_id.clone();
+        let account = self
+            .accounts
+            .get_mut(&sender)
+            .ok_or_else(|| FastPayError::InactiveAccount(sender.clone()))?;
+        fp_ensure!(
+            account.owner.is_some(),
+            FastPayError::InactiveAccount(sender)
+        );
+        // Check authentication of the request.
+        order.check(&account.owner)?;
+        // Check the account is ready for this new request.
+        let request = order.value.request;
+        fp_ensure!(
+            request.sequence_number <= SequenceNumber::max(),
+            FastPayError::InvalidSequenceNumber
+        );
+        fp_ensure!(
+            account.next_sequence_number == request.sequence_number,
+            FastPayError::UnexpectedSequenceNumber
+        );
+        if let Some(pending) = &account.pending {
+            fp_ensure!(
+                matches!(&pending.value, Value::Confirm(r) if r == &request),
+                FastPayError::PreviousRequestMustBeConfirmedFirst {
+                    pending: pending.value.clone()
+                }
+            );
+            // This exact request was already signed. Return the previous vote.
+            return Ok(account.make_account_info(sender));
+        }
+        // Verify that the request is safe, and return the value of the vote.
+        let value = account.validate_operation(request, &checked_assets)?;
+        let vote = Vote::new(value, &self.key_pair);
+        account.pending = Some(vote);
+        Ok(account.make_account_info(sender))
+    }
+
+    /// Confirm a request.
+    fn handle_confirmation_order(
+        &mut self,
+        confirmation_order: ConfirmationOrder,
+    ) -> Result<(AccountInfoResponse, CrossShardContinuation), FastPayError> {
+        // Verify that the certified value is a confirmation.
+        let certificate = confirmation_order.certificate;
+        let request = certificate
+            .value
+            .confirm_request()
+            .ok_or(FastPayError::InvalidConfirmationOrder)?;
+        // Verify the certificate.
+        certificate.check(&self.committee)?;
+        // Process the request.
+        self.process_confirmed_request(request.clone(), certificate)
+    }
+
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
     ) -> Result<(Vec<Vote>, Vec<CrossShardContinuation>), FastPayError> {
-        // TODO: sharding?
+        // No sharding is currently enforced for coin creation orders.
         let locks = order.locks;
-        let contract = order.contract;
-        let hash = HashValue::new(&contract);
+        let description = order.description;
+        let hash = HashValue::new(&description);
 
-        let sources = contract.sources;
-        let targets = contract.targets;
+        let sources = description.sources;
+        let targets = description.targets;
         fp_ensure!(
             locks.len() == sources.len(),
             FastPayError::InvalidCoinCreationOrder
@@ -255,7 +270,7 @@ impl Authority for AuthorityState {
                     operation:
                         Operation::Spend {
                             account_balance,
-                            contract_hash,
+                            description_hash,
                         },
                     ..
                 }) => {
@@ -263,56 +278,50 @@ impl Authority for AuthorityState {
                     fp_ensure!(
                         account_id == &source.account_id
                             && account_balance == &source.account_balance
-                            && contract_hash == &hash,
+                            && description_hash == &hash,
                         FastPayError::InvalidCoinCreationOrder
                     );
                     // Update source amount.
-                    source_amount = source_amount.try_add(*account_balance)?;
+                    source_amount.try_add_assign(*account_balance)?;
                 }
                 _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
             }
             // Verify source coins.
-            let mut seeds = BTreeSet::new();
+            let mut checked_assets = Vec::new();
             for coin in &source.coins {
-                // Verify coin certificate.
-                coin.check(&self.committee)?;
-                match &coin.value {
-                    Value::Coin(Coin {
-                        account_id,
-                        amount,
-                        seed,
-                    }) => {
-                        // Verify locked account.
-                        fp_ensure!(account_id == &source.account_id, FastPayError::InvalidCoin);
-                        // Seeds must be distinct.
-                        fp_ensure!(!seeds.contains(seed), FastPayError::InvalidCoin);
-                        // Update source amount and seeds.
-                        source_amount = source_amount.try_add(*amount)?;
-                        seeds.insert(*seed);
-                    }
-                    _ => fp_bail!(FastPayError::InvalidCoin),
-                }
+                checked_assets.push(coin.check(&self.committee)?);
             }
+            let coin_amount =
+                AccountState::verify_linked_coins(&source.account_id, &checked_assets)?;
+            source_amount.try_add_assign(coin_amount)?;
         }
         // Verify target amount.
-        let mut target_amount = Amount::default();
+        let mut target_amount = Amount::zero();
         for coin in &targets {
-            target_amount = target_amount.try_add(coin.amount)?;
+            fp_ensure!(
+                coin.amount > Amount::zero(),
+                FastPayError::InvalidCoinCreationOrder
+            );
+            target_amount.try_add_assign(coin.amount)?;
         }
         fp_ensure!(
             target_amount <= source_amount,
-            FastPayError::InvalidCoinCreationOrder
+            FastPayError::InsufficientFunding {
+                current_balance: source_amount.into()
+            }
         );
         // Construct votes and continuations.
         let mut votes = Vec::new();
         let mut continuations = Vec::new();
         for coin in targets {
-            let account_id = coin.account_id.clone();
             // Create vote.
             let value = Value::Coin(coin);
             let vote = Vote::new(value, &self.key_pair);
             votes.push(vote);
-            // Send cross shard request to delete source accounts (if needed).
+        }
+        for account_id in source_accounts {
+            // Send cross shard request to delete source account (if needed). This is a
+            // best effort to quickly save storage.
             let shard_id = self.which_shard(&account_id);
             let cont = CrossShardContinuation::Request {
                 shard_id,
@@ -323,7 +332,6 @@ impl Authority for AuthorityState {
         Ok((votes, continuations))
     }
 
-    /// Finalize a request from Primary.
     fn handle_primary_synchronization_order(
         &mut self,
         order: PrimarySynchronizationOrder,
@@ -338,18 +346,17 @@ impl Authority for AuthorityState {
             return Ok(recipient_account.make_account_info(recipient));
         }
         fp_ensure!(
-            order.transaction_index == self.last_transaction_index.increment()?,
+            order.transaction_index == self.last_transaction_index.try_add_one()?,
             FastPayError::UnexpectedTransactionIndex
         );
         let recipient_balance = recipient_account.balance.try_add(order.amount.into())?;
-        let last_transaction_index = self.last_transaction_index.increment()?;
+        let last_transaction_index = self.last_transaction_index.try_add_one()?;
         recipient_account.balance = recipient_balance;
         recipient_account.synchronization_log.push(order);
         self.last_transaction_index = last_transaction_index;
         Ok(recipient_account.make_account_info(recipient))
     }
 
-    /// Handle (trusted!) cross shard request.
     fn handle_cross_shard_request(
         &mut self,
         request: CrossShardRequest,
@@ -381,11 +388,11 @@ impl Authority for AuthorityState {
             if let Some(cert) = account.confirmed_log.get(usize::from(seq)) {
                 response.queried_certificate = Some(cert.clone());
             } else {
-                fp_bail!(FastPayError::CertificateNotfound)
+                fp_bail!(FastPayError::CertificateNotFound)
             }
         }
-        if let Some(idx) = query.query_received_requests_excluding_first_nth {
-            response.queried_received_requests = account.received_log[idx..].to_vec();
+        if let Some(idx) = query.query_received_certificates_excluding_first_nth {
+            response.queried_received_certificates = account.received_log[idx..].to_vec();
         }
         Ok(response)
     }
@@ -398,7 +405,7 @@ impl AuthorityState {
             name,
             key_pair,
             accounts: BTreeMap::new(),
-            last_transaction_index: VersionNumber::new(),
+            last_transaction_index: SequenceNumber::new(),
             shard_id: 0,
             number_of_shards: 1,
         }
@@ -415,7 +422,7 @@ impl AuthorityState {
             name: key_pair.public(),
             key_pair,
             accounts: BTreeMap::new(),
-            last_transaction_index: VersionNumber::new(),
+            last_transaction_index: SequenceNumber::new(),
             shard_id,
             number_of_shards,
         }

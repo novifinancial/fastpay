@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{base_types::*, committee::Committee, error::FastPayError};
@@ -15,7 +15,7 @@ use std::collections::HashSet;
 pub struct PrimarySynchronizationOrder {
     pub recipient: AccountId,
     pub amount: Amount,
-    pub transaction_index: VersionNumber,
+    pub transaction_index: SequenceNumber,
 }
 
 /// A recipient's address in FastPay or on the primary chain.
@@ -44,10 +44,10 @@ pub enum Operation {
     /// Change the authentication key of the account.
     ChangeOwner { new_owner: AccountOwner },
     /// Lock the account so that the balance and linked coins may be eventually transfered
-    /// to new coins (according to the "coin creation contract" behind `contract_hash`).
+    /// to new coins (according to the "coin creation description" behind `description_hash`).
     Spend {
         account_balance: Amount,
-        contract_hash: HashValue,
+        description_hash: HashValue,
     },
     /// Close the account (and spend a number of linked coins) to transfer the given total
     /// amount to the recipient.
@@ -101,7 +101,7 @@ pub enum Value {
     Coin(Coin),
 }
 
-/// The balance of an account plus linked coins to be used in a coin creation contract.
+/// The balance of an account plus linked coins to be used in a coin creation description.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CoinCreationSource {
@@ -113,7 +113,7 @@ pub struct CoinCreationSource {
 /// Instructions to create a number of coins during a CoinCreationOrder.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct CoinCreationContract {
+pub struct CoinCreationDescription {
     /// The sources to be used for coin creation.
     pub sources: Vec<CoinCreationSource>,
     /// The coins to be created.
@@ -125,7 +125,7 @@ pub struct CoinCreationContract {
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CoinCreationOrder {
     /// Instructions to create the coins.
-    pub contract: CoinCreationContract,
+    pub description: CoinCreationDescription,
     /// Proof that the source accounts have been locked with a suitable "Spend" operation
     /// and the account balances are correct.
     pub locks: Vec<Certificate>,
@@ -161,7 +161,7 @@ pub struct ConfirmationOrder {
 pub struct AccountInfoQuery {
     pub account_id: AccountId,
     pub query_sequence_number: Option<SequenceNumber>,
-    pub query_received_requests_excluding_first_nth: Option<usize>,
+    pub query_received_certificates_excluding_first_nth: Option<usize>,
 }
 
 /// The response to an `AccountInfoQuery`
@@ -173,8 +173,9 @@ pub struct AccountInfoResponse {
     pub balance: Balance,
     pub next_sequence_number: SequenceNumber,
     pub pending: Option<Vote>,
+    pub count_received_certificates: usize,
     pub queried_certificate: Option<Certificate>,
-    pub queried_received_requests: Vec<Certificate>,
+    pub queried_received_certificates: Vec<Certificate>,
 }
 
 /// A (trusted) cross-shard request with an authority.
@@ -389,7 +390,7 @@ impl<'a> SignatureAggregator<'a> {
 
 impl Certificate {
     /// Verify the certificate.
-    pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
+    pub fn check<'a>(&'a self, committee: &Committee) -> Result<&'a Value, FastPayError> {
         // Check the quorum.
         let mut weight = 0;
         let mut used_authorities = HashSet::new();
@@ -410,7 +411,8 @@ impl Certificate {
             FastPayError::CertificateRequiresQuorum
         );
         // All what is left is checking signatures!
-        Signature::verify_batch(&self.value, &self.signatures)
+        Signature::verify_batch(&self.value, &self.signatures)?;
+        Ok(&self.value)
     }
 }
 
@@ -422,4 +424,4 @@ impl ConfirmationOrder {
 
 impl BcsSignable for RequestValue {}
 impl BcsSignable for Value {}
-impl BcsSignable for CoinCreationContract {}
+impl BcsSignable for CoinCreationDescription {}

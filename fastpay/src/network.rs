@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transport::*;
@@ -8,7 +8,21 @@ use bytes::Bytes;
 use futures::{channel::mpsc, future::FutureExt, sink::SinkExt, stream::StreamExt};
 use log::*;
 use std::io;
+use structopt::StructOpt;
 use tokio::time;
+
+#[derive(Clone, Debug, StructOpt)]
+pub struct CrossShardConfig {
+    /// Number of cross shards messages allowed before blocking the main server loop
+    #[structopt(long = "cross_shard_queue_size", default_value = "1")]
+    queue_size: usize,
+    /// Maximum number of retries for a cross shard message.
+    #[structopt(long = "cross_shard_max_retries", default_value = "10")]
+    max_retries: usize,
+    /// Delay before retrying of cross-shard message.
+    #[structopt(long = "cross_shard_retry_delay_ms", default_value = "2000")]
+    retry_delay_ms: u64,
+}
 
 pub struct Server {
     network_protocol: NetworkProtocol,
@@ -16,7 +30,7 @@ pub struct Server {
     base_port: u32,
     state: AuthorityState,
     buffer_size: usize,
-    cross_shard_queue_size: usize,
+    cross_shard_config: CrossShardConfig,
     // Stats
     packets_processed: u64,
     user_errors: u64,
@@ -29,7 +43,7 @@ impl Server {
         base_port: u32,
         state: AuthorityState,
         buffer_size: usize,
-        cross_shard_queue_size: usize,
+        cross_shard_config: CrossShardConfig,
     ) -> Self {
         Self {
             network_protocol,
@@ -37,7 +51,7 @@ impl Server {
             base_port,
             state,
             buffer_size,
-            cross_shard_queue_size,
+            cross_shard_config,
             packets_processed: 0,
             user_errors: 0,
         }
@@ -55,6 +69,8 @@ impl Server {
         network_protocol: NetworkProtocol,
         base_address: String,
         base_port: u32,
+        cross_shard_max_retries: usize,
+        cross_shard_retry_delay_ms: u64,
         this_shard: ShardId,
         mut receiver: mpsc::Receiver<(Vec<u8>, ShardId)>,
     ) {
@@ -67,21 +83,41 @@ impl Server {
         while let Some((buf, shard)) = receiver.next().await {
             // Send cross-shard query.
             let remote_address = format!("{}:{}", base_address, base_port + shard);
-            let status = pool.send_data_to(&buf, &remote_address).await;
-            if let Err(error) = status {
-                error!("Failed to send cross-shard query: {}", error);
-            } else {
-                debug!("Sent cross shard query: {} -> {}", this_shard, shard);
-                queries_sent += 1;
-                if queries_sent % 2000 == 0 {
-                    info!(
-                        "{}:{} (shard {}) has sent {} cross-shard queries",
-                        base_address,
-                        base_port + this_shard,
-                        this_shard,
-                        queries_sent
-                    );
+            for i in 0..cross_shard_max_retries {
+                let status = pool.send_data_to(&buf, &remote_address).await;
+                match status {
+                    Err(error) => {
+                        if i < cross_shard_max_retries {
+                            error!(
+                                "Failed to send cross-shard query ({}-th retry): {}",
+                                i, error
+                            );
+                            tokio::time::sleep(tokio::time::Duration::from_millis(
+                                cross_shard_retry_delay_ms,
+                            ))
+                            .await;
+                        } else {
+                            error!(
+                                "Failed to send cross-shard query (giving up after {} retries): {}",
+                                i, error
+                            );
+                        }
+                    }
+                    _ => {
+                        debug!("Sent cross shard query: {} -> {}", this_shard, shard);
+                        queries_sent += 1;
+                        break;
+                    }
                 }
+            }
+            if queries_sent % 2000 == 0 {
+                info!(
+                    "{}:{} (shard {}) has sent {} cross-shard queries",
+                    base_address,
+                    base_port + this_shard,
+                    this_shard,
+                    queries_sent
+                );
             }
         }
     }
@@ -99,11 +135,14 @@ impl Server {
             self.base_port + self.state.shard_id
         );
 
-        let (cross_shard_sender, cross_shard_receiver) = mpsc::channel(self.cross_shard_queue_size);
+        let (cross_shard_sender, cross_shard_receiver) =
+            mpsc::channel(self.cross_shard_config.queue_size);
         tokio::spawn(Self::forward_cross_shard_queries(
             self.network_protocol,
             self.base_address.clone(),
             self.base_port,
+            self.cross_shard_config.max_retries,
+            self.cross_shard_config.retry_delay_ms,
             self.state.shard_id,
             cross_shard_receiver,
         ));
@@ -369,7 +408,7 @@ impl AuthorityClient for Client {
             let shard = AuthorityState::get_shard(
                 self.num_shards,
                 &order
-                    .contract
+                    .description
                     .targets
                     .first()
                     .ok_or(FastPayError::InvalidCoinCreationOrder)?
