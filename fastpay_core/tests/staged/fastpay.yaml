@@ -340,4 +340,3 @@ Vote:
         TYPENAME: PublicKeyBytes
     - signature:
         TYPENAME: Signature
-
