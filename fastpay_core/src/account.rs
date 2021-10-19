@@ -1,7 +1,8 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{base_types::*, error::FastPayError, messages::*};
+use std::collections::BTreeSet;
 
 /// State of a FastPay account.
 #[derive(Debug, Default)]
@@ -19,6 +20,8 @@ pub struct AccountState {
     pub confirmed_log: Vec<Certificate>,
     /// All confirmed certificates as a receiver.
     pub received_log: Vec<Certificate>,
+    /// The indexing keys of all confirmed certificates as a receiver.
+    pub received_keys: BTreeSet<(AccountId, SequenceNumber)>,
     /// All executed Primary synchronization orders for this recipient.
     pub synchronization_log: Vec<PrimarySynchronizationOrder>,
 }
@@ -31,8 +34,9 @@ impl AccountState {
             balance: self.balance,
             next_sequence_number: self.next_sequence_number,
             pending: self.pending.clone(),
+            count_received_certificates: self.received_log.len(),
             queried_certificate: None,
-            queried_received_requests: Vec::new(),
+            queried_received_certificates: Vec::new(),
         }
     }
 
@@ -44,15 +48,43 @@ impl AccountState {
             pending: None,
             confirmed_log: Vec::new(),
             synchronization_log: Vec::new(),
+            received_keys: BTreeSet::new(),
             received_log: Vec::new(),
         }
+    }
+
+    pub(crate) fn verify_linked_coins(
+        id: &AccountId,
+        coins: &[&Value],
+    ) -> Result<Amount, FastPayError> {
+        let mut total = Amount::zero();
+        let mut seeds = BTreeSet::new();
+        for coin in coins {
+            match coin {
+                Value::Coin(Coin {
+                    account_id,
+                    amount,
+                    seed,
+                }) => {
+                    // Verify linked account.
+                    fp_ensure!(account_id == id, FastPayError::InvalidCoin);
+                    // Seeds must be distinct.
+                    fp_ensure!(!seeds.contains(seed), FastPayError::InvalidCoin);
+                    // Update source amount and seeds.
+                    total.try_add_assign(*amount)?;
+                    seeds.insert(*seed);
+                }
+                _ => fp_bail!(FastPayError::InvalidCoin),
+            }
+        }
+        Ok(total)
     }
 
     /// Verify that the operation is valid and return the value to certify.
     pub(crate) fn validate_operation(
         &self,
         request: Request,
-        assets: &[Certificate],
+        assets: &[&Value],
     ) -> Result<Value, FastPayError> {
         let value = match &request.operation {
             Operation::Transfer { amount, .. } => {
@@ -80,19 +112,12 @@ impl AccountState {
                 Value::Lock(request)
             }
             Operation::SpendAndTransfer { amount, .. } => {
-                let mut amount = *amount;
                 // Verify source coins.
-                for coin in assets {
-                    match &coin.value {
-                        Value::Coin(coin) if coin.account_id == request.account_id => {
-                            amount = amount.try_sub(coin.amount)?;
-                        }
-                        _ => fp_bail!(FastPayError::InvalidCoin),
-                    }
-                }
+                let coin_total = Self::verify_linked_coins(&request.account_id, assets)?;
                 // Verify balance.
+                let public_amount = amount.try_sub(coin_total)?;
                 fp_ensure!(
-                    self.balance >= amount.into(),
+                    self.balance >= public_amount.into(),
                     FastPayError::InsufficientFunding {
                         current_balance: self.balance
                     }
@@ -121,6 +146,10 @@ impl AccountState {
         operation: &Operation,
         certificate: Certificate,
     ) -> Result<(), FastPayError> {
+        assert_eq!(
+            &certificate.value.confirm_request().unwrap().operation,
+            operation
+        );
         match operation {
             Operation::OpenAccount { .. } => (),
             Operation::ChangeOwner { new_owner } => {
@@ -130,7 +159,7 @@ impl AccountState {
                 self.owner = None;
             }
             Operation::Transfer { amount, .. } => {
-                self.balance = self.balance.try_sub((*amount).into())?;
+                self.balance.try_sub_assign((*amount).into())?;
             }
             Operation::Spend { .. } => {
                 // impossible under BFT assumptions.
@@ -147,6 +176,15 @@ impl AccountState {
         operation: &Operation,
         certificate: Certificate,
     ) -> Result<(), FastPayError> {
+        assert_eq!(
+            &certificate.value.confirm_request().unwrap().operation,
+            operation
+        );
+        let key = certificate.value.confirm_key().unwrap();
+        if self.received_keys.contains(&key) {
+            // Confirmation already happened.
+            return Ok(());
+        }
         match operation {
             Operation::Transfer { amount, .. } | Operation::SpendAndTransfer { amount, .. } => {
                 self.balance = self
@@ -160,6 +198,7 @@ impl AccountState {
             }
             _ => unreachable!("Not an operation with recipients"),
         }
+        self.received_keys.insert(key);
         self.received_log.push(certificate);
         Ok(())
     }

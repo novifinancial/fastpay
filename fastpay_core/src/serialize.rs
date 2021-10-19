@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use super::messages::*;
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 #[path = "unit_tests/serialize_tests.rs"]
 mod serialize_tests;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum SerializedMessage {
     // Inbound
     RequestOrder(Box<RequestOrder>),

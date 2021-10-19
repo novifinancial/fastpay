@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::arg_enum;
@@ -7,8 +7,8 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, convert::TryInto, io, sync::Arc};
 use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, TcpStream, UdpSocket},
-    prelude::*,
 };
 
 #[cfg(test)]
@@ -187,7 +187,7 @@ impl DataStreamPool for UdpDataStreamPool {
 // Server implementation for UDP.
 impl NetworkProtocol {
     async fn run_udp_server<S>(
-        mut socket: UdpSocket,
+        socket: UdpSocket,
         mut state: S,
         mut exit_future: futures::channel::oneshot::Receiver<()>,
         buffer_size: usize,
@@ -225,8 +225,6 @@ struct TcpDataStream {
 impl TcpDataStream {
     async fn connect(address: String, max_data_size: usize) -> Result<Self, std::io::Error> {
         let stream = TcpStream::connect(address).await?;
-        stream.set_send_buffer_size(max_data_size)?;
-        stream.set_recv_buffer_size(max_data_size)?;
         Ok(Self {
             stream,
             max_data_size,
@@ -315,7 +313,11 @@ impl DataStreamPool for TcpDataStreamPool {
     ) -> future::BoxFuture<'a, Result<(), std::io::Error>> {
         Box::pin(async move {
             let stream = self.get_stream(address).await?;
-            TcpDataStream::tcp_write_data(stream, buffer).await
+            let result = TcpDataStream::tcp_write_data(stream, buffer).await;
+            if result.is_err() {
+                self.streams.remove(address);
+            }
+            result
         })
     }
 }
@@ -323,7 +325,7 @@ impl DataStreamPool for TcpDataStreamPool {
 // Server implementation for TCP.
 impl NetworkProtocol {
     async fn run_tcp_server<S>(
-        mut listener: TcpListener,
+        listener: TcpListener,
         state: S,
         mut exit_future: futures::channel::oneshot::Receiver<()>,
         buffer_size: usize,
@@ -341,8 +343,6 @@ impl NetworkProtocol {
                         value?
                     }
                 };
-            socket.set_send_buffer_size(buffer_size)?;
-            socket.set_recv_buffer_size(buffer_size)?;
             let guarded_state = guarded_state.clone();
             tokio::spawn(async move {
                 loop {
@@ -350,8 +350,10 @@ impl NetworkProtocol {
                     {
                         Ok(buffer) => buffer,
                         Err(err) => {
-                            // We expect an EOF error at the end.
-                            if err.kind() != io::ErrorKind::UnexpectedEof {
+                            // We expect some EOF or disconnect error at the end.
+                            if err.kind() != io::ErrorKind::UnexpectedEof
+                                && err.kind() != io::ErrorKind::ConnectionReset
+                            {
                                 error!("Error while reading TCP stream: {}", err);
                             }
                             break;

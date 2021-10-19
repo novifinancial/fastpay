@@ -1,9 +1,9 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 #![deny(warnings)]
 
-use fastpay::{network, transport};
+use fastpay::{network, network::CrossShardConfig, transport};
 use fastpay_core::{
     account::AccountState, authority::*, base_types::*, committee::*, messages::*, serialize::*,
 };
@@ -56,13 +56,13 @@ struct ClientServerBenchmark {
     /// Maximum size of datagrams received and sent (bytes)
     #[structopt(long, default_value = transport::DEFAULT_MAX_DATAGRAM_SIZE)]
     buffer_size: usize,
-    /// Number of cross shards messages allowed before blocking the main server loop
-    #[structopt(long, default_value = "1")]
-    cross_shard_queue_size: usize,
+    /// Configuration for cross shard requests
+    #[structopt(flatten)]
+    cross_shard_config: CrossShardConfig,
 }
 
 fn main() {
-    env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let benchmark = ClientServerBenchmark::from_args();
 
     let (states, orders) = benchmark.make_structures();
@@ -72,9 +72,8 @@ fn main() {
         // Make special single-core runtime for each server
         let b = benchmark.clone();
         thread::spawn(move || {
-            let mut runtime = Builder::new()
+            let runtime = Builder::new_current_thread()
                 .enable_all()
-                .basic_scheduler()
                 .thread_stack_size(15 * 1024 * 1024)
                 .build()
                 .unwrap();
@@ -88,9 +87,8 @@ fn main() {
         });
     }
 
-    let mut runtime = Builder::new()
+    let runtime = Builder::new_current_thread()
         .enable_all()
-        .basic_scheduler()
         .thread_stack_size(15 * 1024 * 1024)
         .build()
         .unwrap();
@@ -102,7 +100,7 @@ impl ClientServerBenchmark {
         info!("Preparing accounts.");
         let mut keys = Vec::new();
         for _ in 0..self.committee_size {
-            keys.push(get_key_pair());
+            keys.push(KeyPair::generate());
         }
         let committee = Committee {
             voting_rights: keys.iter().map(|k| (k.public(), 1)).collect(),
@@ -129,7 +127,7 @@ impl ClientServerBenchmark {
         for i in 0..self.num_accounts {
             // Create user account.
             let id = AccountId::new(vec![(i as u64).into()]);
-            let key_pair = get_key_pair();
+            let key_pair = KeyPair::generate();
             let owner = key_pair.public();
             let shard = AuthorityState::get_shard(self.num_shards, &id) as usize;
             assert!(states[shard].in_shard(&id));
@@ -184,13 +182,13 @@ impl ClientServerBenchmark {
             self.port,
             state,
             self.buffer_size,
-            self.cross_shard_queue_size,
+            self.cross_shard_config.clone(),
         );
         server.spawn().await.unwrap()
     }
 
     async fn launch_client(&self, mut orders: Vec<(u32, Bytes)>) {
-        time::delay_for(Duration::from_millis(1000)).await;
+        time::sleep(Duration::from_millis(1000)).await;
 
         let items_number = orders.len() / 2;
         let time_start = Instant::now();

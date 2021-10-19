@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
@@ -29,7 +29,7 @@ impl Requester for LocalRequester {
 
 #[test]
 fn test_local_downloader() {
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     rt.block_on(async move {
         let requester = LocalRequester::new();
         let (task, mut handle) = Downloader::start(requester, vec![("a", 10), ("d", 11)]);

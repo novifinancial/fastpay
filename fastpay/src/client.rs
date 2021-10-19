@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 #![deny(warnings)]
@@ -13,254 +13,308 @@ use futures::stream::StreamExt;
 use log::*;
 use std::{
     collections::{HashMap, HashSet},
+    path::PathBuf,
     time::{Duration, Instant},
 };
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
-fn make_authority_clients(
-    committee_config: &CommitteeConfig,
+struct ClientContext {
+    accounts_config_path: PathBuf,
+    committee_config: CommitteeConfig,
+    accounts_config: AccountsConfig,
     buffer_size: usize,
     send_timeout: std::time::Duration,
     recv_timeout: std::time::Duration,
-) -> HashMap<AuthorityName, network::Client> {
-    let mut authority_clients = HashMap::new();
-    for config in &committee_config.authorities {
-        let config = config.clone();
-        let client = network::Client::new(
-            config.network_protocol,
-            config.host,
-            config.base_port,
-            config.num_shards,
-            buffer_size,
+}
+
+impl ClientContext {
+    fn from_options(options: &ClientOptions) -> Self {
+        let send_timeout = Duration::from_micros(options.send_timeout);
+        let recv_timeout = Duration::from_micros(options.recv_timeout);
+        let accounts_config_path = options.accounts.clone();
+        let committee_config_path = &options.committee;
+        let buffer_size = options.buffer_size;
+
+        let accounts_config = AccountsConfig::read_or_create(&accounts_config_path)
+            .expect("Unable to read user accounts");
+        let committee_config = CommitteeConfig::read(committee_config_path)
+            .expect("Unable to read committee config file");
+
+        ClientContext {
+            accounts_config_path,
+            committee_config,
+            accounts_config,
             send_timeout,
             recv_timeout,
-        );
-        authority_clients.insert(config.name, client);
-    }
-    authority_clients
-}
-
-fn make_authority_mass_clients(
-    committee_config: &CommitteeConfig,
-    buffer_size: usize,
-    send_timeout: std::time::Duration,
-    recv_timeout: std::time::Duration,
-    max_in_flight: u64,
-) -> Vec<(u32, network::MassClient)> {
-    let mut authority_clients = Vec::new();
-    for config in &committee_config.authorities {
-        let client = network::MassClient::new(
-            config.network_protocol,
-            config.host.clone(),
-            config.base_port,
             buffer_size,
-            send_timeout,
-            recv_timeout,
-            max_in_flight / config.num_shards as u64, // Distribute window to diff shards
+        }
+    }
+
+    fn make_authority_clients(&self) -> HashMap<AuthorityName, network::Client> {
+        let mut authority_clients = HashMap::new();
+        for config in &self.committee_config.authorities {
+            let config = config.clone();
+            let client = network::Client::new(
+                config.network_protocol,
+                config.host,
+                config.base_port,
+                config.num_shards,
+                self.buffer_size,
+                self.send_timeout,
+                self.recv_timeout,
+            );
+            authority_clients.insert(config.name, client);
+        }
+        authority_clients
+    }
+
+    fn make_authority_mass_clients(&self, max_in_flight: u64) -> Vec<(u32, network::MassClient)> {
+        let mut authority_clients = Vec::new();
+        for config in &self.committee_config.authorities {
+            let client = network::MassClient::new(
+                config.network_protocol,
+                config.host.clone(),
+                config.base_port,
+                self.buffer_size,
+                self.send_timeout,
+                self.recv_timeout,
+                max_in_flight / config.num_shards as u64, // Distribute window to diff shards
+            );
+            authority_clients.push((config.num_shards, client));
+        }
+        authority_clients
+    }
+
+    fn make_account_client(&self, account_id: AccountId) -> AccountClientState<network::Client> {
+        let account = self
+            .accounts_config
+            .get(&account_id)
+            .expect("Unknown account");
+        let committee = Committee::new(self.committee_config.voting_rights());
+        let authority_clients = self.make_authority_clients();
+        AccountClientState::new(
+            account_id,
+            account.key_pair.as_ref().map(|kp| kp.copy()),
+            committee,
+            authority_clients,
+            account.next_sequence_number,
+            account.coins.clone(),
+            account.sent_certificates.clone(),
+            account.received_certificates.clone(),
+            account.balance,
+        )
+    }
+
+    async fn update_recipient_account(
+        &mut self,
+        certificate: Certificate,
+        key_pair: Option<KeyPair>,
+    ) -> Result<(), failure::Error> {
+        let recipient = match &certificate.value {
+            Value::Confirm(request) => request.operation.recipient().unwrap().clone(),
+            Value::Coin(coin) => coin.account_id.clone(),
+            _ => failure::bail!("unexpected value in certificate"),
+        };
+        let committee = Committee::new(self.committee_config.voting_rights());
+        let authority_clients = self.make_authority_clients();
+        let account = self.accounts_config.get_or_insert(recipient.clone());
+        let mut client = AccountClientState::new(
+            recipient,
+            account.key_pair.as_ref().map(|kp| kp.copy()).or(key_pair),
+            committee,
+            authority_clients,
+            account.next_sequence_number,
+            account.coins.clone(),
+            account.sent_certificates.clone(),
+            account.received_certificates.clone(),
+            account.balance,
         );
-        authority_clients.push((config.num_shards, client));
+        client.receive_from_fastpay(certificate).await?;
+        self.update_account_from_state(&client);
+        Ok(())
     }
-    authority_clients
-}
 
-fn make_account_client_state(
-    accounts: &AccountsConfig,
-    committee_config: &CommitteeConfig,
-    account_id: AccountId,
-    buffer_size: usize,
-    send_timeout: std::time::Duration,
-    recv_timeout: std::time::Duration,
-) -> AccountClientState<network::Client> {
-    let account = accounts.get(&account_id).expect("Unknown account");
-    let committee = Committee::new(committee_config.voting_rights());
-    let authority_clients =
-        make_authority_clients(committee_config, buffer_size, send_timeout, recv_timeout);
-    AccountClientState::new(
-        account_id,
-        Some(account.key_pair.copy()),
-        committee,
-        authority_clients,
-        account.next_sequence_number,
-        account.coins.clone(),
-        account.sent_certificates.clone(),
-        account.received_certificates.clone(),
-        account.balance,
-    )
-}
-
-/// Make one request order per account, up to `max_orders` requests.
-fn make_benchmark_request_orders(
-    accounts_config: &mut AccountsConfig,
-    max_orders: usize,
-) -> (Vec<RequestOrder>, Vec<(AccountId, Bytes)>) {
-    let mut orders = Vec::new();
-    let mut serialized_orders = Vec::new();
-    let mut next_recipient = accounts_config.last_account().unwrap().account_id.clone();
-    for account in accounts_config.accounts_mut() {
-        let request = Request {
-            account_id: account.account_id.clone(),
-            operation: Operation::Transfer {
-                recipient: Address::FastPay(next_recipient),
-                amount: Amount::from(1),
-                user_data: UserData::default(),
-            },
-            sequence_number: account.next_sequence_number,
-        };
-        debug!("Preparing request order: {:?}", request);
-        account.next_sequence_number = account.next_sequence_number.increment().unwrap();
-        let order = RequestOrder::new(request.clone().into(), &account.key_pair, Vec::new());
-        orders.push(order.clone());
-        let serialized_order = serialize_request_order(&order);
-        serialized_orders.push((account.account_id.clone(), serialized_order.into()));
-        if serialized_orders.len() >= max_orders {
-            break;
-        }
-
-        next_recipient = account.account_id.clone();
-    }
-    (orders, serialized_orders)
-}
-
-/// Try to make certificates from orders and server configs
-fn make_benchmark_certificates_from_orders_and_server_configs(
-    orders: Vec<RequestOrder>,
-    server_config: Vec<&str>,
-) -> Vec<(AccountId, Bytes)> {
-    let mut keys = Vec::new();
-    for file in server_config {
-        let server_config = AuthorityServerConfig::read(file).expect("Fail to read server config");
-        keys.push((server_config.authority.name, server_config.key));
-    }
-    let committee = Committee {
-        voting_rights: keys.iter().map(|(k, _)| (*k, 1)).collect(),
-        total_votes: keys.len(),
-    };
-    assert!(
-        keys.len() >= committee.quorum_threshold(),
-        "Not enough server configs were provided with --server-configs"
-    );
-    let mut serialized_certificates = Vec::new();
-    for order in orders {
-        let mut certificate = Certificate {
-            value: Value::Confirm(order.value.request.clone()),
-            signatures: Vec::new(),
-        };
-        for i in 0..committee.quorum_threshold() {
-            let (pubx, secx) = keys.get(i).unwrap();
-            let sig = Signature::new(&certificate.value, secx);
-            certificate.signatures.push((*pubx, sig));
-        }
-        let serialized_certificate =
-            serialize_confirmation_order(&ConfirmationOrder { certificate });
-        serialized_certificates.push((
-            order.value.request.account_id,
-            serialized_certificate.into(),
-        ));
-    }
-    serialized_certificates
-}
-
-/// Try to aggregate votes into certificates.
-fn make_benchmark_certificates_from_votes(
-    committee_config: &CommitteeConfig,
-    votes: Vec<Vote>,
-) -> Vec<(AccountId, Bytes)> {
-    let committee = Committee::new(committee_config.voting_rights());
-    let mut aggregators = HashMap::new();
-    let mut certificates = Vec::new();
-    let mut done_senders = HashSet::new();
-    for vote in votes {
-        // We aggregate votes indexed by sender.
-        let account_id = vote
-            .value
-            .confirm_account_id()
-            .expect("this should be a commit")
+    /// Make one request order per account, up to `max_orders` requests.
+    fn make_benchmark_request_orders(
+        &mut self,
+        max_orders: usize,
+    ) -> (Vec<RequestOrder>, Vec<(AccountId, Bytes)>) {
+        let mut orders = Vec::new();
+        let mut serialized_orders = Vec::new();
+        let mut next_recipient = self
+            .accounts_config
+            .last_account()
+            .unwrap()
+            .account_id
             .clone();
-        if done_senders.contains(&account_id) {
-            continue;
+        for account in self.accounts_config.accounts_mut() {
+            let key_pair = match &account.key_pair {
+                Some(kp) => kp,
+                None => continue,
+            };
+            let request = Request {
+                account_id: account.account_id.clone(),
+                operation: Operation::Transfer {
+                    recipient: Address::FastPay(next_recipient),
+                    amount: Amount::from(1),
+                    user_data: UserData::default(),
+                },
+                sequence_number: account.next_sequence_number,
+            };
+            debug!("Preparing request order: {:?}", request);
+            account.next_sequence_number.try_add_assign_one().unwrap();
+            let order = RequestOrder::new(request.clone().into(), key_pair, Vec::new());
+            orders.push(order.clone());
+            let serialized_order = serialize_request_order(&order);
+            serialized_orders.push((account.account_id.clone(), serialized_order.into()));
+            if serialized_orders.len() >= max_orders {
+                break;
+            }
+
+            next_recipient = account.account_id.clone();
         }
-        debug!(
-            "Processing vote on {:?}'s request by {:?}",
-            account_id, vote.authority,
+        (orders, serialized_orders)
+    }
+
+    /// Try to make certificates from orders and server configs
+    fn make_benchmark_certificates_from_orders_and_server_configs(
+        orders: Vec<RequestOrder>,
+        server_config: Vec<&std::path::Path>,
+    ) -> Vec<(AccountId, Bytes)> {
+        let mut keys = Vec::new();
+        for file in server_config {
+            let server_config =
+                AuthorityServerConfig::read(file).expect("Fail to read server config");
+            keys.push((server_config.authority.name, server_config.key));
+        }
+        let committee = Committee {
+            voting_rights: keys.iter().map(|(k, _)| (*k, 1)).collect(),
+            total_votes: keys.len(),
+        };
+        assert!(
+            keys.len() >= committee.quorum_threshold(),
+            "Not enough server configs were provided with --server-configs"
         );
-        let value = vote.value;
-        let aggregator = aggregators
-            .entry(account_id.clone())
-            .or_insert_with(|| SignatureAggregator::new(value, &committee));
-        match aggregator.append(vote.authority, vote.signature) {
-            Ok(Some(certificate)) => {
-                debug!("Found certificate: {:?}", certificate);
-                let buf = serialize_confirmation_order(&ConfirmationOrder { certificate });
-                certificates.push((account_id.clone(), buf.into()));
-                done_senders.insert(account_id);
+        let mut serialized_certificates = Vec::new();
+        for order in orders {
+            let mut certificate = Certificate {
+                value: Value::Confirm(order.value.request.clone()),
+                signatures: Vec::new(),
+            };
+            for i in 0..committee.quorum_threshold() {
+                let (pubx, secx) = keys.get(i).unwrap();
+                let sig = Signature::new(&certificate.value, secx);
+                certificate.signatures.push((*pubx, sig));
             }
-            Ok(None) => {
-                debug!("Added one vote");
+            let serialized_certificate =
+                serialize_confirmation_order(&ConfirmationOrder { certificate });
+            serialized_certificates.push((
+                order.value.request.account_id,
+                serialized_certificate.into(),
+            ));
+        }
+        serialized_certificates
+    }
+
+    /// Try to aggregate votes into certificates.
+    fn make_benchmark_certificates_from_votes(&self, votes: Vec<Vote>) -> Vec<(AccountId, Bytes)> {
+        let committee = Committee::new(self.committee_config.voting_rights());
+        let mut aggregators = HashMap::new();
+        let mut certificates = Vec::new();
+        let mut done_senders = HashSet::new();
+        for vote in votes {
+            // We aggregate votes indexed by sender.
+            let account_id = vote
+                .value
+                .confirm_account_id()
+                .expect("this should be a commit")
+                .clone();
+            if done_senders.contains(&account_id) {
+                continue;
             }
-            Err(error) => {
-                error!("Failed to aggregate vote: {}", error);
+            debug!(
+                "Processing vote on {:?}'s request by {:?}",
+                account_id, vote.authority,
+            );
+            let value = vote.value;
+            let aggregator = aggregators
+                .entry(account_id.clone())
+                .or_insert_with(|| SignatureAggregator::new(value, &committee));
+            match aggregator.append(vote.authority, vote.signature) {
+                Ok(Some(certificate)) => {
+                    debug!("Found certificate: {:?}", certificate);
+                    let buf = serialize_confirmation_order(&ConfirmationOrder { certificate });
+                    certificates.push((account_id.clone(), buf.into()));
+                    done_senders.insert(account_id);
+                }
+                Ok(None) => {
+                    debug!("Added one vote");
+                }
+                Err(error) => {
+                    error!("Failed to aggregate vote: {}", error);
+                }
+            }
+        }
+        certificates
+    }
+
+    /// Broadcast a bulk of requests to each authority.
+    async fn mass_broadcast_orders(
+        &self,
+        phase: &'static str,
+        max_in_flight: u64,
+        orders: Vec<(AccountId, Bytes)>,
+    ) -> Vec<Bytes> {
+        let time_start = Instant::now();
+        info!("Broadcasting {} {} orders", orders.len(), phase);
+        let authority_clients = self.make_authority_mass_clients(max_in_flight);
+        let mut streams = Vec::new();
+        for (num_shards, client) in authority_clients {
+            // Re-index orders by shard for this particular authority client.
+            let mut sharded_requests = HashMap::new();
+            for (account_id, buf) in &orders {
+                let shard = AuthorityState::get_shard(num_shards, account_id);
+                sharded_requests
+                    .entry(shard)
+                    .or_insert_with(Vec::new)
+                    .push(buf.clone());
+            }
+            streams.push(client.run(sharded_requests));
+        }
+        let responses = futures::stream::select_all(streams).concat().await;
+        let time_elapsed = time_start.elapsed();
+        warn!(
+            "Received {} responses in {} ms.",
+            responses.len(),
+            time_elapsed.as_millis()
+        );
+        warn!(
+            "Estimated server throughput: {} {} orders per sec",
+            (orders.len() as u128) * 1_000_000 / time_elapsed.as_micros(),
+            phase
+        );
+        responses
+    }
+
+    fn mass_update_recipients(&mut self, certificates: Vec<(AccountId, Bytes)>) {
+        for (_sender, buf) in certificates {
+            if let Ok(SerializedMessage::ConfirmationOrder(order)) = deserialize_message(&buf[..]) {
+                self.accounts_config
+                    .update_for_received_request(order.certificate);
             }
         }
     }
-    certificates
-}
 
-/// Broadcast a bulk of requests to each authority.
-async fn mass_broadcast_orders(
-    phase: &'static str,
-    committee_config: &CommitteeConfig,
-    buffer_size: usize,
-    send_timeout: std::time::Duration,
-    recv_timeout: std::time::Duration,
-    max_in_flight: u64,
-    orders: Vec<(AccountId, Bytes)>,
-) -> Vec<Bytes> {
-    let time_start = Instant::now();
-    info!("Broadcasting {} {} orders", orders.len(), phase);
-    let authority_clients = make_authority_mass_clients(
-        committee_config,
-        buffer_size,
-        send_timeout,
-        recv_timeout,
-        max_in_flight,
-    );
-    let mut streams = Vec::new();
-    for (num_shards, client) in authority_clients {
-        // Re-index orders by shard for this particular authority client.
-        let mut sharded_requests = HashMap::new();
-        for (account_id, buf) in &orders {
-            let shard = AuthorityState::get_shard(num_shards, account_id);
-            sharded_requests
-                .entry(shard)
-                .or_insert_with(Vec::new)
-                .push(buf.clone());
-        }
-        streams.push(client.run(sharded_requests));
+    fn save_accounts(&self) {
+        self.accounts_config
+            .write(&self.accounts_config_path)
+            .expect("Unable to write user accounts");
+        info!("Saved user account states");
     }
-    let responses = futures::stream::select_all(streams).concat().await;
-    let time_elapsed = time_start.elapsed();
-    warn!(
-        "Received {} responses in {} ms.",
-        responses.len(),
-        time_elapsed.as_millis()
-    );
-    warn!(
-        "Estimated server throughput: {} {} orders per sec",
-        (orders.len() as u128) * 1_000_000 / time_elapsed.as_micros(),
-        phase
-    );
-    responses
-}
 
-fn mass_update_recipients(
-    accounts_config: &mut AccountsConfig,
-    certificates: Vec<(AccountId, Bytes)>,
-) {
-    for (_sender, buf) in certificates {
-        if let Ok(SerializedMessage::ConfirmationOrder(order)) = deserialize_message(&buf[..]) {
-            accounts_config.update_for_received_request(order.certificate);
-        }
+    fn update_account_from_state<A>(&mut self, state: &AccountClientState<A>) {
+        self.accounts_config.update_from_state(state)
     }
 }
 
@@ -290,14 +344,14 @@ fn deserialize_response(response: &[u8]) -> Option<AccountInfoResponse> {
     name = "FastPay Client",
     about = "A Byzantine-fault tolerant sidechain with low-latency finality and high throughput"
 )]
-struct ClientOpt {
+struct ClientOptions {
     /// Sets the file storing the state of our user accounts (an empty one will be created if missing)
     #[structopt(long)]
-    accounts: String,
+    accounts: PathBuf,
 
     /// Sets the file describing the public configurations of all authorities
     #[structopt(long)]
-    committee: String,
+    committee: PathBuf,
 
     /// Timeout for sending queries (us)
     #[structopt(long, default_value = "4000000")]
@@ -316,6 +370,34 @@ struct ClientOpt {
     cmd: ClientCommands,
 }
 
+/// Command-line description of a coin to be created.
+struct NewCoin {
+    account_id: AccountId,
+    amount: Amount,
+}
+
+impl std::str::FromStr for NewCoin {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        let account_id = parts[0].parse()?;
+        let amount = parts[1].parse()?;
+        Ok(NewCoin { account_id, amount })
+    }
+}
+
+impl From<NewCoin> for Coin {
+    fn from(new: NewCoin) -> Self {
+        use rand::Rng;
+        Coin {
+            account_id: new.account_id,
+            amount: new.amount,
+            seed: rand::thread_rng().gen(),
+        }
+    }
+}
+
 #[derive(StructOpt)]
 enum ClientCommands {
     /// Transfer funds
@@ -330,21 +412,67 @@ enum ClientCommands {
         recipient: AccountId,
 
         /// Amount to transfer
-        amount: u64,
+        amount: Amount,
     },
 
-    /// Obtain the balance of the account directly from a quorum of authorities. WARNING:
-    /// the result may be over/under-estimated if the network timeout is too short and some
-    /// authorities are malicious.
-    #[structopt(name = "query_raw_balance")]
-    QueryRawBalance {
+    /// Open (i.e. activate) a new account deriving the UID from an existing one.
+    #[structopt(name = "open_account")]
+    OpenAccount {
+        /// Sending account id (must be one of our accounts)
+        #[structopt(long = "from")]
+        sender: AccountId,
+
+        /// Public key of the new owner (otherwise create a key pair and remember it)
+        #[structopt(long = "to-owner")]
+        owner: Option<AccountOwner>,
+    },
+
+    /// Close (i.e. deactivate) an existing account. (Consider `spend_and_transfer`
+    /// instead for real-life use cases.)
+    #[structopt(name = "close_account")]
+    CloseAccount {
+        /// Sending account id (must be one of our accounts)
+        #[structopt(long = "from")]
+        sender: AccountId,
+    },
+
+    /// Transfer the balance and the value of all the coins linked to the sender account
+    /// before closing it.
+    #[structopt(name = "spend_and_transfer")]
+    SpendAndTransfer {
+        /// Sending account id (must be one of our accounts)
+        #[structopt(long = "from")]
+        sender: AccountId,
+
+        /// Recipient account id
+        #[structopt(long = "to")]
+        recipient: AccountId,
+    },
+
+    /// Transfer the balance and the value of all the coins linked to the sender account
+    /// before closing it.
+    #[structopt(name = "spend_and_create_coins")]
+    SpendAndCreateCoins {
+        /// Sending account id (must be one of our accounts)
+        #[structopt(long = "from")]
+        sender: AccountId,
+
+        /// Descriptions of the coins to be created
+        #[structopt(long = "to-coins")]
+        coins: Vec<NewCoin>,
+    },
+
+    /// Obtain the balance of the account directly from a quorum of authorities.
+    #[structopt(name = "query_balance")]
+    QueryBalance {
         /// Account id
         account_id: AccountId,
     },
 
-    /// Obtain a safe balance value guaranteed by the client.
-    #[structopt(name = "query_balance")]
-    QueryBalance {
+    /// Synchronize the local state of the account (including a conservative estimation of the
+    /// available balance) with a quorum authorities.
+    #[structopt(name = "sync_balance")]
+    SynchronizeBalance {
         /// Account id
         account_id: AccountId,
     },
@@ -365,10 +493,10 @@ enum ClientCommands {
         server_configs: Option<Vec<String>>,
     },
 
-    /// Create new user accounts and print the public keys
-    #[structopt(name = "create_accounts")]
-    CreateAccounts {
-        /// known initial balance of the account
+    /// Create initial user accounts and print information to be used for initialization of authority setup.
+    #[structopt(name = "create_initial_accounts")]
+    CreateInitialAccounts {
+        /// Known initial balance of the account
         #[structopt(long, default_value = "0")]
         initial_funding: Balance,
 
@@ -378,116 +506,160 @@ enum ClientCommands {
 }
 
 fn main() {
-    env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let options = ClientOpt::from_args();
-
-    let send_timeout = Duration::from_micros(options.send_timeout);
-    let recv_timeout = Duration::from_micros(options.recv_timeout);
-    let accounts_config_path = &options.accounts;
-    let committee_config_path = &options.committee;
-    let buffer_size = options.buffer_size;
-
-    let mut accounts_config =
-        AccountsConfig::read_or_create(accounts_config_path).expect("Unable to read user accounts");
-    let committee_config =
-        CommitteeConfig::read(committee_config_path).expect("Unable to read committee config file");
-
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let options = ClientOptions::from_args();
+    let mut context = ClientContext::from_options(&options);
+    let rt = Runtime::new().unwrap();
     match options.cmd {
         ClientCommands::Transfer {
             sender,
             recipient,
             amount,
         } => {
-            let amount = Amount::from(amount);
-
-            let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
-                let mut client_state = make_account_client_state(
-                    &accounts_config,
-                    &committee_config,
-                    sender,
-                    buffer_size,
-                    send_timeout,
-                    recv_timeout,
-                );
+                let mut client_state = context.make_account_client(sender);
                 info!("Starting transfer");
                 let time_start = Instant::now();
-                let cert = client_state
+                let certificate = client_state
                     .transfer_to_fastpay(amount, recipient.clone(), UserData::default())
                     .await
                     .unwrap();
                 let time_total = time_start.elapsed().as_micros();
-                info!("Transfer confirmed after {} us", time_total);
-                println!("{:?}", cert);
-                accounts_config.update_from_state(&client_state);
-                info!("Updating recipient's local balance");
-                let mut recipient_client_state = make_account_client_state(
-                    &accounts_config,
-                    &committee_config,
-                    recipient,
-                    buffer_size,
-                    send_timeout,
-                    recv_timeout,
-                );
-                recipient_client_state
-                    .receive_from_fastpay(cert)
+                info!("Operation confirmed after {} us", time_total);
+                info!("{:?}", certificate);
+                context.update_account_from_state(&client_state);
+
+                info!("Updating recipient's local account");
+                context
+                    .update_recipient_account(certificate, None)
                     .await
                     .unwrap();
-                accounts_config.update_from_state(&recipient_client_state);
-                accounts_config
-                    .write(accounts_config_path)
-                    .expect("Unable to write user accounts");
-                info!("Saved user account states");
+                context.save_accounts();
             });
         }
 
-        ClientCommands::QueryRawBalance { account_id } => {
-            let mut rt = Runtime::new().unwrap();
+        ClientCommands::OpenAccount { sender, owner } => {
             rt.block_on(async move {
-                let mut client_state = make_account_client_state(
-                    &accounts_config,
-                    &committee_config,
-                    account_id,
-                    buffer_size,
-                    send_timeout,
-                    recv_timeout,
-                );
-                info!("Starting query for raw balance");
+                let mut client_state = context.make_account_client(sender);
+                let (new_owner, key_pair) = match owner {
+                    Some(key) => (key, None),
+                    None => {
+                        let key_pair = KeyPair::generate();
+                        (key_pair.public(), Some(key_pair))
+                    }
+                };
+                info!("Starting operation to open a new account");
                 let time_start = Instant::now();
-                let balance = client_state.query_strong_majority_balance().await;
+                let certificate = client_state.open_account(new_owner).await.unwrap();
                 let time_total = time_start.elapsed().as_micros();
-                info!("Raw balance confirmed after {} us", time_total);
-                println!("{}", balance);
-                accounts_config.update_from_state(&client_state);
-                accounts_config
-                    .write(accounts_config_path)
-                    .expect("Unable to write user accounts");
-                info!("Saved client account state");
+                info!("Operation confirmed after {} us", time_total);
+                info!("{:?}", certificate);
+                println!(
+                    "{}",
+                    certificate
+                        .value
+                        .confirm_request()
+                        .unwrap()
+                        .operation
+                        .recipient()
+                        .unwrap()
+                );
+                context.update_account_from_state(&client_state);
+
+                info!("Updating recipient's local account");
+                context
+                    .update_recipient_account(certificate, key_pair)
+                    .await
+                    .unwrap();
+                context.save_accounts();
+            });
+        }
+
+        ClientCommands::CloseAccount { sender } => {
+            rt.block_on(async move {
+                let mut client_state = context.make_account_client(sender);
+                info!("Starting operation to close the account");
+                let time_start = Instant::now();
+                let certificate = client_state.close_account().await.unwrap();
+                let time_total = time_start.elapsed().as_micros();
+                info!("Operation confirmed after {} us", time_total);
+                info!("{:?}", certificate);
+                context.update_account_from_state(&client_state);
+                context.save_accounts();
+            });
+        }
+
+        ClientCommands::SpendAndTransfer { sender, recipient } => {
+            rt.block_on(async move {
+                let mut client_state = context.make_account_client(sender);
+                info!("Starting operation to spend and transfer the account");
+                let time_start = Instant::now();
+                let certificate = client_state
+                    .spend_and_transfer(Address::FastPay(recipient.clone()), UserData::default())
+                    .await
+                    .unwrap();
+                let time_total = time_start.elapsed().as_micros();
+                info!("Operation confirmed after {} us", time_total);
+                info!("{:?}", certificate);
+                context.update_account_from_state(&client_state);
+
+                info!("Updating recipient's local account");
+                context
+                    .update_recipient_account(certificate, None)
+                    .await
+                    .unwrap();
+                context.save_accounts();
+            });
+        }
+
+        ClientCommands::SpendAndCreateCoins { sender, coins } => {
+            rt.block_on(async move {
+                let mut client_state = context.make_account_client(sender);
+                let coins = coins.into_iter().map(|c| c.into()).collect();
+                info!("Starting operation to spend the account and create coins");
+                let time_start = Instant::now();
+                let certificates = client_state.spend_and_create_coins(coins).await.unwrap();
+                let time_total = time_start.elapsed().as_micros();
+                info!("Operation confirmed after {} us", time_total);
+                info!("{:?}", certificates);
+                context.update_account_from_state(&client_state);
+
+                info!("Updating recipients' local accounts");
+                for certificate in certificates {
+                    context
+                        .update_recipient_account(certificate, None)
+                        .await
+                        .unwrap();
+                }
+                context.save_accounts();
             });
         }
 
         ClientCommands::QueryBalance { account_id } => {
-            let mut rt = Runtime::new().unwrap();
             rt.block_on(async move {
-                let mut client_state = make_account_client_state(
-                    &accounts_config,
-                    &committee_config,
-                    account_id,
-                    buffer_size,
-                    send_timeout,
-                    recv_timeout,
-                );
-                info!("Query safe balance using client information");
+                let mut client_state = context.make_account_client(account_id);
+                info!("Starting query authorities for the account balance");
                 let time_start = Instant::now();
-                let balance = client_state.query_safe_balance().await.unwrap();
+                let balance = client_state.query_strong_majority_balance().await;
                 let time_total = time_start.elapsed().as_micros();
-                info!("Safe balance obtained after {} us", time_total);
+                info!("Balance confirmed after {} us", time_total);
                 println!("{}", balance);
-                accounts_config.update_from_state(&client_state);
-                accounts_config
-                    .write(accounts_config_path)
-                    .expect("Unable to write user accounts");
-                info!("Saved client account state");
+                context.update_account_from_state(&client_state);
+                context.save_accounts();
+            });
+        }
+
+        ClientCommands::SynchronizeBalance { account_id } => {
+            rt.block_on(async move {
+                let mut client_state = context.make_account_client(account_id);
+                info!("Synchronize account information");
+                let time_start = Instant::now();
+                let balance = client_state.synchronize_balance().await.unwrap();
+                let time_total = time_start.elapsed().as_micros();
+                info!("Account balance synchronized after {} us", time_total);
+                println!("{}", balance);
+                context.update_account_from_state(&client_state);
+                context.save_accounts();
             });
         }
 
@@ -496,23 +668,13 @@ fn main() {
             max_orders,
             server_configs,
         } => {
-            let max_orders = max_orders.unwrap_or_else(|| accounts_config.num_accounts());
-
-            let mut rt = Runtime::new().unwrap();
+            let max_orders = max_orders.unwrap_or_else(|| context.accounts_config.num_accounts());
             rt.block_on(async move {
                 warn!("Starting benchmark phase 1 (request orders)");
-                let (orders, serialize_orders) =
-                    make_benchmark_request_orders(&mut accounts_config, max_orders);
-                let responses = mass_broadcast_orders(
-                    "request",
-                    &committee_config,
-                    buffer_size,
-                    send_timeout,
-                    recv_timeout,
-                    max_in_flight,
-                    serialize_orders,
-                )
-                .await;
+                let (orders, serialize_orders) = context.make_benchmark_request_orders(max_orders);
+                let responses = context
+                    .mass_broadcast_orders("request", max_in_flight, serialize_orders)
+                    .await;
                 let votes: Vec<_> = responses
                     .into_iter()
                     .filter_map(|buf| deserialize_response(&buf[..]).and_then(|info| info.pending))
@@ -523,21 +685,16 @@ fn main() {
                 let certificates = if let Some(files) = server_configs {
                     warn!("Using server configs provided by --server-configs");
                     let files = files.iter().map(AsRef::as_ref).collect();
-                    make_benchmark_certificates_from_orders_and_server_configs(orders, files)
+                    ClientContext::make_benchmark_certificates_from_orders_and_server_configs(
+                        orders, files,
+                    )
                 } else {
                     warn!("Using committee config");
-                    make_benchmark_certificates_from_votes(&committee_config, votes)
+                    context.make_benchmark_certificates_from_votes(votes)
                 };
-                let responses = mass_broadcast_orders(
-                    "confirmation",
-                    &committee_config,
-                    buffer_size,
-                    send_timeout,
-                    recv_timeout,
-                    max_in_flight,
-                    certificates.clone(),
-                )
-                .await;
+                let responses = context
+                    .mass_broadcast_orders("confirmation", max_in_flight, certificates.clone())
+                    .await;
                 let mut confirmed = HashSet::new();
                 let num_valid =
                     responses
@@ -558,34 +715,29 @@ fn main() {
                 warn!("Updating local state of user accounts");
                 // Make sure that the local balances are accurate so that future
                 // balance checks of the non-mass client pass.
-                mass_update_recipients(&mut accounts_config, certificates);
-                accounts_config
-                    .write(accounts_config_path)
-                    .expect("Unable to write user accounts");
-                info!("Saved client account state");
+                context.mass_update_recipients(certificates);
+                context.save_accounts();
             });
         }
 
-        ClientCommands::CreateAccounts {
+        ClientCommands::CreateInitialAccounts {
             initial_funding,
             num,
         } => {
             for i in 0..num {
-                let account = UserAccount::new(
+                let account = UserAccount::make_initial(
                     AccountId::new(vec![SequenceNumber::from(i as u64)]),
                     initial_funding,
                 );
                 println!(
                     "{}:{}:{}",
                     account.account_id,
-                    account.key_pair.public(),
+                    account.key_pair.as_ref().unwrap().public(),
                     initial_funding,
                 );
-                accounts_config.insert(account);
+                context.accounts_config.insert(account);
             }
-            accounts_config
-                .write(accounts_config_path)
-                .expect("Unable to write user accounts");
+            context.save_accounts();
         }
     }
 }

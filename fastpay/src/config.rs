@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transport::NetworkProtocol;
@@ -13,6 +13,7 @@ use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Write},
+    path::Path,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -38,12 +39,12 @@ pub struct AuthorityServerConfig {
 }
 
 impl AuthorityServerConfig {
-    pub fn read(path: &str) -> Result<Self, std::io::Error> {
+    pub fn read(path: &Path) -> Result<Self, std::io::Error> {
         let data = fs::read(path)?;
         Ok(serde_json::from_slice(data.as_slice())?)
     }
 
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         let data = serde_json::to_string_pretty(self).unwrap();
@@ -58,7 +59,7 @@ pub struct CommitteeConfig {
 }
 
 impl CommitteeConfig {
-    pub fn read(path: &str) -> Result<Self, std::io::Error> {
+    pub fn read(path: &Path) -> Result<Self, std::io::Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let stream = serde_json::Deserializer::from_reader(reader).into_iter();
@@ -67,7 +68,7 @@ impl CommitteeConfig {
         })
     }
 
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         for config in &self.authorities {
@@ -89,7 +90,7 @@ impl CommitteeConfig {
 #[derive(Serialize, Deserialize)]
 pub struct UserAccount {
     pub account_id: AccountId,
-    pub key_pair: KeyPair,
+    pub key_pair: Option<KeyPair>,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
     pub coins: Vec<Certificate>,
@@ -98,11 +99,23 @@ pub struct UserAccount {
 }
 
 impl UserAccount {
-    pub fn new(account_id: AccountId, balance: Balance) -> Self {
-        let key_pair = get_key_pair();
+    pub fn new(account_id: AccountId) -> Self {
         Self {
             account_id,
-            key_pair,
+            key_pair: None,
+            next_sequence_number: SequenceNumber::new(),
+            balance: Balance::default(),
+            coins: Vec::new(),
+            sent_certificates: Vec::new(),
+            received_certificates: Vec::new(),
+        }
+    }
+
+    pub fn make_initial(account_id: AccountId, balance: Balance) -> Self {
+        let key_pair = KeyPair::generate();
+        Self {
+            account_id,
+            key_pair: Some(key_pair),
             next_sequence_number: SequenceNumber::new(),
             balance,
             coins: Vec::new(),
@@ -119,6 +132,12 @@ pub struct AccountsConfig {
 impl AccountsConfig {
     pub fn get(&self, account_id: &AccountId) -> Option<&UserAccount> {
         self.accounts.get(account_id)
+    }
+
+    pub fn get_or_insert(&mut self, account_id: AccountId) -> &UserAccount {
+        self.accounts
+            .entry(account_id.clone())
+            .or_insert_with(|| UserAccount::new(account_id))
     }
 
     pub fn insert(&mut self, account: UserAccount) {
@@ -140,10 +159,12 @@ impl AccountsConfig {
     pub fn update_from_state<A>(&mut self, state: &AccountClientState<A>) {
         let account = self
             .accounts
-            .get_mut(state.account_id())
-            .expect("Updated account should already exist");
+            .entry(state.account_id().clone())
+            .or_insert_with(|| UserAccount::new(state.account_id().clone()));
+        account.key_pair = state.key_pair().map(|k| k.copy());
         account.next_sequence_number = state.next_sequence_number();
         account.balance = state.balance();
+        account.coins = state.coins().clone();
         account.sent_certificates = state.sent_certificates().clone();
         account.received_certificates = state.received_certificates().cloned().collect();
     }
@@ -173,7 +194,7 @@ impl AccountsConfig {
         }
     }
 
-    pub fn read_or_create(path: &str) -> Result<Self, std::io::Error> {
+    pub fn read_or_create(path: &Path) -> Result<Self, std::io::Error> {
         let file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -189,7 +210,7 @@ impl AccountsConfig {
         })
     }
 
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         for account in self.accounts.values() {
@@ -205,7 +226,7 @@ pub struct InitialStateConfig {
 }
 
 impl InitialStateConfig {
-    pub fn read(path: &str) -> Result<Self, failure::Error> {
+    pub fn read(path: &Path) -> Result<Self, failure::Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let mut accounts = Vec::new();
@@ -223,7 +244,7 @@ impl InitialStateConfig {
         Ok(Self { accounts })
     }
 
-    pub fn write(&self, path: &str) -> Result<(), std::io::Error> {
+    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
         for (id, pubkey, balance) in &self.accounts {

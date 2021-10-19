@@ -1,4 +1,4 @@
-// Copyright (c) Facebook Inc.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
 #![deny(warnings)]
@@ -8,17 +8,18 @@ use fastpay_core::{account::AccountState, authority::*, base_types::*, committee
 
 use futures::future::join_all;
 use log::*;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
 #[allow(clippy::too_many_arguments)]
 fn make_shard_server(
     local_ip_addr: &str,
-    server_config_path: &str,
-    committee_config_path: &str,
-    initial_accounts_config_path: &str,
+    server_config_path: &Path,
+    committee_config_path: &Path,
+    initial_accounts_config_path: &Path,
     buffer_size: usize,
-    cross_shard_queue_size: usize,
+    cross_shard_config: network::CrossShardConfig,
     shard: u32,
 ) -> network::Server {
     let server_config =
@@ -49,17 +50,17 @@ fn make_shard_server(
         server_config.authority.base_port,
         state,
         buffer_size,
-        cross_shard_queue_size,
+        cross_shard_config,
     )
 }
 
 fn make_servers(
     local_ip_addr: &str,
-    server_config_path: &str,
-    committee_config_path: &str,
-    initial_accounts_config_path: &str,
+    server_config_path: &Path,
+    committee_config_path: &Path,
+    initial_accounts_config_path: &Path,
     buffer_size: usize,
-    cross_shard_queue_size: usize,
+    cross_shard_config: network::CrossShardConfig,
 ) -> Vec<network::Server> {
     let server_config =
         AuthorityServerConfig::read(server_config_path).expect("Fail to read server config");
@@ -73,7 +74,7 @@ fn make_servers(
             committee_config_path,
             initial_accounts_config_path,
             buffer_size,
-            cross_shard_queue_size,
+            cross_shard_config.clone(),
             shard,
         ))
     }
@@ -85,10 +86,10 @@ fn make_servers(
     name = "FastPay Server",
     about = "A byzantine fault tolerant payments sidechain with low-latency finality and high throughput"
 )]
-struct ServerOpt {
+struct ServerOptions {
     /// Path to the file containing the server configuration of this FastPay authority (including its secret key)
     #[structopt(long)]
-    server: String,
+    server: PathBuf,
 
     /// Subcommands. Acceptable values are run and generate.
     #[structopt(subcommand)]
@@ -104,17 +105,17 @@ enum ServerCommands {
         #[structopt(long, default_value = transport::DEFAULT_MAX_DATAGRAM_SIZE)]
         buffer_size: usize,
 
-        /// Number of cross shards messages allowed before blocking the main server loop
-        #[structopt(long, default_value = "1000")]
-        cross_shard_queue_size: usize,
+        /// Configuration for cross shard requests
+        #[structopt(flatten)]
+        cross_shard_config: network::CrossShardConfig,
 
         /// Path to the file containing the public description of all authorities in this FastPay committee
         #[structopt(long)]
-        committee: String,
+        committee: PathBuf,
 
         /// Path to the file describing the initial user accounts
         #[structopt(long)]
-        initial_accounts: String,
+        initial_accounts: PathBuf,
 
         /// Runs a specific shard (from 0 to shards-1)
         #[structopt(long)]
@@ -143,15 +144,15 @@ enum ServerCommands {
 }
 
 fn main() {
-    env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let options = ServerOpt::from_args();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let options = ServerOptions::from_args();
 
     let server_config_path = &options.server;
 
     match options.cmd {
         ServerCommands::Run {
             buffer_size,
-            cross_shard_queue_size,
+            cross_shard_config,
             committee,
             initial_accounts,
             shard,
@@ -166,7 +167,7 @@ fn main() {
                         &committee,
                         &initial_accounts,
                         buffer_size,
-                        cross_shard_queue_size,
+                        cross_shard_config,
                         shard,
                     );
                     vec![server]
@@ -179,12 +180,12 @@ fn main() {
                         &committee,
                         &initial_accounts,
                         buffer_size,
-                        cross_shard_queue_size,
+                        cross_shard_config,
                     )
                 }
             };
 
-            let mut rt = Runtime::new().unwrap();
+            let rt = Runtime::new().unwrap();
             let mut handles = Vec::new();
             for server in servers {
                 handles.push(async move {
@@ -209,7 +210,7 @@ fn main() {
             port,
             shards,
         } => {
-            let key = get_key_pair();
+            let key = KeyPair::generate();
             let name = key.public();
             let authority = AuthorityConfig {
                 network_protocol: protocol,
