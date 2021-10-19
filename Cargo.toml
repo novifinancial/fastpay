@@ -2,7 +2,8 @@
 members = [
         "fastpay_core",
         "fastpay",
-        "coconut"
+        "coconut",
+        "bulletproofs"
 ]
 
 [profile.release]
