@@ -170,7 +170,7 @@ impl RequestCoinsProof {
                 .map(|(r, w)| w - challenge * r)
                 .collect(),
         };
-        
+
         let zero_sum_response = zero_sum_witness - challenge * zero_sum;
 
         Self {
