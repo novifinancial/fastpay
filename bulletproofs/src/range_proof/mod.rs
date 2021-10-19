@@ -1,17 +1,20 @@
-use crate::errors::ProofError;
-use crate::generators::{BulletproofGens, PedersenGens};
-use crate::inner_product_proof::InnerProductProof;
-use crate::transcript::TranscriptProtocol;
-use crate::util;
+use crate::{
+    errors::ProofError,
+    generators::{BulletproofGens, PedersenGens},
+    inner_product_proof::InnerProductProof,
+    transcript::TranscriptProtocol,
+    util,
+};
 use core::iter;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
+use curve25519_dalek::{
+    ristretto::{CompressedRistretto, RistrettoPoint},
+    scalar::Scalar,
+    traits::{IsIdentity, VartimeMultiscalarMul},
+};
 use merlin::Transcript;
 use rand::thread_rng;
 use rand_core::{CryptoRng, RngCore};
-use serde::de::Visitor;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod dealer;
 pub mod messages;
@@ -224,8 +227,7 @@ impl RangeProof {
         n: usize,
         rng: &mut T,
     ) -> Result<(RangeProof, Vec<CompressedRistretto>), ProofError> {
-        use self::dealer::*;
-        use self::party::*;
+        use self::{dealer::*, party::*};
 
         if values.len() != blindings.len() {
             return Err(ProofError::WrongNumBlindingFactors);
@@ -703,8 +705,7 @@ mod tests {
 
     #[test]
     fn detect_dishonest_party_during_aggregation() {
-        use self::dealer::*;
-        use self::party::*;
+        use self::{dealer::*, party::*};
 
         use crate::errors::MPCError;
 
@@ -777,8 +778,7 @@ mod tests {
 
     #[test]
     fn detect_dishonest_dealer_during_aggregation() {
-        use self::dealer::*;
-        use self::party::*;
+        use self::{dealer::*, party::*};
         use crate::errors::MPCError;
 
         // Simulate one party

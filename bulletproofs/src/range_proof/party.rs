@@ -1,12 +1,16 @@
 use super::messages::*;
-use crate::errors::MPCError;
-use crate::generators::{BulletproofGens, PedersenGens};
-use crate::util;
+use crate::{
+    errors::MPCError,
+    generators::{BulletproofGens, PedersenGens},
+    util,
+};
 use clear_on_drop::clear::Clear;
 use core::iter;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::MultiscalarMul;
+use curve25519_dalek::{
+    ristretto::{CompressedRistretto, RistrettoPoint},
+    scalar::Scalar,
+    traits::MultiscalarMul,
+};
 use rand::thread_rng;
 use rand_core::{CryptoRng, RngCore};
 

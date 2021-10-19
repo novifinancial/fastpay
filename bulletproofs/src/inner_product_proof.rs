@@ -1,12 +1,13 @@
 use core::iter;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::VartimeMultiscalarMul;
+use curve25519_dalek::{
+    ristretto::{CompressedRistretto, RistrettoPoint},
+    scalar::Scalar,
+    traits::VartimeMultiscalarMul,
+};
 use merlin::Transcript;
 use std::borrow::Borrow;
 
-use crate::errors::ProofError;
-use crate::transcript::TranscriptProtocol;
+use crate::{errors::ProofError, transcript::TranscriptProtocol};
 
 #[derive(Clone, Debug)]
 pub struct InnerProductProof {

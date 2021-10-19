@@ -1,13 +1,14 @@
 use super::messages::*;
-use crate::errors::MPCError;
-use crate::generators::{BulletproofGens, PedersenGens};
-use crate::inner_product_proof;
-use crate::range_proof::RangeProof;
-use crate::transcript::TranscriptProtocol;
-use crate::util;
+use crate::{
+    errors::MPCError,
+    generators::{BulletproofGens, PedersenGens},
+    inner_product_proof,
+    range_proof::RangeProof,
+    transcript::TranscriptProtocol,
+    util,
+};
 use core::iter;
-use curve25519_dalek::ristretto::RistrettoPoint;
-use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
 use merlin::Transcript;
 use rand::thread_rng;
 use rand_core::{CryptoRng, RngCore};

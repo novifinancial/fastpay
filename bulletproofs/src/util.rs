@@ -351,8 +351,7 @@ mod tests {
         }
 
         fn flat_slice<T>(x: &[T]) -> &[u8] {
-            use core::mem;
-            use core::slice;
+            use core::{mem, slice};
 
             unsafe { slice::from_raw_parts(x.as_ptr() as *const u8, mem::size_of_val(x)) }
         }
@@ -375,8 +374,7 @@ mod tests {
         v.2.clear();
 
         fn as_bytes<T>(x: &T) -> &[u8] {
-            use core::mem;
-            use core::slice;
+            use core::{mem, slice};
 
             unsafe { slice::from_raw_parts(x as *const T as *const u8, mem::size_of_val(x)) }
         }
