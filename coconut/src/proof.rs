@@ -7,6 +7,8 @@ use crate::{
 };
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::GroupEncoding as _;
+#[cfg(feature = "with_serde")]
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha512};
 use std::convert::TryInto;
 
@@ -15,6 +17,7 @@ use std::convert::TryInto;
 pub mod proof_tests;
 
 /// Represents a ZK proof of valid coin requests.
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct RequestCoinsProof {
     challenge: Scalar,
     input_attributes_responses: Vec<InputAttribute>,

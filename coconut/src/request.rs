@@ -6,12 +6,15 @@ use crate::{
 };
 use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::GroupEncoding as _;
+#[cfg(feature = "with_serde")]
+use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 #[path = "tests/request_tests.rs"]
 pub mod request_tests;
 
 /// The attributes of the input coin.
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct InputAttribute {
     /// The id of the input coin.
     pub id: Scalar,
@@ -20,6 +23,7 @@ pub struct InputAttribute {
 }
 
 /// The attributes of the output coins along with their blinding factors.
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct OutputAttribute {
     /// The id of the output coin.
     pub id: Scalar,
@@ -32,6 +36,7 @@ pub struct OutputAttribute {
 }
 
 /// The randomness used in the coin request.
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct Randomness {
     pub rs: Vec<Scalar>,
     pub os: Vec<Scalar>,
@@ -50,6 +55,7 @@ impl Randomness {
     }
 }
 
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct CoinsRequest {
     /// Input credentials representing coins.
     pub sigmas: Vec<Coin>,
