@@ -5,12 +5,15 @@ use crate::{
 };
 use bls12_381::{G1Projective, Scalar};
 use group::GroupEncoding as _;
+#[cfg(feature = "with_serde")]
+use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 #[path = "tests/issuance_tests.rs"]
 pub mod issuance_tests;
 
 #[derive(Clone)]
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct Coin(pub G1Projective, pub G1Projective);
 
 impl Coin {
@@ -44,6 +47,7 @@ impl Coin {
     }
 }
 
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct BlindedCoins {
     /// A vector of blinded coins.
     coins: Vec<(G1Projective, G1Projective)>,
