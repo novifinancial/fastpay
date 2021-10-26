@@ -1,20 +1,12 @@
-/*
-use curve25519_dalek::{
-    constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT},
-    ristretto::RistrettoPoint,
-    scalar::Scalar,
-    traits::MultiscalarMul,
-};
-*/
 use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
     G1Projective, G2Prepared, G2Projective, Scalar,
 };
+use digest::{ExtendableOutput, Input, XofReader};
 use ff::Field as _;
 use group::{Curve as _, Group as _};
-use digest::{ExtendableOutput, Input, XofReader};
-use sha3::{Sha3XofReader, Sha3_512, Shake256};
 use sha2::Sha512;
+use sha3::{Sha3XofReader, Sha3_512, Shake256};
 
 /// G1 hash domain as defined by IETF:
 /// https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-11#appendix-J.9.1
