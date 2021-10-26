@@ -1,6 +1,6 @@
 use crate::inner_product_proof::inner_product;
+use bls12_381::Scalar;
 use clear_on_drop::clear::Clear;
-use curve25519_dalek::scalar::Scalar;
 
 /// Represents a degree-1 vector polynomial \\(\mathbf{a} + \mathbf{b} \cdot x\\).
 pub struct VecPoly1(pub Vec<Scalar>, pub Vec<Scalar>);
@@ -259,6 +259,15 @@ pub fn read32(data: &[u8]) -> [u8; 32] {
     buf32
 }
 
+/// Construct a `Scalar` from the low 255 bits of a 256-bit integer.
+pub fn scalar_from_bits(bytes: [u8; 32]) -> Scalar {
+    // Ensure that s < 2^255 by masking the high bit
+    let mut bytes = bytes;
+    bytes[31] &= 0b0111_1111;
+    let s: Option<Scalar> = Scalar::from_bytes(&bytes).into();
+    s.expect("Failed to create scalar from bits")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -301,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_scalar_exp() {
-        let x = Scalar::from_bits(
+        let x = scalar_from_bits(
             *b"\x84\xfc\xbcOx\x12\xa0\x06\xd7\x91\xd9z:'\xdd\x1e!CE\xf7\xb1\xb9Vz\x810sD\x96\x85\xb5\x07",
         );
         assert_eq!(scalar_exp_vartime(&x, 0), Scalar::one());

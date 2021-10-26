@@ -2,10 +2,10 @@
 
 mod errors;
 mod generators;
-//mod inner_product_proof;
+mod inner_product_proof;
 //mod range_proof;
 mod transcript;
-//mod util;
+mod util;
 /*
 pub use crate::{
     errors::ProofError,

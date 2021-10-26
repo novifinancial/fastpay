@@ -15,7 +15,6 @@ digest = "0.8"
 byteorder = "1"
 rand_core = "0.5"
 serde = { version = "1", features = ["derive"] }
-rand = "0.7"
 subtle = "2"
 bls12_381 = { version="0.6.0", features=["experimental"] }
 ff = "0.11.0"
@@ -24,3 +23,4 @@ sha2 = "0.9.8"
 
 [dev-dependencies]
 bincode = "1"
+rand = "0.8.4"
