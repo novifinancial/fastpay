@@ -1,12 +1,12 @@
 #![allow(non_snake_case)]
 
-mod errors;
+//mod errors;
 mod generators;
-mod inner_product_proof;
-mod range_proof;
-mod transcript;
-mod util;
-
+//mod inner_product_proof;
+//mod range_proof;
+//mod transcript;
+//mod util;
+/*
 pub use crate::{
     errors::ProofError,
     generators::{BulletproofGens, BulletproofGensShare, PedersenGens},
@@ -19,3 +19,4 @@ pub mod range_proof_mpc {
         range_proof::{dealer, messages, party},
     };
 }
+*/
