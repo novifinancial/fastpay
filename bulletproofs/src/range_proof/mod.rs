@@ -551,9 +551,6 @@ impl<'de> Deserialize<'de> for RangeProof {
                 // Using Error::custom requires T: Display, which our error
                 // type only implements when it implements std::error::Error.
                 return RangeProof::from_bytes(v).map_err(serde::de::Error::custom);
-                // In no-std contexts, drop the error message.
-                return RangeProof::from_bytes(v)
-                    .map_err(|_| serde::de::Error::custom("deserialization error"));
             }
         }
 

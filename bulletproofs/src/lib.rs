@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 mod errors;
 mod generators;
 mod inner_product_proof;
