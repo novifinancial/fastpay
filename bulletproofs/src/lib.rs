@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 
-//mod errors;
+mod errors;
 mod generators;
 //mod inner_product_proof;
 //mod range_proof;
-//mod transcript;
+mod transcript;
 //mod util;
 /*
 pub use crate::{
