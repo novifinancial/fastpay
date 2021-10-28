@@ -4,6 +4,7 @@ use crate::{
     setup::{KeyPair, Parameters, PublicKey},
 };
 use bls12_381::Scalar;
+use rand::SeedableRng;
 
 // Fixture
 pub fn parameters() -> Parameters {
@@ -75,7 +76,7 @@ pub fn output_attributes() -> Vec<OutputAttribute> {
 // Fixture
 pub fn coin1() -> Coin {
     Coin::default(
-        &mut parameters(),
+        &parameters(),
         &keypair().secret,
         &input_attribute1().value,
         &input_attribute1().id,
@@ -85,7 +86,7 @@ pub fn coin1() -> Coin {
 // Fixture
 pub fn coin2() -> Coin {
     Coin::default(
-        &mut parameters(),
+        &parameters(),
         &keypair().secret,
         &input_attribute2().value,
         &input_attribute2().id,
@@ -95,7 +96,8 @@ pub fn coin2() -> Coin {
 // Fixture
 pub fn request() -> CoinsRequest {
     CoinsRequest::new(
-        &mut parameters(),
+        rand::rngs::StdRng::seed_from_u64(37),
+        &parameters(),
         &keypair().public,
         /* sigmas */ &vec![coin1(), coin2()],
         &input_attributes(),

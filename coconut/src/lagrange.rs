@@ -14,9 +14,9 @@ pub struct Polynomial {
 
 impl Polynomial {
     /// Create a random polynomial with a specific degree.
-    pub fn random(parameters: &mut Parameters, degree: usize) -> Self {
+    pub fn random(rng: impl rand::RngCore, degree: usize) -> Self {
         Polynomial {
-            coefficients: parameters.n_random_scalars(degree + 1),
+            coefficients: Parameters::n_random_scalars(rng, degree + 1),
         }
     }
 

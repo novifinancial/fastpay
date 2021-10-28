@@ -6,7 +6,7 @@ use crate::fixtures::{
 
 impl Coin {
     pub fn default(
-        parameters: &mut Parameters,
+        parameters: &Parameters,
         secret: &SecretKey,
         value: &Scalar,
         id: &Scalar,
@@ -27,7 +27,7 @@ impl Coin {
 #[test]
 fn verify_coin() {
     let mut coin = coin1();
-    coin.randomize(&mut parameters());
+    coin.randomize(&mut rand::thread_rng());
 
     let ok = coin.plain_verify(
         &parameters(),
@@ -75,7 +75,7 @@ fn aggregate_coin() {
         .skip(1)
         .map(|key| {
             let coin = Coin::default(
-                &mut parameters(),
+                &parameters(),
                 &key.secret,
                 /* value */ &input_attribute1().value,
                 /* id */ &input_attribute1().id,
@@ -105,7 +105,7 @@ fn aggregate_coin_fail() {
         .skip(2)
         .map(|key| {
             let coin = Coin::default(
-                &mut parameters(),
+                &parameters(),
                 &key.secret,
                 /* value */ &input_attribute1().value,
                 /* id */ &input_attribute1().id,

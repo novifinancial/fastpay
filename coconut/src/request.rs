@@ -45,12 +45,12 @@ pub struct Randomness {
 }
 
 impl Randomness {
-    pub fn new(parameters: &mut Parameters, input_len: usize, output_len: usize) -> Self {
+    pub fn new(mut rng: impl rand::RngCore, input_len: usize, output_len: usize) -> Self {
         Self {
-            rs: parameters.n_random_scalars(input_len),
-            os: parameters.n_random_scalars(output_len),
-            input_rs: parameters.n_random_scalars(input_len),
-            output_rs: parameters.n_random_scalars(output_len),
+            rs: Parameters::n_random_scalars(&mut rng, input_len),
+            os: Parameters::n_random_scalars(&mut rng, output_len),
+            input_rs: Parameters::n_random_scalars(&mut rng, input_len),
+            output_rs: Parameters::n_random_scalars(&mut rng, output_len),
         }
     }
 }
@@ -78,8 +78,9 @@ pub struct CoinsRequest {
 
 impl CoinsRequest {
     pub fn new(
+        mut rng: impl rand::RngCore,
         // The system parameters.
-        parameters: &mut Parameters,
+        parameters: &Parameters,
         // The aggregated public key of the authorities.
         public_key: &PublicKey,
         // The credentials representing the input coins. Each credential has two attributes, a coin
@@ -94,22 +95,18 @@ impl CoinsRequest {
         assert!(parameters.max_attributes() >= 2);
         assert!(public_key.max_attributes() >= 2);
 
+        // Generate all random values for the commitments.
+        let randomness = Randomness::new(&mut rng, input_attributes.len(), output_attributes.len());
+
         // Randomize the input credentials; each credential represents an input coin.
         let sigmas: Vec<_> = sigmas
             .iter()
             .cloned()
             .map(|mut sigma| {
-                sigma.randomize(parameters);
+                sigma.randomize(&mut rng);
                 sigma
             })
             .collect();
-
-        // Generate all random values for the commitments.
-        #[cfg(not(test))]
-        let randomness =
-            Randomness::new(parameters, input_attributes.len(), output_attributes.len());
-        #[cfg(test)]
-        let randomness = Randomness::test(input_attributes.len(), output_attributes.len());
 
         // Compute Kappa and Nu for each input coin.
         let beta0 = &public_key.betas[0];
@@ -167,6 +164,7 @@ impl CoinsRequest {
 
         // Compute the ZK proof asserting correctness of the computations above.
         let proof = RequestCoinsProof::new(
+            rng,
             parameters,
             public_key,
             &base_hs,

@@ -4,6 +4,7 @@ use crate::{
     setup::{Parameters, PublicKey, SecretKey},
 };
 use bls12_381::{G1Projective, Scalar};
+use ff::Field;
 use group::GroupEncoding as _;
 #[cfg(feature = "with_serde")]
 use serde::{Deserialize, Serialize};
@@ -17,8 +18,8 @@ pub mod issuance_tests;
 pub struct Coin(pub G1Projective, pub G1Projective);
 
 impl Coin {
-    pub fn randomize(&mut self, parameters: &mut Parameters) {
-        let r = parameters.random_scalar();
+    pub fn randomize(&mut self, rng: impl rand::RngCore) {
+        let r = Scalar::random(rng);
         self.0 *= r;
         self.1 *= r;
     }
