@@ -1,10 +1,15 @@
 use super::*;
 use crate::fixtures::{input_attributes, keypair, output_attributes, parameters, request};
+use rand::{rngs::StdRng, SeedableRng};
 
 #[test]
 fn verify_zk_proof() {
     let coin_request = request();
-    let randomness = Randomness::test(/* input_len */ 2, /* output_len */ 2);
+    let randomness = Randomness::new(
+        StdRng::seed_from_u64(37),
+        /* input_len */ 2,
+        /* output_len */ 2,
+    );
 
     let base_hs: Vec<_> = coin_request
         .cms
@@ -13,7 +18,8 @@ fn verify_zk_proof() {
         .collect();
 
     let proof = RequestCoinsProof::new(
-        &mut parameters(),
+        StdRng::seed_from_u64(37),
+        &parameters(),
         &keypair().public,
         &base_hs,
         &coin_request.sigmas,

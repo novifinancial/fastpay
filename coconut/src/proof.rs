@@ -6,6 +6,7 @@ use crate::{
     setup::{Parameters, PublicKey},
 };
 use bls12_381::{G1Projective, G2Projective, Scalar};
+use ff::Field;
 use group::GroupEncoding as _;
 #[cfg(feature = "with_serde")]
 use serde::{Deserialize, Serialize};
@@ -27,8 +28,10 @@ pub struct RequestCoinsProof {
 }
 
 impl RequestCoinsProof {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        parameters: &mut Parameters,
+        mut rng: impl rand::RngCore,
+        parameters: &Parameters,
         public_key: &PublicKey,
         base_hs: &[G1Projective],
         sigmas: &[Coin],
@@ -43,21 +46,21 @@ impl RequestCoinsProof {
         let input_attributes_witnesses: Vec<_> = input_attributes
             .iter()
             .map(|_| InputAttribute {
-                value: parameters.random_scalar(),
-                id: parameters.random_scalar(),
+                value: Scalar::random(&mut rng),
+                id: Scalar::random(&mut rng),
             })
             .collect();
         let output_attributes_witnesses: Vec<_> = output_attributes
             .iter()
             .map(|_| OutputAttribute {
-                value: parameters.random_scalar(),
-                value_blinding_factor: parameters.random_scalar(),
-                id: parameters.random_scalar(),
-                id_blinding_factor: parameters.random_scalar(),
+                value: Scalar::random(&mut rng),
+                value_blinding_factor: Scalar::random(&mut rng),
+                id: Scalar::random(&mut rng),
+                id_blinding_factor: Scalar::random(&mut rng),
             })
             .collect();
         let randomness_witnesses =
-            Randomness::new(parameters, input_attributes.len(), output_attributes.len());
+            Randomness::new(rng, input_attributes.len(), output_attributes.len());
 
         // Compute Kappa and Nu from the witnesses.
         let beta0 = &public_key.betas[0];

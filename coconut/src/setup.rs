@@ -5,7 +5,7 @@ use bls12_381::{
 };
 use ff::Field as _;
 use group::{Curve as _, Group as _};
-use rand::{rngs::ThreadRng, thread_rng};
+use rand::RngCore;
 use sha2::Sha512;
 
 #[cfg(test)]
@@ -17,6 +17,7 @@ pub mod setup_tests;
 const G1_HASH_DOMAIN: &[u8] = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
 /// The global system parameters (public).
+#[derive(Clone, Debug)]
 pub struct Parameters {
     /// A generator of G1.
     pub g1: G1Projective,
@@ -25,8 +26,6 @@ pub struct Parameters {
     pub hs: Vec<G1Projective>,
     /// A generator of G2.
     pub g2: G2Projective,
-    /// A RNG for fast randomness generation.
-    rng: ThreadRng,
 }
 
 impl Parameters {
@@ -39,7 +38,6 @@ impl Parameters {
                 .map(|x| Self::hash_to_g1(format!("h{}", x)))
                 .collect(),
             g2: G2Projective::generator(),
-            rng: thread_rng(),
         }
     }
 
@@ -48,14 +46,9 @@ impl Parameters {
         self.hs.len()
     }
 
-    /// Pick a random scalar.
-    pub fn random_scalar(&mut self) -> Scalar {
-        Scalar::random(&mut self.rng)
-    }
-
     /// Pick n random scalars.
-    pub fn n_random_scalars(&mut self, n: usize) -> Vec<Scalar> {
-        (0..n).map(|_| self.random_scalar()).collect()
+    pub fn n_random_scalars(mut rng: impl RngCore, n: usize) -> Vec<Scalar> {
+        (0..n).map(|_| Scalar::random(&mut rng)).collect()
     }
 
     /// Hash a message into an element of G1.
@@ -126,15 +119,16 @@ impl KeyPair {
     /// Compute the keys of all authorities along with the aggregated public key. This function
     /// should be distributed so that no single authority learns the master secret key.
     pub fn ttp(
-        parameters: &mut Parameters,
+        mut rng: impl rand::RngCore,
+        parameters: &Parameters,
         threshold: usize,
         committee: usize,
     ) -> (PublicKey, Vec<KeyPair>) {
         assert!(threshold <= committee && threshold > 0);
 
-        let v = Polynomial::random(parameters, threshold - 1);
+        let v = Polynomial::random(&mut rng, threshold - 1);
         let ws: Vec<_> = (0..parameters.max_attributes())
-            .map(|_| Polynomial::random(parameters, threshold - 1))
+            .map(|_| Polynomial::random(&mut rng, threshold - 1))
             .collect();
 
         Self::derive_keys(parameters, committee, v, ws)
