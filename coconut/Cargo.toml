@@ -11,7 +11,7 @@ group = "0.11.0"
 thiserror = "1.0.29"
 
 [dependencies.bls12_381]
-version = "0.6.0"
+version = "0.6.1"
 git = "https://github.com/matbd/bls12_381"
 branch = "serde"
 features = ["experimental"]

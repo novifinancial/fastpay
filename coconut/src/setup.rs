@@ -6,6 +6,8 @@ use bls12_381::{
 use ff::Field as _;
 use group::{Curve as _, Group as _};
 use rand::RngCore;
+#[cfg(feature = "with_serde")]
+use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 
 #[cfg(test)]
@@ -17,7 +19,8 @@ pub mod setup_tests;
 const G1_HASH_DOMAIN: &[u8] = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
 /// The global system parameters (public).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct Parameters {
     /// A generator of G1.
     pub g1: G1Projective,
@@ -76,6 +79,7 @@ impl Parameters {
 }
 
 /// The secret key of each authority.
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct SecretKey {
     pub x: Scalar,
     pub ys: Vec<Scalar>,
@@ -83,6 +87,8 @@ pub struct SecretKey {
 
 /// The public key. This structure can represent the public key of a single authority or their
 /// aggregated public key (aggregated keys are undistinguishable from single-authority keys).
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct PublicKey {
     pub alpha: G2Projective,
     pub betas: Vec<G2Projective>,
@@ -106,6 +112,7 @@ impl PublicKey {
 }
 
 /// Convenience structure representing the keypair of an authority.
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct KeyPair {
     /// The index of this authority (used for Lagrange interpolation).
     pub index: u64,

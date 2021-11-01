@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 #[path = "tests/issuance_tests.rs"]
 pub mod issuance_tests;
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct Coin(pub G1Projective, pub G1Projective);
 
@@ -32,6 +32,7 @@ impl Coin {
         value: Scalar,
         id: Scalar,
     ) -> bool {
+        assert_eq!(public_key.betas.len(), 2);
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
         let kappa = public_key.alpha + beta0 * value + beta1 * id;
