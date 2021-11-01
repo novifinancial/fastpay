@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub mod request_tests;
 
 /// The attributes of the input coin.
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct InputAttribute {
     /// The id of the input coin.
@@ -23,6 +24,7 @@ pub struct InputAttribute {
 }
 
 /// The attributes of the output coins along with their blinding factors.
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct OutputAttribute {
     /// The id of the output coin.
@@ -36,6 +38,7 @@ pub struct OutputAttribute {
 }
 
 /// The randomness used in the coin request.
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct Randomness {
     pub rs: Vec<Scalar>,
@@ -55,6 +58,7 @@ impl Randomness {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct CoinsRequest {
     /// Input credentials representing coins.

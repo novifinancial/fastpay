@@ -18,6 +18,7 @@ use std::convert::TryInto;
 pub mod proof_tests;
 
 /// Represents a ZK proof of valid coin requests.
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct RequestCoinsProof {
     challenge: Scalar,
