@@ -487,8 +487,8 @@ mod tests {
     use super::*;
     use crate::generators::hash_to_g1;
     use crate::util;
-    use sha3::Sha3_512;
     use rand::{rngs::ThreadRng, thread_rng};
+    use sha3::Sha3_512;
 
     fn test_helper_create(n: usize) {
         let mut rng = rand::thread_rng();

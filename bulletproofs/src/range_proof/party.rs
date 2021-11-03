@@ -4,22 +4,19 @@ use crate::{
     generators::{BulletproofGens, PedersenGens},
     util,
 };
-use clear_on_drop::clear::Clear;
-use core::iter;
 use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
     G1Affine, G1Projective, G2Prepared, G2Projective, Scalar,
 };
+use clear_on_drop::clear::Clear;
+use core::iter;
 use ff::Field as _;
 use group::{Curve as _, Group as _, GroupEncoding as _};
 use rand::thread_rng;
-use rand::{RngCore, CryptoRng};
+use rand::{CryptoRng, RngCore};
 //use rand_core::{CryptoRng, RngCore};
 
-pub fn multiscalar_mul_by_ref(
-    scalars: &[&Scalar],
-    points: &[&G1Projective],
-) -> G1Projective {
+pub fn multiscalar_mul_by_ref(scalars: &[&Scalar], points: &[&G1Projective]) -> G1Projective {
     points
         .iter()
         .zip(scalars.iter())
@@ -115,10 +112,14 @@ impl<'a> PartyAwaitingPosition<'a> {
 
         // Compute S = <s_L, G> + <s_R, H> + s_blinding * B_blinding
         let S = multiscalar_mul_by_ref(
-            &iter::once(&s_blinding).chain(s_L.iter()).chain(s_R.iter()).collect::<Vec<_>>(),
+            &iter::once(&s_blinding)
+                .chain(s_L.iter())
+                .chain(s_R.iter())
+                .collect::<Vec<_>>(),
             &iter::once(&self.pc_gens.B_blinding)
                 .chain(bp_share.G(self.n))
-                .chain(bp_share.H(self.n)).collect::<Vec<_>>(),
+                .chain(bp_share.H(self.n))
+                .collect::<Vec<_>>(),
         );
 
         // Return next state and all commitments

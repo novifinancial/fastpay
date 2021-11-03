@@ -1,12 +1,12 @@
-use core::iter;
-use serde::{Deserialize, Serialize};
-use ff::Field as _;
-use group::{Curve as _, Group as _, GroupEncoding as _};
 use crate::generators::{BulletproofGens, PedersenGens};
 use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
     G1Affine, G1Projective, G2Prepared, G2Projective, Scalar,
 };
+use core::iter;
+use ff::Field as _;
+use group::{Curve as _, Group as _, GroupEncoding as _};
+use serde::{Deserialize, Serialize};
 
 pub fn vartime_multiscalar_mul(scalars: &[Scalar], points: &[&G1Projective]) -> G1Projective {
     points
@@ -132,12 +132,14 @@ impl ProofShare {
                 .chain(iter::once(*x))
                 .chain(iter::once(-self.e_blinding))
                 .chain(g)
-                .chain(h).collect::<Vec<_>>(),
+                .chain(h)
+                .collect::<Vec<_>>(),
             &iter::once(&bit_commitment.A_j)
                 .chain(iter::once(&bit_commitment.S_j))
                 .chain(iter::once(&pc_gens.B_blinding))
                 .chain(bp_gens.share(j).G(n))
-                .chain(bp_gens.share(j).H(n)).collect::<Vec<_>>(),
+                .chain(bp_gens.share(j).H(n))
+                .collect::<Vec<_>>(),
         );
         let identity: bool = P_check.is_identity().into();
         if !identity {
@@ -154,12 +156,14 @@ impl ProofShare {
                 .chain(iter::once(*x))
                 .chain(iter::once(x * x))
                 .chain(iter::once(delta - self.t_x))
-                .chain(iter::once(-self.t_x_blinding)).collect::<Vec<_>>(),
+                .chain(iter::once(-self.t_x_blinding))
+                .collect::<Vec<_>>(),
             &iter::once(&V_j)
                 .chain(iter::once(&poly_commitment.T_1_j))
                 .chain(iter::once(&poly_commitment.T_2_j))
                 .chain(iter::once(&pc_gens.B))
-                .chain(iter::once(&pc_gens.B_blinding)).collect::<Vec<_>>(),
+                .chain(iter::once(&pc_gens.B_blinding))
+                .collect::<Vec<_>>(),
         );
 
         if t_check.is_identity().into() {

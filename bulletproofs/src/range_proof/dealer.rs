@@ -7,11 +7,14 @@ use crate::{
     transcript::TranscriptProtocol,
     util,
 };
+use bls12_381::{
+    hash_to_curve::{ExpandMsgXmd, HashToCurve},
+    G1Affine, G1Projective, G2Prepared, G2Projective, Scalar,
+};
 use core::iter;
-use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
 use merlin::Transcript;
 use rand::thread_rng;
-use rand_core::{CryptoRng, RngCore};
+use rand::{CryptoRng, RngCore};
 
 /// Used to construct a dealer for the aggregated rangeproof MPC protocol.
 pub struct Dealer {}
@@ -93,11 +96,11 @@ impl<'a, 'b> DealerAwaitingBitCommitments<'a, 'b> {
         }
 
         // Commit aggregated A_j, S_j
-        let A: RistrettoPoint = bit_commitments.iter().map(|vc| vc.A_j).sum();
-        self.transcript.append_point(b"A", &A.compress());
+        let A: G1Projective = bit_commitments.iter().map(|vc| vc.A_j).sum();
+        self.transcript.append_point(b"A", &A);
 
-        let S: RistrettoPoint = bit_commitments.iter().map(|vc| vc.S_j).sum();
-        self.transcript.append_point(b"S", &S.compress());
+        let S: G1Projective = bit_commitments.iter().map(|vc| vc.S_j).sum();
+        self.transcript.append_point(b"S", &S);
 
         let y = self.transcript.challenge_scalar(b"y");
         let z = self.transcript.challenge_scalar(b"z");
@@ -133,9 +136,9 @@ pub struct DealerAwaitingPolyCommitments<'a, 'b> {
     bit_challenge: BitChallenge,
     bit_commitments: Vec<BitCommitment>,
     /// Aggregated commitment to the parties' bits
-    A: RistrettoPoint,
+    A: G1Projective,
     /// Aggregated commitment to the parties' bit blindings
-    S: RistrettoPoint,
+    S: G1Projective,
 }
 
 impl<'a, 'b> DealerAwaitingPolyCommitments<'a, 'b> {
@@ -150,11 +153,11 @@ impl<'a, 'b> DealerAwaitingPolyCommitments<'a, 'b> {
         }
 
         // Commit sums of T_1_j's and T_2_j's
-        let T_1: RistrettoPoint = poly_commitments.iter().map(|pc| pc.T_1_j).sum();
-        let T_2: RistrettoPoint = poly_commitments.iter().map(|pc| pc.T_2_j).sum();
+        let T_1: G1Projective = poly_commitments.iter().map(|pc| pc.T_1_j).sum();
+        let T_2: G1Projective = poly_commitments.iter().map(|pc| pc.T_2_j).sum();
 
-        self.transcript.append_point(b"T_1", &T_1.compress());
-        self.transcript.append_point(b"T_2", &T_2.compress());
+        self.transcript.append_point(b"T_1", &T_1);
+        self.transcript.append_point(b"T_2", &T_2);
 
         let x = self.transcript.challenge_scalar(b"x");
         let poly_challenge = PolyChallenge { x };
@@ -195,10 +198,10 @@ pub struct DealerAwaitingProofShares<'a, 'b> {
     bit_commitments: Vec<BitCommitment>,
     poly_challenge: PolyChallenge,
     poly_commitments: Vec<PolyCommitment>,
-    A: RistrettoPoint,
-    S: RistrettoPoint,
-    T_1: RistrettoPoint,
-    T_2: RistrettoPoint,
+    A: G1Projective,
+    S: G1Projective,
+    T_1: G1Projective,
+    T_2: G1Projective,
 }
 
 impl<'a, 'b> DealerAwaitingProofShares<'a, 'b> {
@@ -237,10 +240,10 @@ impl<'a, 'b> DealerAwaitingProofShares<'a, 'b> {
 
         // Get a challenge value to combine statements for the IPP
         let w = self.transcript.challenge_scalar(b"w");
-        let Q = w * self.pc_gens.B;
+        let Q = self.pc_gens.B * w;
 
         let G_factors: Vec<Scalar> = iter::repeat(Scalar::one()).take(self.n * self.m).collect();
-        let H_factors: Vec<Scalar> = util::exp_iter(self.bit_challenge.y.invert())
+        let H_factors: Vec<Scalar> = util::exp_iter(self.bit_challenge.y.invert().unwrap())
             .take(self.n * self.m)
             .collect();
 
@@ -265,10 +268,10 @@ impl<'a, 'b> DealerAwaitingProofShares<'a, 'b> {
         );
 
         Ok(RangeProof {
-            A: self.A.compress(),
-            S: self.S.compress(),
-            T_1: self.T_1.compress(),
-            T_2: self.T_2.compress(),
+            A: self.A,
+            S: self.S,
+            T_1: self.T_1,
+            T_2: self.T_2,
             t_x,
             t_x_blinding,
             e_blinding,
