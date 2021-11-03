@@ -18,7 +18,7 @@ use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 //pub mod dealer;
 pub mod messages;
-//pub mod party;
+pub mod party;
 /*
 /// The `RangeProof` struct represents a proof that one or more values
 /// are in a range.
