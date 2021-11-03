@@ -3,7 +3,7 @@
 mod errors;
 mod generators;
 mod inner_product_proof;
-//mod range_proof;
+mod range_proof;
 mod transcript;
 mod util;
 /*

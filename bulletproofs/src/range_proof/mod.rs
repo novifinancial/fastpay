@@ -16,10 +16,10 @@ use rand::thread_rng;
 use rand_core::{CryptoRng, RngCore};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
-pub mod dealer;
+//pub mod dealer;
 pub mod messages;
-pub mod party;
-
+//pub mod party;
+/*
 /// The `RangeProof` struct represents a proof that one or more values
 /// are in a range.
 ///
@@ -814,3 +814,4 @@ mod tests {
         assert!(maybe_share0.unwrap_err() == MPCError::MaliciousDealer);
     }
 }
+*/
