@@ -182,8 +182,8 @@ impl CoinsRequest {
         // Make the range proofs over the output values.
         let bp_gens = &parameters.bulletproof_gens;
         let pc_gens = PedersenGens {
-            B: parameters.hs[0].clone(),
-            B_blinding: parameters.g1.clone(),
+            B: parameters.hs[0],
+            B_blinding: parameters.g1,
         };
         let mut prover_transcript = Transcript::new(b"CocoBullets");
         let secret_values: Vec<_> = output_attributes
@@ -194,11 +194,11 @@ impl CoinsRequest {
             })
             .collect();
         let (range_proof, output_commitments) = RangeProof::prove_multiple(
-            &bp_gens,
+            bp_gens,
             &pc_gens,
             &mut prover_transcript,
             &secret_values,
-            &randomness.output_rs.iter().cloned().collect::<Vec<_>>(),
+            &randomness.output_rs.to_vec(),
             32,
         )
         .expect("Failed to generate range proof");
@@ -234,12 +234,12 @@ impl CoinsRequest {
         // Check the range proofs.
         let bp_gens = &parameters.bulletproof_gens;
         let pc_gens = PedersenGens {
-            B: parameters.hs[0].clone(),
-            B_blinding: parameters.g1.clone(),
+            B: parameters.hs[0],
+            B_blinding: parameters.g1,
         };
         let mut verifier_transcript = Transcript::new(b"CocoBullets");
         self.range_proof.verify_multiple(
-            &bp_gens,
+            bp_gens,
             &pc_gens,
             &mut verifier_transcript,
             &self.output_commitments,

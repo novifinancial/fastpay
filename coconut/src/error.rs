@@ -25,8 +25,8 @@ pub enum CoconutError {
     PairingCheckFailed,
 
     #[error("ZK check failed")]
-    ZKCheckFailed,
+    MalformedCoinRequest,
 
     #[error("Range proof check failed")]
-    RangeCheckFailed(#[from] ProofError),
+    ValueOutOfRange(#[from] ProofError),
 }
