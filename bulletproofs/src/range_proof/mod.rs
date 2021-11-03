@@ -393,10 +393,10 @@ impl RangeProof {
             return Err(ProofError::FormatError);
         }
 
-        let tmp: Option<G1Affine> = G1Affine::from_compressed(&read48(&slice[0 * 48..])).into();
+        let tmp: Option<G1Affine> = G1Affine::from_compressed(&read48(&slice[0..])).into();
         let A = tmp.ok_or(ProofError::FormatError)?.into();
 
-        let tmp: Option<G1Affine> = G1Affine::from_compressed(&read48(&slice[1 * 48..])).into();
+        let tmp: Option<G1Affine> = G1Affine::from_compressed(&read48(&slice[48..])).into();
         let S = tmp.ok_or(ProofError::FormatError)?.into();
 
         let tmp: Option<G1Affine> = G1Affine::from_compressed(&read48(&slice[2 * 48..])).into();
@@ -405,10 +405,10 @@ impl RangeProof {
         let tmp: Option<G1Affine> = G1Affine::from_compressed(&read48(&slice[3 * 48..])).into();
         let T_2 = tmp.ok_or(ProofError::FormatError)?.into();
 
-        let tmp: Option<Scalar> = Scalar::from_bytes(&read32(&slice[4 * 48 + 0 * 32..])).into();
+        let tmp: Option<Scalar> = Scalar::from_bytes(&read32(&slice[4 * 48..])).into();
         let t_x = tmp.ok_or(ProofError::FormatError)?;
 
-        let tmp: Option<Scalar> = Scalar::from_bytes(&read32(&slice[4 * 48 + 1 * 32..])).into();
+        let tmp: Option<Scalar> = Scalar::from_bytes(&read32(&slice[4 * 48 + 32..])).into();
         let t_x_blinding = tmp.ok_or(ProofError::FormatError)?;
 
         let tmp: Option<Scalar> = Scalar::from_bytes(&read32(&slice[4 * 48 + 2 * 32..])).into();
@@ -458,7 +458,7 @@ impl<'de> Deserialize<'de> for RangeProof {
             {
                 // Using Error::custom requires T: Display, which our error
                 // type only implements when it implements std::error::Error.
-                return RangeProof::from_bytes(v).map_err(serde::de::Error::custom);
+                RangeProof::from_bytes(v).map_err(serde::de::Error::custom)
             }
         }
 

@@ -78,6 +78,7 @@ impl ProofShare {
 
     /// Audit an individual proof share to determine whether it is
     /// malformed.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn audit_share(
         &self,
         bp_gens: &BulletproofGens,
@@ -140,7 +141,7 @@ impl ProofShare {
 
         let V_j = bit_commitment.V_j;
 
-        let sum_of_powers_y = util::sum_of_powers(&y, n);
+        let sum_of_powers_y = util::sum_of_powers(y, n);
         let sum_of_powers_2 = util::sum_of_powers(&Scalar::from(2u64), n);
         let delta = (z - zz) * sum_of_powers_y * y_jn - z * zz * sum_of_powers_2 * z_j;
         let t_check = vartime_multiscalar_mul(

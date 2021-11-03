@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+#![allow(clippy::many_single_char_names)]
 
 mod errors;
 mod generators;
