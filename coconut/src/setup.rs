@@ -9,6 +9,7 @@ use rand::RngCore;
 #[cfg(feature = "with_serde")]
 use serde::{Deserialize, Serialize};
 use sha2::Sha512;
+use bulletproofs::BulletproofGens;
 
 #[cfg(test)]
 #[path = "tests/setup_tests.rs"]
@@ -19,7 +20,7 @@ pub mod setup_tests;
 const G1_HASH_DOMAIN: &[u8] = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
 /// The global system parameters (public).
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct Parameters {
     /// A generator of G1.
@@ -29,6 +30,8 @@ pub struct Parameters {
     pub hs: Vec<G1Projective>,
     /// A generator of G2.
     pub g2: G2Projective,
+    // Bulletproofs generators.
+    pub bulletproof_gens: BulletproofGens
 }
 
 impl Parameters {
@@ -41,6 +44,7 @@ impl Parameters {
                 .map(|x| Self::hash_to_g1(format!("h{}", x)))
                 .collect(),
             g2: G2Projective::generator(),
+            bulletproof_gens: BulletproofGens::new(64, 1)
         }
     }
 
