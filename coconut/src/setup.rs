@@ -3,13 +3,13 @@ use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
     G1Projective, G2Prepared, G2Projective, Scalar,
 };
+use bulletproofs::BulletproofGens;
 use ff::Field as _;
 use group::{Curve as _, Group as _};
 use rand::RngCore;
 #[cfg(feature = "with_serde")]
 use serde::{Deserialize, Serialize};
 use sha2::Sha512;
-use bulletproofs::BulletproofGens;
 
 #[cfg(test)]
 #[path = "tests/setup_tests.rs"]
@@ -31,7 +31,7 @@ pub struct Parameters {
     /// A generator of G2.
     pub g2: G2Projective,
     // Bulletproofs generators.
-    pub bulletproof_gens: BulletproofGens
+    pub bulletproof_gens: BulletproofGens,
 }
 
 impl Parameters {
@@ -44,7 +44,7 @@ impl Parameters {
                 .map(|x| Self::hash_to_g1(format!("h{}", x)))
                 .collect(),
             g2: G2Projective::generator(),
-            bulletproof_gens: BulletproofGens::new(64, 1)
+            bulletproof_gens: BulletproofGens::new(64, 2),
         }
     }
 
