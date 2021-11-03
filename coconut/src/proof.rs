@@ -301,7 +301,7 @@ impl RequestCoinsProof {
             &output_commitments_reconstruct,
             &zero_sum_reconstruct,
         );
-        ensure!(challenge == self.challenge, CoconutError::ZKCheckFailed);
+        ensure!(challenge == self.challenge, CoconutError::MalformedCoinRequest);
         Ok(())
     }
 
