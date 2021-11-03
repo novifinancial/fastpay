@@ -5,23 +5,12 @@ use crate::{
     transcript::TranscriptProtocol,
     util,
 };
+use bls12_381::{G1Affine, G1Projective, Scalar};
 use core::iter;
-/*
-use curve25519_dalek::{
-    ristretto::{G1Projective, RistrettoPoint},
-    scalar::Scalar,
-    traits::{IsIdentity, VartimeMultiscalarMul},
-};
-*/
-use bls12_381::{
-    hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Affine, G1Projective, G2Prepared, G2Projective, Scalar,
-};
 use ff::Field as _;
-use group::{Curve as _, Group as _, GroupEncoding as _};
+use group::Curve as _;
 use merlin::Transcript;
-use rand::thread_rng;
-use rand::{CryptoRng, RngCore};
+use rand::{thread_rng, CryptoRng, RngCore};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod dealer;

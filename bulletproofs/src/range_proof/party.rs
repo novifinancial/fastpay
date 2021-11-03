@@ -4,16 +4,11 @@ use crate::{
     generators::{BulletproofGens, PedersenGens},
     util,
 };
-use bls12_381::{
-    hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Affine, G1Projective, G2Prepared, G2Projective, Scalar,
-};
+use bls12_381::{G1Projective, Scalar};
 use clear_on_drop::clear::Clear;
 use core::iter;
 use ff::Field as _;
-use group::{Curve as _, Group as _, GroupEncoding as _};
-use rand::thread_rng;
-use rand::{CryptoRng, RngCore};
+use rand::{thread_rng, CryptoRng, RngCore};
 //use rand_core::{CryptoRng, RngCore};
 
 pub fn multiscalar_mul_by_ref(scalars: &[&Scalar], points: &[&G1Projective]) -> G1Projective {

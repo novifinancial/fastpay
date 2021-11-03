@@ -7,14 +7,10 @@ use crate::{
     transcript::TranscriptProtocol,
     util,
 };
-use bls12_381::{
-    hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Affine, G1Projective, G2Prepared, G2Projective, Scalar,
-};
+use bls12_381::{G1Projective, Scalar};
 use core::iter;
 use merlin::Transcript;
-use rand::thread_rng;
-use rand::{CryptoRng, RngCore};
+use rand::{thread_rng, CryptoRng, RngCore};
 
 /// Used to construct a dealer for the aggregated rangeproof MPC protocol.
 pub struct Dealer {}

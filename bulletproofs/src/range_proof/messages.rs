@@ -1,12 +1,6 @@
 use crate::generators::{BulletproofGens, PedersenGens};
-use bls12_381::{
-    hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Affine, G1Projective, G2Prepared, G2Projective, Scalar,
-};
+use bls12_381::{G1Projective, Scalar};
 use core::iter;
-use ff::Field as _;
-use group::{Curve as _, Group as _, GroupEncoding as _};
-use serde::{Deserialize, Serialize};
 
 pub fn vartime_multiscalar_mul(scalars: &[Scalar], points: &[&G1Projective]) -> G1Projective {
     points
@@ -94,8 +88,6 @@ impl ProofShare {
         poly_commitment: &PolyCommitment,
         poly_challenge: &PolyChallenge,
     ) -> Result<(), ()> {
-        use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
-
         use crate::{inner_product_proof::inner_product, util};
 
         let n = self.l_vec.len();

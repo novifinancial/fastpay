@@ -1,7 +1,6 @@
 use crate::errors::ProofError;
 use bls12_381::{G1Projective, Scalar};
-use ff::Field as _;
-use group::{Curve as _, Group as _, GroupEncoding as _};
+use group::GroupEncoding as _;
 use merlin::Transcript;
 
 pub trait TranscriptProtocol {
@@ -75,8 +74,6 @@ impl TranscriptProtocol for Transcript {
         label: &'static [u8],
         point: &G1Projective,
     ) -> Result<(), ProofError> {
-        use curve25519_dalek::traits::IsIdentity;
-
         if point.is_identity().into() {
             Err(ProofError::VerificationError)
         } else {

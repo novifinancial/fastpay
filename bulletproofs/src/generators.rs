@@ -1,12 +1,10 @@
 use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Projective, G2Prepared, G2Projective, Scalar,
+    G1Projective, Scalar,
 };
 use digest::{ExtendableOutput, Input, XofReader};
-use ff::Field as _;
-use group::{Curve as _, Group as _};
 use sha2::Sha512;
-use sha3::{Sha3XofReader, Sha3_512, Shake256};
+use sha3::{Sha3XofReader, Shake256};
 
 /// G1 hash domain as defined by IETF:
 /// https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-11#appendix-J.9.1

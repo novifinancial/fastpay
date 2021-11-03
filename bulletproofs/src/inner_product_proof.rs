@@ -1,14 +1,9 @@
 use crate::{errors::ProofError, transcript::TranscriptProtocol};
-use bls12_381::{
-    hash_to_curve::{ExpandMsgXmd, HashToCurve},
-    G1Affine, G1Projective, G2Prepared, G2Projective, Scalar,
-};
+use bls12_381::{G1Affine, G1Projective, Scalar};
 use core::iter;
-use ff::Field as _;
-use group::{Curve as _, Group as _, GroupEncoding as _};
+use group::Curve as _;
 use merlin::Transcript;
 use std::borrow::Borrow;
-use std::ops::Mul;
 
 /// Given `data` with `len >= 32`, return the first 32 bytes.
 pub fn read32(data: &[u8]) -> [u8; 32] {
@@ -485,10 +480,8 @@ pub fn inner_product(a: &[Scalar], b: &[Scalar]) -> Scalar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generators::hash_to_g1;
-    use crate::util;
-    use rand::{rngs::ThreadRng, thread_rng};
-    use sha3::Sha3_512;
+    use crate::{generators::hash_to_g1, util};
+    use ff::Field as _;
 
     fn test_helper_create(n: usize) {
         let mut rng = rand::thread_rng();
