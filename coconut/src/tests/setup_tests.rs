@@ -19,7 +19,7 @@ impl KeyPair {
             .collect();
 
         // Compute the key of each authority
-        KeyPair::derive_keys(&parameters, committee, v, ws)
+        KeyPair::derive_keys(parameters, committee, v, ws)
     }
 }
 

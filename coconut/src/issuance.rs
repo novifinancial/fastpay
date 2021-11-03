@@ -4,18 +4,22 @@ use crate::{
     setup::{Parameters, PublicKey, SecretKey},
 };
 use bls12_381::{G1Projective, Scalar};
+use ff::Field;
 use group::GroupEncoding as _;
+#[cfg(feature = "with_serde")]
+use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 #[path = "tests/issuance_tests.rs"]
 pub mod issuance_tests;
 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct Coin(pub G1Projective, pub G1Projective);
 
 impl Coin {
-    pub fn randomize(&mut self, parameters: &mut Parameters) {
-        let r = parameters.random_scalar();
+    pub fn randomize(&mut self, rng: impl rand::RngCore) {
+        let r = Scalar::random(rng);
         self.0 *= r;
         self.1 *= r;
     }
@@ -28,6 +32,7 @@ impl Coin {
         value: Scalar,
         id: Scalar,
     ) -> bool {
+        assert_eq!(public_key.betas.len(), 2);
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
         let kappa = public_key.alpha + beta0 * value + beta1 * id;
@@ -44,6 +49,7 @@ impl Coin {
     }
 }
 
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct BlindedCoins {
     /// A vector of blinded coins.
     coins: Vec<(G1Projective, G1Projective)>,
