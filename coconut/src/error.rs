@@ -1,4 +1,5 @@
 use thiserror::Error;
+use bulletproofs::ProofError;
 
 #[macro_export]
 macro_rules! bail {
@@ -25,4 +26,7 @@ pub enum CoconutError {
 
     #[error("ZK check failed")]
     ZKCheckFailed,
+
+    #[error("Range proof check failed")]
+    RangeCheckFailed(#[from] ProofError)
 }

@@ -8,6 +8,9 @@ use bls12_381::{G1Projective, G2Projective, Scalar};
 use group::GroupEncoding as _;
 #[cfg(feature = "with_serde")]
 use serde::{Deserialize, Serialize};
+use bulletproofs::{RangeProof, PedersenGens,};
+use merlin::Transcript;
+use std::convert::TryInto as _;
 
 #[cfg(test)]
 #[path = "tests/request_tests.rs"]
@@ -58,7 +61,7 @@ impl Randomness {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct CoinsRequest {
     /// Input credentials representing coins.
@@ -78,6 +81,8 @@ pub struct CoinsRequest {
     /// A ZK-proof asserting correctness of all the other fields and that the sum of the input
     /// coins equals the sum of the output coins.
     pub proof: RequestCoinsProof,
+    /// The range proofs over the output values.
+    pub range_proofs: Vec<RangeProof>
 }
 
 impl CoinsRequest {
@@ -160,11 +165,13 @@ impl CoinsRequest {
             .zip(randomness.input_rs.iter())
             .map(|(x, r)| parameters.hs[0] * x.value + parameters.g1 * r)
             .collect();
+        /*
         let output_commitments: Vec<_> = output_attributes
             .iter()
             .zip(randomness.output_rs.iter())
             .map(|(x, r)| parameters.hs[0] * x.value + parameters.g1 * r)
             .collect();
+        */
 
         // Compute the ZK proof asserting correctness of the computations above.
         let proof = RequestCoinsProof::new(
@@ -178,6 +185,31 @@ impl CoinsRequest {
             &randomness,
         );
 
+        // Make the range proofs over the output values.
+        let bp_gens = &parameters.bulletproof_gens;
+        let pc_gens = PedersenGens {
+            B: parameters.hs[0].clone(),
+            B_blinding: parameters.g1.clone()
+        };
+        let mut prover_transcript = Transcript::new(b"CocoBullets");
+        let mut range_proofs = Vec::new();
+        let mut output_commitments = Vec::new();
+        for (out, blinding) in output_attributes.iter().zip(randomness.output_rs.iter()) {
+            let bytes_value: [u8; 8] = out.value.to_bytes()[0..8].try_into().unwrap();
+            let secret_value = u64::from_le_bytes(bytes_value);
+            
+            let (proof, committed_value) = RangeProof::prove_single(
+                &bp_gens,
+                &pc_gens,
+                &mut prover_transcript,
+                secret_value,
+                &blinding,
+                32,
+            ).expect("Failed to generate range proof");
+            range_proofs.push(proof);
+            output_commitments.push(committed_value);
+        }
+
         Self {
             sigmas,
             kappas,
@@ -187,6 +219,7 @@ impl CoinsRequest {
             input_commitments,
             output_commitments,
             proof,
+            range_proofs
         }
     }
 
@@ -204,6 +237,17 @@ impl CoinsRequest {
             &self.input_commitments,
             &self.output_commitments,
         )?;
+
+        // Check the range proofs.
+        let bp_gens = &parameters.bulletproof_gens;
+        let pc_gens = PedersenGens {
+            B: parameters.hs[0].clone(),
+            B_blinding: parameters.g1.clone()
+        };
+        let mut verifier_transcript = Transcript::new(b"CocoBullets");
+        for (proof, commitment) in self.range_proofs.iter().zip(self.output_commitments.iter()) {
+            proof.verify_single(&bp_gens, &pc_gens, &mut verifier_transcript, &commitment, 32)?;
+        }
 
         // Check the pairing equations.
         self.kappas

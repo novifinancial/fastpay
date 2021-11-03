@@ -16,11 +16,16 @@ byteorder = "1"
 rand_core = "0.5"
 serde = { version = "1", features = ["derive"] }
 subtle = "2"
-bls12_381 = { version="0.6.0", features=["experimental"] }
 ff = "0.11.0"
 group = "0.11.0"
 sha2 = "0.9.8"
 rand = "0.8.4"
+
+[dependencies.bls12_381]
+version = "0.6.1"
+git = "https://github.com/matbd/bls12_381"
+branch = "serde"
+features = ["experimental"]
 
 [dev-dependencies]
 bincode = "1"
