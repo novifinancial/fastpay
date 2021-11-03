@@ -5,11 +5,11 @@ use crate::{
     setup::{Parameters, PublicKey},
 };
 use bls12_381::{G1Projective, G2Projective, Scalar};
+use bulletproofs::{PedersenGens, RangeProof};
 use group::GroupEncoding as _;
+use merlin::Transcript;
 #[cfg(feature = "with_serde")]
 use serde::{Deserialize, Serialize};
-use bulletproofs::{RangeProof, PedersenGens,};
-use merlin::Transcript;
 use std::convert::TryInto as _;
 
 #[cfg(test)]
@@ -81,8 +81,8 @@ pub struct CoinsRequest {
     /// A ZK-proof asserting correctness of all the other fields and that the sum of the input
     /// coins equals the sum of the output coins.
     pub proof: RequestCoinsProof,
-    /// The range proofs over the output values.
-    pub range_proofs: Vec<RangeProof>
+    /// The aggregated range proof over the output values.
+    pub range_proof: RangeProof,
 }
 
 impl CoinsRequest {
@@ -160,18 +160,12 @@ impl CoinsRequest {
             .collect();
 
         // Commit to the input coin values to prove that the sum of the inputs equals the sum of the outputs.
+        // The commitments to the output values is made as part of bulletproof.
         let input_commitments: Vec<_> = input_attributes
             .iter()
             .zip(randomness.input_rs.iter())
             .map(|(x, r)| parameters.hs[0] * x.value + parameters.g1 * r)
             .collect();
-        /*
-        let output_commitments: Vec<_> = output_attributes
-            .iter()
-            .zip(randomness.output_rs.iter())
-            .map(|(x, r)| parameters.hs[0] * x.value + parameters.g1 * r)
-            .collect();
-        */
 
         // Compute the ZK proof asserting correctness of the computations above.
         let proof = RequestCoinsProof::new(
@@ -189,26 +183,25 @@ impl CoinsRequest {
         let bp_gens = &parameters.bulletproof_gens;
         let pc_gens = PedersenGens {
             B: parameters.hs[0].clone(),
-            B_blinding: parameters.g1.clone()
+            B_blinding: parameters.g1.clone(),
         };
         let mut prover_transcript = Transcript::new(b"CocoBullets");
-        let mut range_proofs = Vec::new();
-        let mut output_commitments = Vec::new();
-        for (out, blinding) in output_attributes.iter().zip(randomness.output_rs.iter()) {
-            let bytes_value: [u8; 8] = out.value.to_bytes()[0..8].try_into().unwrap();
-            let secret_value = u64::from_le_bytes(bytes_value);
-            
-            let (proof, committed_value) = RangeProof::prove_single(
-                &bp_gens,
-                &pc_gens,
-                &mut prover_transcript,
-                secret_value,
-                &blinding,
-                32,
-            ).expect("Failed to generate range proof");
-            range_proofs.push(proof);
-            output_commitments.push(committed_value);
-        }
+        let secret_values: Vec<_> = output_attributes
+            .iter()
+            .map(|x| {
+                let bytes_value: [u8; 8] = x.value.to_bytes()[0..8].try_into().unwrap();
+                u64::from_le_bytes(bytes_value)
+            })
+            .collect();
+        let (range_proof, output_commitments) = RangeProof::prove_multiple(
+            &bp_gens,
+            &pc_gens,
+            &mut prover_transcript,
+            &secret_values,
+            &randomness.output_rs.iter().cloned().collect::<Vec<_>>(),
+            32,
+        )
+        .expect("Failed to generate range proof");
 
         Self {
             sigmas,
@@ -219,7 +212,7 @@ impl CoinsRequest {
             input_commitments,
             output_commitments,
             proof,
-            range_proofs
+            range_proof,
         }
     }
 
@@ -242,12 +235,16 @@ impl CoinsRequest {
         let bp_gens = &parameters.bulletproof_gens;
         let pc_gens = PedersenGens {
             B: parameters.hs[0].clone(),
-            B_blinding: parameters.g1.clone()
+            B_blinding: parameters.g1.clone(),
         };
         let mut verifier_transcript = Transcript::new(b"CocoBullets");
-        for (proof, commitment) in self.range_proofs.iter().zip(self.output_commitments.iter()) {
-            proof.verify_single(&bp_gens, &pc_gens, &mut verifier_transcript, &commitment, 32)?;
-        }
+        self.range_proof.verify_multiple(
+            &bp_gens,
+            &pc_gens,
+            &mut verifier_transcript,
+            &self.output_commitments,
+            32,
+        )?;
 
         // Check the pairing equations.
         self.kappas
