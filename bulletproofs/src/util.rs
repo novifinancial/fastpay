@@ -252,14 +252,11 @@ fn sum_of_powers_slow(x: &Scalar, n: usize) -> Scalar {
     exp_iter(*x).take(n).sum()
 }
 
-/// Given `data` with `len >= 32`, return the first 32 bytes.
-pub fn read32(data: &[u8]) -> [u8; 32] {
-    let mut buf32 = [0u8; 32];
-    buf32[..].copy_from_slice(&data[..32]);
-    buf32
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-/// Construct a `Scalar` from the low 255 bits of a 256-bit integer.
+    /// Construct a `Scalar` from the low 255 bits of a 256-bit integer.
 pub fn scalar_from_bits(bytes: [u8; 32]) -> Scalar {
     // Ensure that s < 2^255 by masking the high bit
     let mut bytes = bytes;
@@ -267,10 +264,6 @@ pub fn scalar_from_bits(bytes: [u8; 32]) -> Scalar {
     let s: Option<Scalar> = Scalar::from_bytes(&bytes).into();
     s.expect("Failed to create scalar from bits")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 
     #[test]
     fn exp_2_is_powers_of_2() {
