@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-use crate::fixtures::{input_attributes, keypair, output_attributes, parameters, request};
+use crate::fixtures::{input_attributes, keypair, offset, output_attributes, parameters, request};
 use rand::{rngs::StdRng, SeedableRng};
 
 #[test]
@@ -39,6 +39,7 @@ fn verify_zk_proof() {
         &coin_request.cs,
         &coin_request.input_commitments,
         &coin_request.output_commitments,
+        &offset(),
     );
     assert!(result.is_ok());
 }

@@ -212,7 +212,15 @@ impl CoinsRequest {
     }
 
     /// Verifies the coin request.
-    pub fn verify(&self, parameters: &Parameters, public_key: &PublicKey) -> CoconutResult<()> {
+    pub fn verify(
+        &self,
+        // The system parameters.
+        parameters: &Parameters,
+        // The authorities aggregated key.
+        public_key: &PublicKey,
+        // The offset between the input and output coins: output = input + offset.
+        offset: &Scalar,
+    ) -> CoconutResult<()> {
         // Verify the ZK proof.
         self.proof.verify(
             parameters,
@@ -223,6 +231,7 @@ impl CoinsRequest {
             &self.cs,
             &self.input_commitments,
             &self.output_commitments,
+            offset,
         )?;
 
         // Check the range proofs.

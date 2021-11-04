@@ -197,6 +197,7 @@ impl RequestCoinsProof {
         cs: &[(G1Projective, G1Projective)],
         input_commitments: &[G1Projective],
         output_commitments: &[G1Projective],
+        offset: &Scalar,
     ) -> CoconutResult<()> {
         ensure!(sigmas.len() == kappas.len(), CoconutError::MalformedProof);
         ensure!(sigmas.len() == cms.len(), CoconutError::MalformedProof);
@@ -289,7 +290,8 @@ impl RequestCoinsProof {
             })
             .collect();
         let zero_sum = output_commitments.iter().sum::<G1Projective>()
-            - input_commitments.iter().sum::<G1Projective>();
+            - input_commitments.iter().sum::<G1Projective>()
+            - parameters.hs[0] * offset;
         let zero_sum_reconstruct =
             zero_sum * self.challenge + parameters.g1 * self.zero_sum_response;
 
