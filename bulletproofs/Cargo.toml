@@ -8,13 +8,12 @@ edition = "2018"
 [dependencies]
 thiserror = "1"
 merlin = "2"
-curve25519-dalek = { version = "2", features = ["serde"] }
+curve25519-dalek = { version = "2" }
 clear_on_drop = "0.2.4"
 sha3 = "0.8"
 digest = "0.8"
 byteorder = "1"
 rand_core = "0.5"
-serde = { version = "1", features = ["derive"] }
 subtle = "2"
 ff = "0.11.0"
 group = "0.11.0"
@@ -27,5 +26,15 @@ git = "https://github.com/matbd/bls12_381"
 branch = "serde"
 features = ["experimental"]
 
+[dependencies.serde]
+version = "1.0.130"
+optional = true
+default-features = true
+features = ["derive"]
+
 [dev-dependencies]
 bincode = "1"
+
+[features]
+with_serde = ["serde", "bls12_381/serde", "curve25519-dalek/serde"]
+with_equality = []

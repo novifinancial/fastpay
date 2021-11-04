@@ -64,8 +64,9 @@ impl Randomness {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "with_equality", derive(Eq, PartialEq))]
 pub struct CoinsRequest {
     /// Input credentials representing coins.
     pub sigmas: Vec<Coin>,

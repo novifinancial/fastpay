@@ -23,7 +23,7 @@ pub mod setup_tests;
 const G1_HASH_DOMAIN: &[u8] = b"COCONUT-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
 /// The global system parameters (public).
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct Parameters {
     /// A generator of G1.
@@ -99,7 +99,7 @@ pub struct SecretKey {
 
 /// The public key. This structure can represent the public key of a single authority or their
 /// aggregated public key (aggregated keys are undistinguishable from single-authority keys).
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct PublicKey {
     pub alpha: G2Projective,

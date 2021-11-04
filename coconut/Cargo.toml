@@ -10,7 +10,7 @@ sha2 = "0.9.8"
 group = "0.11.0"
 thiserror = "1.0.29"
 merlin = "2"
-bulletproofs = { path="../bulletproofs" }
+bulletproofs = { path = "../bulletproofs" }
 
 [dependencies.bls12_381]
 version = "0.6.1"
@@ -25,4 +25,5 @@ default-features = true
 features = ["derive"]
 
 [features]
-with_serde = ["serde", "bls12_381/serde"]
+with_serde = ["serde", "bls12_381/serde", "bulletproofs/with_serde"]
+with_equality = ["bulletproofs/with_equality"]

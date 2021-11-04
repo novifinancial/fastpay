@@ -3,6 +3,8 @@ use bls12_381::{
     G1Projective, Scalar,
 };
 use digest::{ExtendableOutput, Input, XofReader};
+#[cfg(feature = "with_serde")]
+use serde::{Deserialize, Serialize};
 use sha2::Sha512;
 use sha3::{Sha3XofReader, Shake256};
 
@@ -117,7 +119,8 @@ impl Iterator for GeneratorsChain {
 /// chain, and even forward-compatible to multiparty aggregation of
 /// constraint system proofs, since the generators are namespaced by
 /// their party index.
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct BulletproofGens {
     /// The maximum number of usable generators for each party.
     pub gens_capacity: usize,

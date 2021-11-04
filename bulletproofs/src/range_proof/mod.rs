@@ -14,6 +14,7 @@ use ff::Field as _;
 use group::Curve as _;
 use merlin::Transcript;
 use rand::{thread_rng, CryptoRng, RngCore};
+#[cfg(feature = "with_serde")]
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod dealer;
@@ -66,6 +67,7 @@ pub fn read48(data: &[u8]) -> [u8; 48] {
 /// module and can be used to perform online aggregation between
 /// parties without revealing secret values to each other.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "with_equality", derive(Eq, PartialEq))]
 pub struct RangeProof {
     /// Commitment to the bits of the value
     A: G1Projective,
@@ -432,15 +434,17 @@ impl RangeProof {
     }
 }
 
+#[cfg(feature = "with_serde")]
 impl Serialize for RangeProof {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(&self.to_bytes()[..])
+        serializer.serialize_newtype_struct("RangeProof", &self.to_bytes())
     }
 }
 
+#[cfg(feature = "with_serde")]
 impl<'de> Deserialize<'de> for RangeProof {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -455,17 +459,16 @@ impl<'de> Deserialize<'de> for RangeProof {
                 formatter.write_str("a valid RangeProof")
             }
 
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<RangeProof, E>
+            fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
             where
-                E: serde::de::Error,
+                D: serde::de::Deserializer<'de>,
             {
-                // Using Error::custom requires T: Display, which our error
-                // type only implements when it implements std::error::Error.
-                RangeProof::from_bytes(v).map_err(serde::de::Error::custom)
+                RangeProof::from_bytes(&Vec::deserialize(deserializer)?)
+                    .map_err(serde::de::Error::custom)
             }
         }
 
-        deserializer.deserialize_bytes(RangeProofVisitor)
+        deserializer.deserialize_newtype_struct("RangeProof", RangeProofVisitor)
     }
 }
 
@@ -481,7 +484,7 @@ fn delta(n: usize, m: usize, y: &Scalar, z: &Scalar) -> Scalar {
     (z - z * z) * sum_y - z * z * z * sum_2 * sum_z
 }
 
-#[cfg(test)]
+#[cfg(all(test, serde))]
 mod tests {
     use super::*;
     use crate::generators::PedersenGens;
