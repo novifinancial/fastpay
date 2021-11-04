@@ -17,7 +17,7 @@ pub mod setup_tests;
 
 /// G1 hash domain as defined by IETF:
 /// https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-11#appendix-J.9.1
-const G1_HASH_DOMAIN: &[u8] = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
+const G1_HASH_DOMAIN: &[u8] = b"COCONUT-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
 
 /// The global system parameters (public).
 #[derive(Clone)]
