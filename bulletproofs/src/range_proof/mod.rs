@@ -505,8 +505,8 @@ mod tests {
         for _ in 0..n {
             power_g += (z - z2) * exp_y - z3 * exp_2;
 
-            exp_y = exp_y * y; // y^i -> y^(i+1)
-            exp_2 = exp_2 + exp_2; // 2^i -> 2^(i+1)
+            exp_y *= y; // y^i -> y^(i+1)
+            exp_2 += exp_2; // 2^i -> 2^(i+1)
         }
 
         assert_eq!(power_g, delta(n, 1, &y, &z),);
