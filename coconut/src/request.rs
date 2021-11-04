@@ -106,6 +106,7 @@ impl CoinsRequest {
         assert!(sigmas.len() == input_attributes.len());
         assert!(parameters.max_attributes() >= 2);
         assert!(public_key.max_attributes() >= 2);
+        assert!(parameters.max_attributes() >= output_attributes.len());
 
         // Generate all random values for the commitments.
         let randomness = Randomness::new(&mut rng, input_attributes.len(), output_attributes.len());

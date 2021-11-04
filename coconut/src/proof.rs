@@ -45,6 +45,7 @@ impl RequestCoinsProof {
     ) -> Self {
         assert!(parameters.max_attributes() >= 2);
         assert!(public_key.max_attributes() >= 2);
+        assert!(parameters.max_attributes() >= output_attributes.len());
 
         // Compute the witnesses.
         let input_attributes_witnesses: Vec<_> = input_attributes
@@ -206,13 +207,29 @@ impl RequestCoinsProof {
         input_commitments: &[G1Projective],
         output_commitments: &[G1Projective],
     ) -> CoconutResult<()> {
-        assert!(sigmas.len() == kappas.len());
-        assert!(sigmas.len() == nus.len());
-        assert!(sigmas.len() == cms.len());
-        assert!(sigmas.len() == input_commitments.len());
-        assert!(output_commitments.len() == cs.len());
-        assert!(parameters.max_attributes() >= 2);
-        assert!(public_key.max_attributes() >= 2);
+        ensure!(sigmas.len() == kappas.len(), CoconutError::MalformedProof);
+        ensure!(sigmas.len() == nus.len(), CoconutError::MalformedProof);
+        ensure!(sigmas.len() == cms.len(), CoconutError::MalformedProof);
+        ensure!(
+            sigmas.len() == input_commitments.len(),
+            CoconutError::MalformedProof
+        );
+        ensure!(
+            output_commitments.len() == cs.len(),
+            CoconutError::MalformedProof
+        );
+        ensure!(
+            parameters.max_attributes() >= 2,
+            CoconutError::MalformedProof
+        );
+        ensure!(
+            public_key.max_attributes() >= 2,
+            CoconutError::MalformedProof
+        );
+        ensure!(
+            parameters.max_attributes() >= output_commitments.len(),
+            CoconutError::MalformedProof
+        );
 
         // Compute the Kappa and Nu witnesses.
         let beta0 = &public_key.betas[0];

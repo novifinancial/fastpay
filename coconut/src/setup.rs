@@ -38,7 +38,7 @@ pub struct Parameters {
 }
 
 impl Parameters {
-    pub fn new(max_attributes: usize) -> Parameters {
+    pub fn new(max_attributes: usize, max_outputs: usize) -> Parameters {
         assert!(max_attributes > 0);
 
         Self {
@@ -47,13 +47,18 @@ impl Parameters {
                 .map(|x| Self::hash_to_g1(format!("h{}", x)))
                 .collect(),
             g2: G2Projective::generator(),
-            bulletproof_gens: BulletproofGens::new(64, 2),
+            bulletproof_gens: BulletproofGens::new(64, max_outputs),
         }
     }
 
     /// Return the maximum number of attributes that can be embedded into a credential.
     pub fn max_attributes(&self) -> usize {
         self.hs.len()
+    }
+
+    /// Return the maximum number of output coins.
+    pub fn max_outputs(&self) -> usize {
+        self.bulletproof_gens.party_capacity
     }
 
     /// Pick n random scalars.

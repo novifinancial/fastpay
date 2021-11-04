@@ -11,7 +11,7 @@ use rand::SeedableRng;
 
 // Fixture
 pub fn parameters() -> Parameters {
-    Parameters::new(2)
+    Parameters::new(2, 2)
 }
 
 // Fixture
