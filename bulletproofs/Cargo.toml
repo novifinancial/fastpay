@@ -29,4 +29,3 @@ features = ["experimental"]
 
 [dev-dependencies]
 bincode = "1"
-rand = "0.8.4"
