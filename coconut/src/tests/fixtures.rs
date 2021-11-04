@@ -68,12 +68,17 @@ pub fn output_attributes() -> Vec<OutputAttribute> {
             id_blinding_factor: Scalar::from(20),
         },
         OutputAttribute {
-            value: Scalar::from(2),
+            value: Scalar::from(3),
             value_blinding_factor: Scalar::from(30),
             id: Scalar::from(4567),
             id_blinding_factor: Scalar::from(40),
         },
     ]
+}
+
+// Fixture
+pub fn offset() -> Scalar {
+    Scalar::one()
 }
 
 // Fixture
