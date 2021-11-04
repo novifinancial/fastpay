@@ -71,8 +71,6 @@ pub struct CoinsRequest {
     pub sigmas: Vec<Coin>,
     /// Kappa group elements associated with the input credentials (`sigmas`).
     pub kappas: Vec<G2Projective>,
-    /// Nu group elements associated with the input credentials (`sigmas`).
-    pub nus: Vec<G1Projective>,
     /// The common commitments Cm of the output coin values and ids.
     pub cms: Vec<G1Projective>,
     /// The blinded output coin values and ids.
@@ -115,25 +113,20 @@ impl CoinsRequest {
         let sigmas: Vec<_> = sigmas
             .iter()
             .cloned()
-            .map(|mut sigma| {
+            .zip(randomness.rs.iter())
+            .map(|(mut sigma, r)| {
                 sigma.randomize(&mut rng);
-                sigma
+                Coin(sigma.0, sigma.1 + sigma.0 * r)
             })
             .collect();
 
-        // Compute Kappa and Nu for each input coin.
+        // Compute Kappa for each input coin.
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
         let kappas = input_attributes
             .iter()
             .zip(randomness.rs.iter())
             .map(|(x, r)| public_key.alpha + beta0 * x.value + beta1 * x.id + parameters.g2 * r)
-            .collect();
-        let nus = randomness
-            .rs
-            .iter()
-            .zip(sigmas.iter())
-            .map(|(r, sigma)| sigma.0 * r)
             .collect();
 
         // Compute the common commitment Cm for the outputs.
@@ -177,7 +170,6 @@ impl CoinsRequest {
             parameters,
             public_key,
             &base_hs,
-            &sigmas,
             input_attributes,
             output_attributes,
             &randomness,
@@ -210,7 +202,6 @@ impl CoinsRequest {
         Self {
             sigmas,
             kappas,
-            nus,
             cms,
             cs,
             input_commitments,
@@ -228,7 +219,6 @@ impl CoinsRequest {
             public_key,
             &self.sigmas,
             &self.kappas,
-            &self.nus,
             &self.cms,
             &self.cs,
             &self.input_commitments,
@@ -253,11 +243,10 @@ impl CoinsRequest {
         // Check the pairing equations.
         self.kappas
             .iter()
-            .zip(self.nus.iter())
             .zip(self.sigmas.iter())
-            .all(|((kappa, nu), sigma)| {
+            .all(|(kappa, sigma)| {
                 !bool::from(sigma.0.is_identity())
-                    && Parameters::check_pairing(&sigma.0, kappa, &(sigma.1 + nu), &parameters.g2)
+                    && Parameters::check_pairing(&sigma.0, kappa, &sigma.1, &parameters.g2)
             })
             .then(|| ())
             .ok_or(CoconutError::PairingCheckFailed)

@@ -38,7 +38,6 @@ impl RequestCoinsProof {
         parameters: &Parameters,
         public_key: &PublicKey,
         base_hs: &[G1Projective],
-        sigmas: &[Coin],
         input_attributes: &[InputAttribute],
         output_attributes: &[OutputAttribute],
         randomness: &Randomness,
@@ -74,12 +73,6 @@ impl RequestCoinsProof {
             .iter()
             .zip(randomness_witnesses.rs.iter())
             .map(|(x, r)| public_key.alpha + beta0 * x.value + beta1 * x.id + parameters.g2 * r)
-            .collect();
-        let nus: Vec<_> = randomness_witnesses
-            .rs
-            .iter()
-            .zip(sigmas.iter())
-            .map(|(r, sigma)| sigma.0 * r)
             .collect();
 
         // Compute the commitments to the output attributes from the witnesses.
@@ -124,7 +117,6 @@ impl RequestCoinsProof {
             public_key,
             base_hs,
             &kappas,
-            &nus,
             &cms,
             &cs,
             &input_commitments,
@@ -201,14 +193,12 @@ impl RequestCoinsProof {
         public_key: &PublicKey,
         sigmas: &[Coin],
         kappas: &[G2Projective],
-        nus: &[G1Projective],
         cms: &[G1Projective],
         cs: &[(G1Projective, G1Projective)],
         input_commitments: &[G1Projective],
         output_commitments: &[G1Projective],
     ) -> CoconutResult<()> {
         ensure!(sigmas.len() == kappas.len(), CoconutError::MalformedProof);
-        ensure!(sigmas.len() == nus.len(), CoconutError::MalformedProof);
         ensure!(sigmas.len() == cms.len(), CoconutError::MalformedProof);
         ensure!(
             sigmas.len() == input_commitments.len(),
@@ -245,12 +235,6 @@ impl RequestCoinsProof {
                     + beta1 * attribute.id
                     + parameters.g2 * r
             })
-            .collect();
-        let nus_reconstruct: Vec<_> = nus
-            .iter()
-            .zip(sigmas.iter())
-            .zip(self.randomness_responses.rs.iter())
-            .map(|((nu, sigma), r)| nu * self.challenge + sigma.0 * r)
             .collect();
 
         // Compute the base group element h.
@@ -314,7 +298,6 @@ impl RequestCoinsProof {
             public_key,
             &base_hs,
             &kappas_reconstruct,
-            &nus_reconstruct,
             &cms_reconstruct,
             &cs_reconstruct,
             &input_commitments_reconstruct,
@@ -334,7 +317,6 @@ impl RequestCoinsProof {
         public_key: &PublicKey,
         base_hs: &[G1Projective],
         kappas: &[G2Projective],
-        nus: &[G1Projective],
         cms: &[G1Projective],
         cs: &[(G1Projective, G1Projective)],
         input_commitments: &[G1Projective],
@@ -353,9 +335,6 @@ impl RequestCoinsProof {
         }
         for kappa in kappas {
             hasher.update(kappa.to_bytes());
-        }
-        for nu in nus {
-            hasher.update(nu.to_bytes());
         }
         for cm in cms {
             hasher.update(cm.to_bytes());
