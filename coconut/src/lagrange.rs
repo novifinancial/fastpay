@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::setup::Parameters;
 use bls12_381::Scalar;
 use core::{iter::Sum, ops::Mul};

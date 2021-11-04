@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use crate::fixtures::{
     aggregated_key, coin1, input_attribute1, keypair, keypairs, output_attributes, parameters,
