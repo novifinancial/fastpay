@@ -406,13 +406,15 @@ fn create_and_transfer_coins(coins: Vec<TransparentCoin>) -> Result<(), failure:
         vec![0; 4],
     );
     // spend account #1 and create coins
-    let certificates = rt.block_on(client1.spend_and_create_coins(coins.clone()))?;
+    let assets = rt.block_on(client1.spend_and_create_coins(coins.clone()))?;
     assert!(client1.lock_certificate.is_some());
-    assert_eq!(certificates.len(), coins.len());
+    assert_eq!(assets.len(), coins.len());
     // receive coins on account #2
-    for (i, certificate) in certificates.into_iter().enumerate() {
-        assert!(matches!(&certificate.value, Value::Coin(c) if c == &coins[i]));
-        rt.block_on(client2.receive_from_fastpay(certificate))?;
+    for (i, asset) in assets.into_iter().enumerate() {
+        assert!(
+            matches!(&asset, Asset::TransparentCoin(certificate) if certificate.value == Value::Coin(coins[i].clone()))
+        );
+        rt.block_on(client2.receive_asset(asset))?;
     }
     assert_eq!(client2.coins.len(), coins.len());
     assert_eq!(
@@ -438,7 +440,7 @@ fn create_and_transfer_coins(coins: Vec<TransparentCoin>) -> Result<(), failure:
         rt.block_on(client3.query_strong_majority_balance()),
         Balance::from(3)
     );
-    rt.block_on(client3.receive_from_fastpay(certificate))?;
+    rt.block_on(client3.receive_confirmation(certificate))?;
     assert_eq!(
         rt.block_on(client3.synchronize_balance()).unwrap(),
         Balance::from(3)
@@ -692,7 +694,7 @@ fn test_receiving_unconfirmed_transfer() {
         SequenceNumber::from(0)
     );
     // Let the receiver confirm in last resort.
-    rt.block_on(client2.receive_from_fastpay(certificate))
+    rt.block_on(client2.receive_confirmation(certificate))
         .unwrap();
     assert_eq!(
         rt.block_on(client2.query_strong_majority_balance()),
@@ -779,7 +781,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
         SequenceNumber::from(0)
     );
     // Let the receiver confirm in last resort.
-    rt.block_on(client2.receive_from_fastpay(certificate))
+    rt.block_on(client2.receive_confirmation(certificate))
         .unwrap();
     assert_eq!(
         rt.block_on(client2.query_strong_majority_balance()),

@@ -471,7 +471,7 @@ fn test_handle_confirmation_order_inactive_sender_ok() {
 #[test]
 fn test_handle_coin_creation_order_ok() {
     let mut state = init_state_with_accounts(Vec::new());
-    let coins = vec![
+    let transparent_coins = vec![
         make_certificate(
             &state,
             Value::Coin(TransparentCoin {
@@ -492,7 +492,8 @@ fn test_handle_coin_creation_order_ok() {
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
         account_balance: Amount::from(5),
-        coins,
+        transparent_coins,
+        opaque_coin_public_seeds: Vec::new(),
     }];
     let targets = vec![
         TransparentCoin {
@@ -509,6 +510,7 @@ fn test_handle_coin_creation_order_ok() {
     let description = CoinCreationDescription {
         sources,
         targets: targets.clone(),
+        coconut_request: None,
     };
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
@@ -547,7 +549,8 @@ fn test_handle_coin_creation_order_no_source_coin_ok() {
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
         account_balance: Amount::from(15),
-        coins: Vec::new(),
+        transparent_coins: Vec::new(),
+        opaque_coin_public_seeds: Vec::new(),
     }];
     let targets = vec![
         TransparentCoin {
@@ -564,6 +567,7 @@ fn test_handle_coin_creation_order_no_source_coin_ok() {
     let description = CoinCreationDescription {
         sources,
         targets: targets.clone(),
+        coconut_request: None,
     };
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
@@ -602,7 +606,8 @@ fn test_handle_coin_creation_order_empty_target_coin() {
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
         account_balance: Amount::from(15),
-        coins: Vec::new(),
+        transparent_coins: Vec::new(),
+        opaque_coin_public_seeds: Vec::new(),
     }];
     let targets = vec![
         TransparentCoin {
@@ -621,7 +626,11 @@ fn test_handle_coin_creation_order_empty_target_coin() {
             seed: 3,
         },
     ];
-    let description = CoinCreationDescription { sources, targets };
+    let description = CoinCreationDescription {
+        sources,
+        targets,
+        coconut_request: None,
+    };
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
@@ -643,7 +652,7 @@ fn test_handle_coin_creation_order_empty_target_coin() {
 #[test]
 fn test_handle_coin_creation_order_insufficient_funds() {
     let mut state = init_state_with_accounts(Vec::new());
-    let coins = vec![
+    let transparent_coins = vec![
         make_certificate(
             &state,
             Value::Coin(TransparentCoin {
@@ -664,7 +673,8 @@ fn test_handle_coin_creation_order_insufficient_funds() {
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
         account_balance: Amount::from(5),
-        coins,
+        transparent_coins,
+        opaque_coin_public_seeds: Vec::new(),
     }];
     let targets = vec![
         TransparentCoin {
@@ -678,7 +688,11 @@ fn test_handle_coin_creation_order_insufficient_funds() {
             seed: 2,
         },
     ];
-    let description = CoinCreationDescription { sources, targets };
+    let description = CoinCreationDescription {
+        sources,
+        targets,
+        coconut_request: None,
+    };
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
@@ -700,7 +714,7 @@ fn test_handle_coin_creation_order_insufficient_funds() {
 #[test]
 fn test_handle_coin_creation_order_replayed_seed() {
     let mut state = init_state_with_accounts(Vec::new());
-    let coins = vec![
+    let transparent_coins = vec![
         make_certificate(
             &state,
             Value::Coin(TransparentCoin {
@@ -721,7 +735,8 @@ fn test_handle_coin_creation_order_replayed_seed() {
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
         account_balance: Amount::from(5),
-        coins,
+        transparent_coins,
+        opaque_coin_public_seeds: Vec::new(),
     }];
     let targets = vec![
         TransparentCoin {
@@ -735,7 +750,11 @@ fn test_handle_coin_creation_order_replayed_seed() {
             seed: 2,
         },
     ];
-    let description = CoinCreationDescription { sources, targets };
+    let description = CoinCreationDescription {
+        sources,
+        targets,
+        coconut_request: None,
+    };
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
@@ -757,7 +776,7 @@ fn test_handle_coin_creation_order_replayed_seed() {
 #[test]
 fn test_handle_coin_creation_order_incorrect_source() {
     let mut state = init_state_with_accounts(Vec::new());
-    let coins = vec![
+    let transparent_coins = vec![
         make_certificate(
             &state,
             Value::Coin(TransparentCoin {
@@ -778,7 +797,8 @@ fn test_handle_coin_creation_order_incorrect_source() {
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
         account_balance: Amount::from(5),
-        coins,
+        transparent_coins,
+        opaque_coin_public_seeds: Vec::new(),
     }];
     let targets = vec![
         TransparentCoin {
@@ -792,7 +812,11 @@ fn test_handle_coin_creation_order_incorrect_source() {
             seed: 2,
         },
     ];
-    let description = CoinCreationDescription { sources, targets };
+    let description = CoinCreationDescription {
+        sources,
+        targets,
+        coconut_request: None,
+    };
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
@@ -814,7 +838,7 @@ fn test_handle_coin_creation_order_incorrect_source() {
 #[test]
 fn test_handle_coin_creation_order_repeated_source() {
     let mut state = init_state_with_accounts(Vec::new());
-    let coins = vec![
+    let transparent_coins = vec![
         make_certificate(
             &state,
             Value::Coin(TransparentCoin {
@@ -835,7 +859,8 @@ fn test_handle_coin_creation_order_repeated_source() {
     let source = CoinCreationSource {
         account_id: dbg_account(1),
         account_balance: Amount::from(5),
-        coins,
+        transparent_coins,
+        opaque_coin_public_seeds: Vec::new(),
     };
     let sources = vec![source.clone(), source];
     let targets = vec![
@@ -850,7 +875,11 @@ fn test_handle_coin_creation_order_repeated_source() {
             seed: 2,
         },
     ];
-    let description = CoinCreationDescription { sources, targets };
+    let description = CoinCreationDescription {
+        sources,
+        targets,
+        coconut_request: None,
+    };
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
@@ -872,7 +901,7 @@ fn test_handle_coin_creation_order_repeated_source() {
 #[test]
 fn test_handle_coin_creation_order_invalid_balance() {
     let mut state = init_state_with_accounts(Vec::new());
-    let coins = vec![
+    let transparent_coins = vec![
         make_certificate(
             &state,
             Value::Coin(TransparentCoin {
@@ -893,7 +922,8 @@ fn test_handle_coin_creation_order_invalid_balance() {
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
         account_balance: Amount::from(6),
-        coins,
+        transparent_coins,
+        opaque_coin_public_seeds: Vec::new(),
     }];
     let targets = vec![
         TransparentCoin {
@@ -907,7 +937,11 @@ fn test_handle_coin_creation_order_invalid_balance() {
             seed: 2,
         },
     ];
-    let description = CoinCreationDescription { sources, targets };
+    let description = CoinCreationDescription {
+        sources,
+        targets,
+        coconut_request: None,
+    };
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,

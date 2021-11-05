@@ -4,7 +4,8 @@
 use crate::{
     account::AccountState, base_types::*, committee::Committee, error::FastPayError, messages::*,
 };
-use std::collections::{BTreeMap, HashSet};
+use bls12_381::Scalar;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 #[cfg(test)]
 #[path = "unit_tests/authority_tests.rs"]
@@ -177,10 +178,9 @@ impl Authority for AuthorityState {
         if let Some(authority) = &order.value.limited_to {
             fp_ensure!(self.name == *authority, FastPayError::InvalidRequestOrder);
         }
-        // Verify additional certificates in the order.
-        let mut checked_assets = Vec::new();
+        // Verify assets in the order.
         for asset in &order.assets {
-            checked_assets.push(asset.check(&self.committee)?);
+            asset.check(&self.committee)?;
         }
         // Obtain the sender's account.
         let sender = order.value.request.account_id.clone();
@@ -206,7 +206,7 @@ impl Authority for AuthorityState {
         );
         if let Some(pending) = &account.pending {
             fp_ensure!(
-                matches!(&pending.value, Value::Confirm(r) if r == &request),
+                matches!(&pending.value, Value::Confirm(r) | Value::Lock(r) if r == &request),
                 FastPayError::PreviousRequestMustBeConfirmedFirst {
                     pending: pending.value.clone()
                 }
@@ -215,7 +215,7 @@ impl Authority for AuthorityState {
             return Ok(account.make_account_info(sender));
         }
         // Verify that the request is safe, and return the value of the vote.
-        let value = account.validate_operation(request, &checked_assets)?;
+        let value = account.validate_operation(request, &order.assets)?;
         let vote = Vote::new(value, &self.key_pair);
         account.pending = Some(vote);
         Ok(account.make_account_info(sender))
@@ -246,7 +246,6 @@ impl Authority for AuthorityState {
         let locks = order.locks;
         let description = order.description;
         let hash = HashValue::new(&description);
-
         let sources = description.sources;
         let targets = description.targets;
         fp_ensure!(
@@ -288,16 +287,16 @@ impl Authority for AuthorityState {
                 }
                 _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
             }
-            // Verify source coins.
-            let mut checked_assets = Vec::new();
-            for coin in &source.coins {
-                checked_assets.push(coin.check(&self.committee)?);
+            // Verify transparent source coins.
+            let mut assets = Vec::new();
+            for coin in &source.transparent_coins {
+                coin.check(&self.committee)?;
+                assets.push(Asset::TransparentCoin(coin.clone()));
             }
-            let coin_amount =
-                AccountState::verify_linked_coins(&source.account_id, &checked_assets)?;
+            let coin_amount = AccountState::verify_linked_assets(&source.account_id, &assets)?;
             source_amount.try_add_assign(coin_amount)?;
         }
-        // Verify target amount.
+        // Verify target amount and/or coconut proof.
         let mut target_amount = Amount::zero();
         for coin in &targets {
             fp_ensure!(
@@ -306,12 +305,48 @@ impl Authority for AuthorityState {
             );
             target_amount.try_add_assign(coin.amount)?;
         }
-        fp_ensure!(
-            target_amount <= source_amount,
-            FastPayError::InsufficientFunding {
-                current_balance: source_amount.into()
+        match &description.coconut_request {
+            None => {
+                fp_ensure!(
+                    target_amount <= source_amount,
+                    FastPayError::InsufficientFunding {
+                        current_balance: source_amount.into()
+                    }
+                );
             }
-        );
+            Some(request) => {
+                // Verify input coins. Note: Those must be given listed in the right order
+                // in the request.
+                let mut keys = Vec::new();
+                for source in &sources {
+                    let mut seen = BTreeSet::new();
+                    for public_seed in &source.opaque_coin_public_seeds {
+                        // Seeds must be distinct within the same source.
+                        fp_ensure!(
+                            !seen.contains(public_seed),
+                            FastPayError::InvalidCoinCreationOrder
+                        );
+                        seen.insert(*public_seed);
+                        let key = CoconutKey {
+                            id: source.account_id.clone(),
+                            public_seed: *public_seed,
+                        };
+                        keys.push(key.scalar());
+                    }
+                }
+                // Verify coconut proof.
+                let offset =
+                    Scalar::from(u64::from(source_amount)) - Scalar::from(u64::from(target_amount));
+                let setup = &self
+                    .committee
+                    .coconut_setup
+                    .as_ref()
+                    .ok_or(FastPayError::InvalidCoinCreationOrder)?;
+                request
+                    .verify(&setup.parameters, &setup.verification_key, &keys, &offset)
+                    .map_err(|_| FastPayError::InvalidCoinCreationOrder)?;
+            }
+        }
         // Construct votes and continuations.
         let mut votes = Vec::new();
         let mut continuations = Vec::new();

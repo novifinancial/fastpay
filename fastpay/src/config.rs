@@ -6,7 +6,7 @@ use fastpay_core::{
     base_types::*,
     client::AccountClientState,
     committee::{CoconutSetup, Committee},
-    messages::{Address, Certificate, Operation, Value},
+    messages::{Address, Asset, Certificate, Operation, Value},
 };
 
 use serde::{Deserialize, Serialize};
@@ -108,7 +108,7 @@ pub struct UserAccount {
     pub key_pair: Option<KeyPair>,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
-    pub coins: Vec<Certificate>,
+    pub coins: Vec<Asset>,
     pub sent_certificates: Vec<Certificate>,
     pub received_certificates: Vec<Certificate>,
 }

@@ -113,7 +113,6 @@ impl ClientContext {
     ) -> Result<(), failure::Error> {
         let recipient = match &certificate.value {
             Value::Confirm(request) => request.operation.recipient().unwrap().clone(),
-            Value::Coin(coin) => coin.account_id.clone(),
             _ => failure::bail!("unexpected value in certificate"),
         };
         let committee = self.committee_config.clone().into_committee();
@@ -130,7 +129,32 @@ impl ClientContext {
             account.received_certificates.clone(),
             account.balance,
         );
-        client.receive_from_fastpay(certificate).await?;
+        client.receive_confirmation(certificate).await?;
+        self.update_account_from_state(&client);
+        Ok(())
+    }
+
+    async fn update_recipient_account_with_asset(
+        &mut self,
+        asset: Asset,
+        key_pair: Option<KeyPair>,
+    ) -> Result<(), failure::Error> {
+        let recipient = asset.account_id()?.clone();
+        let committee = self.committee_config.clone().into_committee();
+        let authority_clients = self.make_authority_clients();
+        let account = self.accounts_config.get_or_insert(recipient.clone());
+        let mut client = AccountClientState::new(
+            recipient,
+            account.key_pair.as_ref().map(|kp| kp.copy()).or(key_pair),
+            committee,
+            authority_clients,
+            account.next_sequence_number,
+            account.coins.clone(),
+            account.sent_certificates.clone(),
+            account.received_certificates.clone(),
+            account.balance,
+        );
+        client.receive_asset(asset).await?;
         self.update_account_from_state(&client);
         Ok(())
     }
@@ -623,7 +647,10 @@ fn main() {
 
                 info!("Updating recipients' local accounts");
                 for asset in assets {
-                    context.update_recipient_account(asset, None).await.unwrap();
+                    context
+                        .update_recipient_account_with_asset(asset, None)
+                        .await
+                        .unwrap();
                 }
                 context.save_accounts();
             });

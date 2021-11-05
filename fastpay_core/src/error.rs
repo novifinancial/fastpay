@@ -90,6 +90,8 @@ pub enum FastPayError {
     InvalidNewAccountId(AccountId),
     #[fail(display = "Invalid coin.")]
     InvalidCoin,
+    #[fail(display = "Invalid asset information.")]
+    InvalidAsset,
 
     // Other server-side errors
     #[fail(display = "No certificate for this account and sequence number")]
