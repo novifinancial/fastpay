@@ -45,6 +45,16 @@ Address:
           TYPENAME: AccountId
 Amount:
   NEWTYPESTRUCT: U64
+Asset:
+  ENUM:
+    0:
+      TransparentCoin:
+        NEWTYPE:
+          TYPENAME: Certificate
+    1:
+      OpaqueCoin:
+        NEWTYPE:
+          TYPENAME: OpaqueCoin
 Balance:
   NEWTYPESTRUCT: I128
 Certificate:
@@ -56,6 +66,10 @@ Certificate:
           TUPLE:
             - TYPENAME: PublicKeyBytes
             - TYPENAME: Signature
+Coin:
+  TUPLESTRUCT:
+    - TYPENAME: G1
+    - TYPENAME: G1
 CoinCreationDescription:
   STRUCT:
     - sources:
@@ -64,6 +78,9 @@ CoinCreationDescription:
     - targets:
         SEQ:
           TYPENAME: TransparentCoin
+    - coconut_request:
+        OPTION:
+          TYPENAME: CoinsRequest
 CoinCreationOrder:
   STRUCT:
     - description:
@@ -77,9 +94,38 @@ CoinCreationSource:
         TYPENAME: AccountId
     - account_balance:
         TYPENAME: Amount
-    - coins:
+    - transparent_coins:
         SEQ:
           TYPENAME: Certificate
+    - opaque_coin_public_seeds:
+        SEQ: U128
+CoinsRequest:
+  STRUCT:
+    - sigmas:
+        SEQ:
+          TYPENAME: Coin
+    - kappas:
+        SEQ:
+          TYPENAME: G2
+    - cms:
+        SEQ:
+          TYPENAME: G1
+    - cs:
+        SEQ:
+          TUPLEARRAY:
+            CONTENT:
+              TYPENAME: G1
+            SIZE: 3
+    - input_commitments:
+        SEQ:
+          TYPENAME: G1
+    - output_commitments:
+        SEQ:
+          TYPENAME: G1
+    - proof:
+        TYPENAME: RequestCoinsProof
+    - range_proof:
+        TYPENAME: RangeProof
 ConfirmationOrder:
   STRUCT:
     - certificate:
@@ -157,36 +203,204 @@ FastPayError:
     20:
       InvalidCoin: UNIT
     21:
-      CertificateNotFound: UNIT
+      InvalidAsset: UNIT
     22:
-      InvalidCrossShardRequest: UNIT
+      CertificateNotFound: UNIT
     23:
-      InvalidRequestOrder: UNIT
+      InvalidCrossShardRequest: UNIT
     24:
-      InvalidConfirmationOrder: UNIT
+      InvalidRequestOrder: UNIT
     25:
-      InvalidCoinCreationOrder: UNIT
+      InvalidConfirmationOrder: UNIT
     26:
-      ClientErrorWhileProcessingRequestOrder: UNIT
+      InvalidCoinCreationOrder: UNIT
     27:
-      ClientErrorWhileProcessingCoinCreationOrder: UNIT
+      ClientErrorWhileProcessingRequestOrder: UNIT
     28:
-      ClientErrorWhileRequestingCertificate: UNIT
+      ClientErrorWhileProcessingCoinCreationOrder: UNIT
     29:
-      WrongShard: UNIT
+      ClientErrorWhileRequestingCertificate: UNIT
     30:
-      InvalidDecoding: UNIT
+      WrongShard: UNIT
     31:
-      UnexpectedMessage: UNIT
+      InvalidDecoding: UNIT
     32:
+      UnexpectedMessage: UNIT
+    33:
       ClientIoError:
         STRUCT:
           - error: STR
+G1:
+  TUPLESTRUCT:
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+G2:
+  TUPLESTRUCT:
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
 HashValue:
   NEWTYPESTRUCT:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 64
+InputAttribute:
+  STRUCT:
+    - seed:
+        TYPENAME: Scalar
+    - value:
+        TYPENAME: Scalar
+    - id:
+        TYPENAME: Scalar
+OpaqueCoin:
+  STRUCT:
+    - id:
+        TYPENAME: AccountId
+    - public_seed: U128
+    - private_seed: U128
+    - value:
+        TYPENAME: Amount
+    - coin:
+        TYPENAME: Coin
 Operation:
   ENUM:
     0:
@@ -228,11 +442,42 @@ Operation:
               TYPENAME: Amount
           - user_data:
               TYPENAME: UserData
+OutputAttribute:
+  STRUCT:
+    - seed:
+        TYPENAME: Scalar
+    - seed_blinding_factor:
+        TYPENAME: Scalar
+    - value:
+        TYPENAME: Scalar
+    - value_blinding_factor:
+        TYPENAME: Scalar
+    - id:
+        TYPENAME: Scalar
+    - id_blinding_factor:
+        TYPENAME: Scalar
 PublicKeyBytes:
   NEWTYPESTRUCT:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 32
+Randomness:
+  STRUCT:
+    - rs:
+        SEQ:
+          TYPENAME: Scalar
+    - os:
+        SEQ:
+          TYPENAME: Scalar
+    - input_rs:
+        SEQ:
+          TYPENAME: Scalar
+    - output_rs:
+        SEQ:
+          TYPENAME: Scalar
+RangeProof:
+  NEWTYPESTRUCT:
+    SEQ: U8
 Request:
   STRUCT:
     - account_id:
@@ -241,6 +486,20 @@ Request:
         TYPENAME: Operation
     - sequence_number:
         TYPENAME: SequenceNumber
+RequestCoinsProof:
+  STRUCT:
+    - challenge:
+        TYPENAME: Scalar
+    - input_attributes_responses:
+        SEQ:
+          TYPENAME: InputAttribute
+    - output_attributes_responses:
+        SEQ:
+          TYPENAME: OutputAttribute
+    - randomness_responses:
+        TYPENAME: Randomness
+    - zero_sum_response:
+        TYPENAME: Scalar
 RequestOrder:
   STRUCT:
     - value:
@@ -251,7 +510,7 @@ RequestOrder:
         TYPENAME: Signature
     - assets:
         SEQ:
-          TYPENAME: Certificate
+          TYPENAME: Asset
 RequestValue:
   STRUCT:
     - request:
@@ -259,6 +518,40 @@ RequestValue:
     - limited_to:
         OPTION:
           TYPENAME: PublicKeyBytes
+Scalar:
+  TUPLESTRUCT:
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
+    - U8
 SequenceNumber:
   NEWTYPESTRUCT: U64
 SerializedMessage:
