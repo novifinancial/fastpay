@@ -4,7 +4,7 @@
 #![deny(warnings)]
 
 use fastpay::{config::*, network, transport};
-use fastpay_core::{account::AccountState, authority::*, base_types::*};
+use fastpay_core::{account::AccountState, authority::*, base_types::*, committee::CoconutSetup};
 
 use futures::future::join_all;
 use log::*;
@@ -35,7 +35,13 @@ fn make_shard_server(
     let committee = committee_config.into_committee();
     let num_shards = server_config.authority.num_shards;
 
-    let mut state = AuthorityState::new_shard(committee, server_config.key, shard, num_shards);
+    let mut state = AuthorityState::new_shard(
+        committee,
+        server_config.key,
+        server_config.coconut_key,
+        shard,
+        num_shards,
+    );
 
     // Load initial states
     for (id, owner, balance) in &initial_accounts_config.accounts {
@@ -155,7 +161,11 @@ fn make_server_config(options: AuthorityOptions) -> AuthorityServerConfig {
         base_port: options.port,
         num_shards: options.shards,
     };
-    AuthorityServerConfig { authority, key }
+    AuthorityServerConfig {
+        authority,
+        key,
+        coconut_key: None,
+    }
 }
 
 #[derive(StructOpt)]
@@ -282,11 +292,25 @@ fn main() {
             authorities,
             committee,
         } => {
+            let mut rng = coconut::rand::thread_rng();
+            let parameters = coconut::Parameters::new(
+                3,
+                /* TODO: check party capacity for bulletproofs */ authorities.len(),
+            );
+            let threshold = (2 * authorities.len() + 1) / 3;
+            let (verification_key, key_pairs) =
+                coconut::KeyPair::ttp(&mut rng, &parameters, threshold, authorities.len());
+            let coconut_setup = CoconutSetup {
+                parameters,
+                verification_key,
+            };
             let authorities = authorities
                 .into_iter()
-                .map(|options| {
+                .zip(key_pairs.into_iter())
+                .map(|(options, coconut_key_pair)| {
                     let path = options.server_config_path.clone();
-                    let server = make_server_config(options);
+                    let mut server = make_server_config(options);
+                    server.coconut_key = Some(coconut_key_pair);
                     server
                         .write(&path)
                         .expect("Unable to write server config file");
@@ -295,7 +319,10 @@ fn main() {
                 })
                 .collect();
 
-            let config = CommitteeConfig { authorities };
+            let config = CommitteeConfig {
+                authorities,
+                coconut_setup: Some(coconut_setup),
+            };
             config
                 .write(&committee)
                 .expect("Unable to write committee description");

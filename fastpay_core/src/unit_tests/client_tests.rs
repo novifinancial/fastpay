@@ -80,12 +80,12 @@ fn init_local_authorities(
         voting_rights.insert(key_pair.public(), 1);
         key_pairs.push(key_pair);
     }
-    let committee = Committee::new(voting_rights);
+    let committee = Committee::new(voting_rights, None);
 
     let mut clients = HashMap::new();
     for key_pair in key_pairs {
         let name = key_pair.public();
-        let state = AuthorityState::new(committee.clone(), name, key_pair);
+        let state = AuthorityState::new(committee.clone(), name, key_pair, None);
         clients.insert(name, LocalAuthorityClient::new(state));
     }
     (clients, committee)
@@ -106,12 +106,12 @@ fn init_local_authorities_bad_1(
             key_pairs.push(key_pair);
         }
     }
-    let committee = Committee::new(voting_rights);
+    let committee = Committee::new(voting_rights, None);
 
     let mut clients = HashMap::new();
     for key_pair in key_pairs {
         let name = key_pair.public();
-        let state = AuthorityState::new(committee.clone(), name, key_pair);
+        let state = AuthorityState::new(committee.clone(), name, key_pair, None);
         clients.insert(name, LocalAuthorityClient::new(state));
     }
     (clients, committee)

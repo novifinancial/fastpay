@@ -2,20 +2,32 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::base_types::*;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Committee {
     pub voting_rights: BTreeMap<AuthorityName, usize>,
     pub total_votes: usize,
+    pub coconut_setup: Option<CoconutSetup>,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct CoconutSetup {
+    pub parameters: coconut::Parameters,
+    pub verification_key: coconut::PublicKey,
 }
 
 impl Committee {
-    pub fn new(voting_rights: BTreeMap<AuthorityName, usize>) -> Self {
+    pub fn new(
+        voting_rights: BTreeMap<AuthorityName, usize>,
+        coconut_setup: Option<CoconutSetup>,
+    ) -> Self {
         let total_votes = voting_rights.iter().fold(0, |sum, (_, votes)| sum + *votes);
         Committee {
             voting_rights,
             total_votes,
+            coconut_setup,
         }
     }
 
@@ -24,6 +36,7 @@ impl Committee {
         Committee {
             voting_rights: keys.into_iter().map(|k| (k, 1)).collect(),
             total_votes,
+            coconut_setup: None,
         }
     }
 

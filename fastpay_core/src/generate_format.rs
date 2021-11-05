@@ -1,17 +1,23 @@
 // Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
+use bls12_381::{G1Projective as G1, G2Projective as G2, Scalar};
 use fastpay_core::{error, messages, serialize};
 use serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
 use std::{fs::File, io::Write};
 use structopt::{clap::arg_enum, StructOpt};
 
 fn get_registry() -> Result<Registry> {
-    let mut tracer = Tracer::new(TracerConfig::default());
-    let samples = Samples::new();
+    let mut tracer = Tracer::new(
+        TracerConfig::default()
+            .record_samples_for_newtype_structs(true)
+            .record_samples_for_tuple_structs(true),
+    );
+    let mut samples = Samples::new();
     // 1. Record samples for types with custom deserializers.
-    // tracer.trace_value(&mut samples, ...)?;
-
+    tracer.trace_value(&mut samples, &G1::generator())?;
+    tracer.trace_value(&mut samples, &G2::generator())?;
+    tracer.trace_value(&mut samples, &Scalar::zero())?;
     // 2. Trace the main entry point(s) + every enum separately.
     tracer.trace_type::<messages::Address>(&samples)?;
     tracer.trace_type::<messages::Operation>(&samples)?;

@@ -135,7 +135,7 @@ fn init_contract() -> (FastPaySmartContractState, KeyPair) {
     let name = key_pair.public();
     let mut authorities = BTreeMap::new();
     authorities.insert(name, /* voting right */ 1);
-    let committee = Committee::new(authorities);
+    let committee = Committee::new(authorities, None);
     (FastPaySmartContractState::new(committee), key_pair)
 }
 
