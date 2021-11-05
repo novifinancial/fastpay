@@ -111,6 +111,7 @@ impl ClientServerBenchmark {
             let state = AuthorityState::new_shard(
                 committee.clone(),
                 key_pair_auth.copy(),
+                None,
                 i as u32,
                 self.num_shards,
             );

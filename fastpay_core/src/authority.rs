@@ -18,6 +18,8 @@ pub struct AuthorityState {
     pub committee: Committee,
     /// The signature key pair of the authority.
     pub key_pair: KeyPair,
+    /// The signature key pair of the authority.
+    pub coconut_key_pair: Option<coconut::KeyPair>,
     /// States of FastPay accounts.
     pub accounts: BTreeMap<AccountId, AccountState>,
     /// The latest transaction index of the blockchain that the authority has seen.
@@ -399,11 +401,17 @@ impl Authority for AuthorityState {
 }
 
 impl AuthorityState {
-    pub fn new(committee: Committee, name: AuthorityName, key_pair: KeyPair) -> Self {
+    pub fn new(
+        committee: Committee,
+        name: AuthorityName,
+        key_pair: KeyPair,
+        coconut_key_pair: Option<coconut::KeyPair>,
+    ) -> Self {
         AuthorityState {
             committee,
             name,
             key_pair,
+            coconut_key_pair,
             accounts: BTreeMap::new(),
             last_transaction_index: SequenceNumber::new(),
             shard_id: 0,
@@ -414,6 +422,7 @@ impl AuthorityState {
     pub fn new_shard(
         committee: Committee,
         key_pair: KeyPair,
+        coconut_key_pair: Option<coconut::KeyPair>,
         shard_id: u32,
         number_of_shards: u32,
     ) -> Self {
@@ -421,6 +430,7 @@ impl AuthorityState {
             committee,
             name: key_pair.public(),
             key_pair,
+            coconut_key_pair,
             accounts: BTreeMap::new(),
             last_transaction_index: SequenceNumber::new(),
             shard_id,

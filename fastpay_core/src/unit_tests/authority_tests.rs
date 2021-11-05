@@ -1011,8 +1011,8 @@ fn init_state() -> AuthorityState {
     let name = key_pair.public();
     let mut authorities = BTreeMap::new();
     authorities.insert(name, /* voting right */ 1);
-    let committee = Committee::new(authorities);
-    AuthorityState::new(committee, name, key_pair)
+    let committee = Committee::new(authorities, None);
+    AuthorityState::new(committee, name, key_pair, None)
 }
 
 fn init_state_with_accounts<I: IntoIterator<Item = (AccountId, AccountOwner, Balance)>>(

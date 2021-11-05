@@ -19,12 +19,14 @@ rm -f *.json *.txt
 # Create configuration files for 4 authorities with 4 shards each.
 # * Private server states are stored in `server*.json`.
 # * `committee.json` is the public description of the FastPay committee.
+
+# echo 'null' > committee.json  # no coconut parameters
 # for I in 1 2 3 4
 # do
 #    ./server generate --server server_"$I".json --host 127.0.0.1 --port 9"$I"00 --shards 4 >> committee.json
 # done
 
-# or equivalently:
+# With coconut trusted setup:
 ./server generate-all --authorities \
    server_1.json:udp:127.0.0.1:9100:4 \
    server_2.json:udp:127.0.0.1:9200:4 \
