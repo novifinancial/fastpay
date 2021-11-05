@@ -100,7 +100,7 @@ pub trait AccountClient {
     /// Spend a single account and create new coins.
     fn spend_and_create_coins(
         &mut self,
-        new_coins: Vec<Coin>,
+        new_coins: Vec<TransparentCoin>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error>;
 
     /// Spend the account and transfer the value to a receiver.
@@ -1121,7 +1121,7 @@ where
 
     fn spend_and_create_coins(
         &mut self,
-        new_coins: Vec<Coin>,
+        new_coins: Vec<TransparentCoin>,
     ) -> AsyncResult<Vec<Certificate>, failure::Error> {
         Box::pin(async move {
             let account_balance = self.synchronize_balance().await?;

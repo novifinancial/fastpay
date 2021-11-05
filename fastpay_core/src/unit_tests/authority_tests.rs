@@ -474,7 +474,7 @@ fn test_handle_coin_creation_order_ok() {
     let coins = vec![
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(3),
                 seed: 1,
@@ -482,7 +482,7 @@ fn test_handle_coin_creation_order_ok() {
         ),
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(7),
                 seed: 2,
@@ -495,12 +495,12 @@ fn test_handle_coin_creation_order_ok() {
         coins,
     }];
     let targets = vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(8),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(7),
             seed: 2,
@@ -550,12 +550,12 @@ fn test_handle_coin_creation_order_no_source_coin_ok() {
         coins: Vec::new(),
     }];
     let targets = vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(8),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(7),
             seed: 2,
@@ -605,17 +605,17 @@ fn test_handle_coin_creation_order_empty_target_coin() {
         coins: Vec::new(),
     }];
     let targets = vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(8),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(7),
             seed: 2,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(0),
             seed: 3,
@@ -646,7 +646,7 @@ fn test_handle_coin_creation_order_insufficient_funds() {
     let coins = vec![
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(3),
                 seed: 1,
@@ -654,7 +654,7 @@ fn test_handle_coin_creation_order_insufficient_funds() {
         ),
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(7),
                 seed: 2,
@@ -667,12 +667,12 @@ fn test_handle_coin_creation_order_insufficient_funds() {
         coins,
     }];
     let targets = vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(8),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(8),
             seed: 2,
@@ -703,7 +703,7 @@ fn test_handle_coin_creation_order_replayed_seed() {
     let coins = vec![
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(3),
                 seed: 1,
@@ -711,7 +711,7 @@ fn test_handle_coin_creation_order_replayed_seed() {
         ),
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(7),
                 seed: 1,
@@ -724,12 +724,12 @@ fn test_handle_coin_creation_order_replayed_seed() {
         coins,
     }];
     let targets = vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(7),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(8),
             seed: 2,
@@ -760,7 +760,7 @@ fn test_handle_coin_creation_order_incorrect_source() {
     let coins = vec![
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(3),
                 seed: 1,
@@ -768,7 +768,7 @@ fn test_handle_coin_creation_order_incorrect_source() {
         ),
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(2),
                 amount: Amount::from(7),
                 seed: 2,
@@ -781,12 +781,12 @@ fn test_handle_coin_creation_order_incorrect_source() {
         coins,
     }];
     let targets = vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(7),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(8),
             seed: 2,
@@ -817,7 +817,7 @@ fn test_handle_coin_creation_order_repeated_source() {
     let coins = vec![
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(3),
                 seed: 1,
@@ -825,7 +825,7 @@ fn test_handle_coin_creation_order_repeated_source() {
         ),
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(7),
                 seed: 2,
@@ -839,12 +839,12 @@ fn test_handle_coin_creation_order_repeated_source() {
     };
     let sources = vec![source.clone(), source];
     let targets = vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(7),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(8),
             seed: 2,
@@ -875,7 +875,7 @@ fn test_handle_coin_creation_order_invalid_balance() {
     let coins = vec![
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(3),
                 seed: 1,
@@ -883,7 +883,7 @@ fn test_handle_coin_creation_order_invalid_balance() {
         ),
         make_certificate(
             &state,
-            Value::Coin(Coin {
+            Value::Coin(TransparentCoin {
                 account_id: dbg_account(1),
                 amount: Amount::from(7),
                 seed: 2,
@@ -896,12 +896,12 @@ fn test_handle_coin_creation_order_invalid_balance() {
         coins,
     }];
     let targets = vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(7),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(8),
             seed: 2,
