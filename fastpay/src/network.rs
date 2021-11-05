@@ -7,6 +7,7 @@ use fastpay_core::{authority::*, base_types::*, client::*, error::*, messages::*
 use bytes::Bytes;
 use futures::{channel::mpsc, future::FutureExt, sink::SinkExt, stream::StreamExt};
 use log::*;
+use rand::Rng;
 use std::io;
 use structopt::StructOpt;
 use tokio::time;
@@ -405,15 +406,8 @@ impl AuthorityClient for Client {
         order: CoinCreationOrder,
     ) -> AsyncResult<Vec<Vote>, FastPayError> {
         Box::pin(async move {
-            let shard = AuthorityState::get_shard(
-                self.num_shards,
-                &order
-                    .description
-                    .targets
-                    .first()
-                    .ok_or(FastPayError::InvalidCoinCreationOrder)?
-                    .account_id,
-            ); // TODO: this is arbitrary
+            // TODO: We should not let the client choose the shard.
+            let shard = rand::thread_rng().gen_range(0, self.num_shards);
             self.send_recv_votes_bytes(shard, serialize_coin_creation_order(&order))
                 .await
         })

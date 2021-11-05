@@ -5,6 +5,7 @@ use crate::transport::NetworkProtocol;
 use fastpay_core::{
     base_types::*,
     client::AccountClientState,
+    committee::Committee,
     messages::{Address, Certificate, Operation, Value},
 };
 
@@ -54,15 +55,20 @@ impl AuthorityServerConfig {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct CommitteeConfig {
     pub authorities: Vec<AuthorityConfig>,
 }
 
 impl CommitteeConfig {
+    pub fn into_committee(self) -> Committee {
+        Committee::new(self.voting_rights())
+    }
+
     pub fn read(path: &Path) -> Result<Self, std::io::Error> {
         let file = File::open(path)?;
-        let reader = BufReader::new(file);
-        let stream = serde_json::Deserializer::from_reader(reader).into_iter();
+        let mut reader = BufReader::new(file);
+        let stream = serde_json::Deserializer::from_reader(&mut reader).into_iter();
         Ok(Self {
             authorities: stream.filter_map(Result::ok).collect(),
         })
@@ -78,7 +84,7 @@ impl CommitteeConfig {
         Ok(())
     }
 
-    pub fn voting_rights(&self) -> BTreeMap<AuthorityName, usize> {
+    fn voting_rights(&self) -> BTreeMap<AuthorityName, usize> {
         let mut map = BTreeMap::new();
         for authority in &self.authorities {
             map.insert(authority.name, 1);
