@@ -84,9 +84,8 @@ pub struct RequestOrder {
 }
 
 /// A transparent coin linked a given account.
-// TODO: This could be an enum to allow several types of coins.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Coin {
+pub struct TransparentCoin {
     pub account_id: AccountId,
     pub amount: Amount,
     pub seed: u128,
@@ -98,7 +97,7 @@ pub struct Coin {
 pub enum Value {
     Lock(Request),
     Confirm(Request),
-    Coin(Coin),
+    Coin(TransparentCoin),
 }
 
 /// The balance of an account plus linked coins to be used in a coin creation description.
@@ -117,7 +116,7 @@ pub struct CoinCreationDescription {
     /// The sources to be used for coin creation.
     pub sources: Vec<CoinCreationSource>,
     /// The coins to be created.
-    pub targets: Vec<Coin>,
+    pub targets: Vec<TransparentCoin>,
 }
 
 /// Same as RequestOrder but meant to create coins.

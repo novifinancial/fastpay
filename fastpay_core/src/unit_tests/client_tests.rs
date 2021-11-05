@@ -303,7 +303,7 @@ fn test_transfer_ownership() {
 
 #[test]
 fn test_create_single_coin() {
-    create_and_transfer_coins(vec![Coin {
+    create_and_transfer_coins(vec![TransparentCoin {
         account_id: dbg_account(2),
         amount: Amount::from(3),
         seed: 1,
@@ -314,12 +314,12 @@ fn test_create_single_coin() {
 #[test]
 fn test_create_multiple_coins() {
     create_and_transfer_coins(vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(1),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(2),
             seed: 2,
@@ -331,12 +331,12 @@ fn test_create_multiple_coins() {
 #[test]
 fn test_create_multiple_coins_repeated_seeds() {
     assert!(create_and_transfer_coins(vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(1),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(2),
             seed: 1,
@@ -348,12 +348,12 @@ fn test_create_multiple_coins_repeated_seeds() {
 #[test]
 fn test_create_multiple_coins_wrong_account() {
     assert!(create_and_transfer_coins(vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(1),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(2),
             seed: 2,
@@ -365,12 +365,12 @@ fn test_create_multiple_coins_wrong_account() {
 #[test]
 fn test_create_multiple_coins_balance_exceeded() {
     assert!(create_and_transfer_coins(vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(2),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(2),
             seed: 2,
@@ -379,7 +379,7 @@ fn test_create_multiple_coins_balance_exceeded() {
     .is_err());
 }
 
-fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
+fn create_and_transfer_coins(coins: Vec<TransparentCoin>) -> Result<(), failure::Error> {
     let rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
     let mut client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());

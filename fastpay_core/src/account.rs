@@ -61,7 +61,7 @@ impl AccountState {
         let mut seeds = BTreeSet::new();
         for coin in coins {
             match coin {
-                Value::Coin(Coin {
+                Value::Coin(TransparentCoin {
                     account_id,
                     amount,
                     seed,

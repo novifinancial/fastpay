@@ -56,13 +56,6 @@ Certificate:
           TUPLE:
             - TYPENAME: PublicKeyBytes
             - TYPENAME: Signature
-Coin:
-  STRUCT:
-    - account_id:
-        TYPENAME: AccountId
-    - amount:
-        TYPENAME: Amount
-    - seed: U128
 CoinCreationDescription:
   STRUCT:
     - sources:
@@ -70,7 +63,7 @@ CoinCreationDescription:
           TYPENAME: CoinCreationSource
     - targets:
         SEQ:
-          TYPENAME: Coin
+          TYPENAME: TransparentCoin
 CoinCreationOrder:
   STRUCT:
     - description:
@@ -312,6 +305,13 @@ Signature:
     TUPLEARRAY:
       CONTENT: U8
       SIZE: 64
+TransparentCoin:
+  STRUCT:
+    - account_id:
+        TYPENAME: AccountId
+    - amount:
+        TYPENAME: Amount
+    - seed: U128
 UserData:
   NEWTYPESTRUCT:
     OPTION:
@@ -331,7 +331,7 @@ Value:
     2:
       Coin:
         NEWTYPE:
-          TYPENAME: Coin
+          TYPENAME: TransparentCoin
 Vote:
   STRUCT:
     - value:

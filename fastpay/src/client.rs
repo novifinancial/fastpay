@@ -387,10 +387,10 @@ impl std::str::FromStr for NewCoin {
     }
 }
 
-impl From<NewCoin> for Coin {
+impl From<NewCoin> for TransparentCoin {
     fn from(new: NewCoin) -> Self {
         use rand::Rng;
-        Coin {
+        TransparentCoin {
             account_id: new.account_id,
             amount: new.amount,
             seed: rand::thread_rng().gen(),
