@@ -4,7 +4,7 @@
 use super::base_types::*;
 use std::collections::BTreeMap;
 
-#[derive(Eq, PartialEq, Clone, Hash, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Committee {
     pub voting_rights: BTreeMap<AuthorityName, usize>,
     pub total_votes: usize,
@@ -15,6 +15,14 @@ impl Committee {
         let total_votes = voting_rights.iter().fold(0, |sum, (_, votes)| sum + *votes);
         Committee {
             voting_rights,
+            total_votes,
+        }
+    }
+
+    pub fn make_simple(keys: Vec<AuthorityName>) -> Self {
+        let total_votes = keys.len();
+        Committee {
+            voting_rights: keys.into_iter().map(|k| (k, 1)).collect(),
             total_votes,
         }
     }

@@ -4,11 +4,14 @@
 #![deny(warnings)]
 
 use fastpay::{config::*, network, transport};
-use fastpay_core::{account::AccountState, authority::*, base_types::*, committee::Committee};
+use fastpay_core::{account::AccountState, authority::*, base_types::*};
 
 use futures::future::join_all;
 use log::*;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
@@ -29,11 +32,10 @@ fn make_shard_server(
     let initial_accounts_config = InitialStateConfig::read(initial_accounts_config_path)
         .expect("Fail to read initial account config");
 
-    let committee = Committee::new(committee_config.voting_rights());
+    let committee = committee_config.into_committee();
     let num_shards = server_config.authority.num_shards;
 
-    let mut state =
-        AuthorityState::new_shard(committee, server_config.key.copy(), shard, num_shards);
+    let mut state = AuthorityState::new_shard(committee, server_config.key, shard, num_shards);
 
     // Load initial states
     for (id, owner, balance) in &initial_accounts_config.accounts {
@@ -87,13 +89,73 @@ fn make_servers(
     about = "A byzantine fault tolerant payments sidechain with low-latency finality and high throughput"
 )]
 struct ServerOptions {
-    /// Path to the file containing the server configuration of this FastPay authority (including its secret key)
-    #[structopt(long)]
-    server: PathBuf,
-
     /// Subcommands. Acceptable values are run and generate.
     #[structopt(subcommand)]
     cmd: ServerCommands,
+}
+
+#[derive(StructOpt, Debug, PartialEq, Eq)]
+struct AuthorityOptions {
+    /// Path to the file containing the server configuration of this FastPay authority (including its secret key)
+    #[structopt(long = "server")]
+    server_config_path: PathBuf,
+
+    /// Chooses a network protocol between Udp and Tcp
+    #[structopt(long, default_value = "Udp")]
+    protocol: transport::NetworkProtocol,
+
+    /// Sets the public name of the host
+    #[structopt(long)]
+    host: String,
+
+    /// Sets the base port, i.e. the port on which the server listens for the first shard
+    #[structopt(long)]
+    port: u32,
+
+    /// Number of shards for this authority
+    #[structopt(long)]
+    shards: u32,
+}
+
+impl FromStr for AuthorityOptions {
+    type Err = failure::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        failure::ensure!(
+            parts.len() == 5,
+            "Expecting format `file.json:(udp|tcp):host:port:num-shards`"
+        );
+
+        let server_config_path = Path::new(parts[0]).to_path_buf();
+        let protocol = parts[1]
+            .parse()
+            .map_err(|s| failure::format_err!("{}", s))?;
+        let host = parts[2].to_string();
+        let port = parts[3].parse()?;
+        let shards = parts[4].parse()?;
+
+        Ok(Self {
+            server_config_path,
+            protocol,
+            host,
+            port,
+            shards,
+        })
+    }
+}
+
+fn make_server_config(options: AuthorityOptions) -> AuthorityServerConfig {
+    let key = KeyPair::generate();
+    let name = key.public();
+    let authority = AuthorityConfig {
+        network_protocol: options.protocol,
+        name,
+        host: options.host,
+        base_port: options.port,
+        num_shards: options.shards,
+    };
+    AuthorityServerConfig { authority, key }
 }
 
 #[derive(StructOpt)]
@@ -101,6 +163,10 @@ enum ServerCommands {
     /// Runs a service for each shard of the FastPay authority")
     #[structopt(name = "run")]
     Run {
+        /// Path to the file containing the server configuration of this FastPay authority (including its secret key)
+        #[structopt(long = "server")]
+        server_config_path: PathBuf,
+
         /// Maximum size of datagrams received and sent (bytes)
         #[structopt(long, default_value = transport::DEFAULT_MAX_DATAGRAM_SIZE)]
         buffer_size: usize,
@@ -125,21 +191,20 @@ enum ServerCommands {
     /// Generate a new server configuration and output its public description
     #[structopt(name = "generate")]
     Generate {
-        /// Chooses a network protocol between Udp and Tcp
-        #[structopt(long, default_value = "Udp")]
-        protocol: transport::NetworkProtocol,
+        #[structopt(flatten)]
+        options: AuthorityOptions,
+    },
 
-        /// Sets the public name of the host
+    /// Act as a trusted third-party and generate all server configurations
+    #[structopt(name = "generate-all")]
+    GenerateAll {
+        /// Configuration of each authority in the committee encoded as `(Udp|Tcp):host:port:num-shards`
         #[structopt(long)]
-        host: String,
+        authorities: Vec<AuthorityOptions>,
 
-        /// Sets the base port, i.e. the port on which the server listens for the first shard
+        /// Path where to write the description of the FastPay committee
         #[structopt(long)]
-        port: u32,
-
-        /// Number of shards for this authority
-        #[structopt(long)]
-        shards: u32,
+        committee: PathBuf,
     },
 }
 
@@ -147,10 +212,9 @@ fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let options = ServerOptions::from_args();
 
-    let server_config_path = &options.server;
-
     match options.cmd {
         ServerCommands::Run {
+            server_config_path,
             buffer_size,
             cross_shard_config,
             committee,
@@ -163,7 +227,7 @@ fn main() {
                     info!("Running shard number {}", shard);
                     let server = make_shard_server(
                         "0.0.0.0", // Allow local IP address to be different from the public one.
-                        server_config_path,
+                        &server_config_path,
                         &committee,
                         &initial_accounts,
                         buffer_size,
@@ -176,7 +240,7 @@ fn main() {
                     info!("Running all shards");
                     make_servers(
                         "0.0.0.0", // Allow local IP address to be different from the public one.
-                        server_config_path,
+                        &server_config_path,
                         &committee,
                         &initial_accounts,
                         buffer_size,
@@ -204,27 +268,58 @@ fn main() {
             rt.block_on(join_all(handles));
         }
 
-        ServerCommands::Generate {
-            protocol,
-            host,
-            port,
-            shards,
-        } => {
-            let key = KeyPair::generate();
-            let name = key.public();
-            let authority = AuthorityConfig {
-                network_protocol: protocol,
-                name,
-                host,
-                base_port: port,
-                num_shards: shards,
-            };
-            let server = AuthorityServerConfig { authority, key };
+        ServerCommands::Generate { options } => {
+            let path = options.server_config_path.clone();
+            let server = make_server_config(options);
             server
-                .write(server_config_path)
+                .write(&path)
                 .expect("Unable to write server config file");
             info!("Wrote server config file");
             server.authority.print();
         }
+
+        ServerCommands::GenerateAll {
+            authorities,
+            committee,
+        } => {
+            let authorities = authorities
+                .into_iter()
+                .map(|options| {
+                    let path = options.server_config_path.clone();
+                    let server = make_server_config(options);
+                    server
+                        .write(&path)
+                        .expect("Unable to write server config file");
+                    info!("Wrote server config {}", path.to_str().unwrap());
+                    server.authority
+                })
+                .collect();
+
+            let config = CommitteeConfig { authorities };
+            config
+                .write(&committee)
+                .expect("Unable to write committee description");
+            info!("Wrote committee config {}", committee.to_str().unwrap());
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_authority_options() {
+        let options = AuthorityOptions::from_str("server.json:udp:localhost:9001:2").unwrap();
+        assert_eq!(
+            options,
+            AuthorityOptions {
+                server_config_path: "server.json".into(),
+                protocol: transport::NetworkProtocol::Udp,
+                host: "localhost".into(),
+                port: 9001,
+                shards: 2
+            }
+        );
     }
 }

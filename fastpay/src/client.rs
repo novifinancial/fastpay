@@ -91,7 +91,7 @@ impl ClientContext {
             .accounts_config
             .get(&account_id)
             .expect("Unknown account");
-        let committee = Committee::new(self.committee_config.voting_rights());
+        let committee = self.committee_config.clone().into_committee();
         let authority_clients = self.make_authority_clients();
         AccountClientState::new(
             account_id,
@@ -116,7 +116,7 @@ impl ClientContext {
             Value::Coin(coin) => coin.account_id.clone(),
             _ => failure::bail!("unexpected value in certificate"),
         };
-        let committee = Committee::new(self.committee_config.voting_rights());
+        let committee = self.committee_config.clone().into_committee();
         let authority_clients = self.make_authority_clients();
         let account = self.accounts_config.get_or_insert(recipient.clone());
         let mut client = AccountClientState::new(
@@ -188,10 +188,7 @@ impl ClientContext {
                 AuthorityServerConfig::read(file).expect("Fail to read server config");
             keys.push((server_config.authority.name, server_config.key));
         }
-        let committee = Committee {
-            voting_rights: keys.iter().map(|(k, _)| (*k, 1)).collect(),
-            total_votes: keys.len(),
-        };
+        let committee = Committee::make_simple(keys.iter().map(|(n, _)| *n).collect());
         assert!(
             keys.len() >= committee.quorum_threshold(),
             "Not enough server configs were provided with --server-configs"
@@ -219,7 +216,7 @@ impl ClientContext {
 
     /// Try to aggregate votes into certificates.
     fn make_benchmark_certificates_from_votes(&self, votes: Vec<Vote>) -> Vec<(AccountId, Bytes)> {
-        let committee = Committee::new(self.committee_config.voting_rights());
+        let committee = self.committee_config.clone().into_committee();
         let mut aggregators = HashMap::new();
         let mut certificates = Vec::new();
         let mut done_senders = HashSet::new();
@@ -618,18 +615,15 @@ fn main() {
                 let coins = coins.into_iter().map(|c| c.into()).collect();
                 info!("Starting operation to spend the account and create coins");
                 let time_start = Instant::now();
-                let certificates = client_state.spend_and_create_coins(coins).await.unwrap();
+                let assets = client_state.spend_and_create_coins(coins).await.unwrap();
                 let time_total = time_start.elapsed().as_micros();
                 info!("Operation confirmed after {} us", time_total);
-                info!("{:?}", certificates);
+                info!("{:?}", assets);
                 context.update_account_from_state(&client_state);
 
                 info!("Updating recipients' local accounts");
-                for certificate in certificates {
-                    context
-                        .update_recipient_account(certificate, None)
-                        .await
-                        .unwrap();
+                for asset in assets {
+                    context.update_recipient_account(asset, None).await.unwrap();
                 }
                 context.save_accounts();
             });
