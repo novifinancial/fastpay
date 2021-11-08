@@ -587,7 +587,7 @@ impl Authority for AuthorityState {
                 }
                 // Remove the consensus instance if needed.
                 self.instances.remove(&proposal.instance_id);
-                // Prepate cross-requests.
+                // Prepare cross-shard requests.
                 let continuations = requests
                     .iter()
                     .map(|request| {
