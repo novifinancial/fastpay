@@ -8,7 +8,7 @@ edition = "2018"
 [dependencies]
 thiserror = "1"
 merlin = "2"
-curve25519-dalek = { version = "2" }
+curve25519-dalek = { version = "2", features = ["serde"] }
 clear_on_drop = "0.2.4"
 sha3 = "0.8"
 digest = "0.8"
