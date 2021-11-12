@@ -33,12 +33,16 @@ impl Coin {
         parameters: &Parameters,
         public_key: &PublicKey,
         value: Scalar,
+        seed: Scalar,
         id: Scalar,
     ) -> bool {
-        assert_eq!(public_key.betas.len(), 2);
+        if public_key.betas.len() < 3 {
+            return false;
+        }
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
-        let kappa = public_key.alpha + beta0 * value + beta1 * id;
+        let beta2 = &public_key.betas[2];
+        let kappa = public_key.alpha + beta0 * value + beta1 * seed + beta2 * id;
         Parameters::check_pairing(&self.0, &kappa, &self.1, &parameters.g2)
     }
 
@@ -68,10 +72,10 @@ impl BlindedCoins {
         // The common commitments Cm of the coin values and ids.
         cms: &[G1Projective],
         // The blinded output coin values and ids.
-        cs: &[(G1Projective, G1Projective)],
+        cs: &[(G1Projective, G1Projective, G1Projective)],
     ) -> Self {
         assert!(cms.len() == cs.len());
-        assert!(parameters.max_attributes() >= 2);
+        assert!(parameters.max_attributes() >= 3);
 
         // Compute the base group element h.
         let base_hs = cms.iter().map(|cm| Parameters::hash_to_g1(cm.to_bytes()));
@@ -79,10 +83,11 @@ impl BlindedCoins {
         // Homomorphically computes the blinded credential.
         let y0 = &secret.ys[0];
         let y1 = &secret.ys[1];
+        let y2 = &secret.ys[2];
         let coins = cs
             .iter()
             .zip(base_hs.into_iter())
-            .map(|((v, id), h)| (h, v * y0 + id * y1 + h * secret.x))
+            .map(|((v, seed, id), h)| (h, v * y0 + seed * y1 + id * y2 + h * secret.x))
             .collect();
 
         Self { coins }
@@ -98,6 +103,7 @@ impl BlindedCoins {
     ) -> Vec<Coin> {
         let gamma_0 = &public_key.gammas[0];
         let gamma_1 = &public_key.gammas[1];
+        let gamma_2 = &public_key.gammas[2];
         self.coins
             .iter()
             .zip(output_attributes.iter())
@@ -105,7 +111,8 @@ impl BlindedCoins {
                 Coin(
                     *h,
                     b + gamma_0 * (-attribute.value_blinding_factor)
-                        + gamma_1 * (-attribute.id_blinding_factor),
+                        + gamma_1 * (-attribute.seed_blinding_factor)
+                        + gamma_2 * (-attribute.id_blinding_factor),
                 )
             })
             .collect()

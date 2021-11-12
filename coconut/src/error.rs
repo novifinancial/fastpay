@@ -27,6 +27,9 @@ pub enum CoconutError {
     #[error("Malformed proof parameters")]
     MalformedProof,
 
+    #[error("Too many attributes")]
+    TooManyAttributes,
+
     #[error("Pairing check failed")]
     PairingCheckFailed,
 
