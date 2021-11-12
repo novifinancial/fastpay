@@ -39,6 +39,7 @@ pub fn vartime_multiscalar_mul(scalars: &[Scalar], points: &[&G1Projective]) -> 
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "with_equality", derive(Eq, PartialEq))]
 pub struct InnerProductProof {
     pub(crate) L_vec: Vec<G1Projective>,
     pub(crate) R_vec: Vec<G1Projective>,

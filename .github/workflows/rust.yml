@@ -11,7 +11,6 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -22,10 +21,14 @@ jobs:
         rustup component add rustfmt --toolchain 1.54.0-x86_64-unknown-linux-gnu
         rustup component add clippy --toolchain 1.54.0-x86_64-unknown-linux-gnu
     - name: Build
-      run: cargo build --verbose
-    - name: Run tests
+      run: cargo build --all-features --verbose
+    - name: Run tests (all features)
+      run: cargo test --all-features --verbose
+    - name: Run tests (default features)
       run: cargo test --verbose
+    - name: Clippy (all features)
+      run: cargo clippy --all-features --all-targets
+    - name: Clippy (default features)
+      run: cargo clippy --all-targets
     - name: Rustfmt
       run: cargo fmt -- --check
-    - name: Clippy
-      run: cargo clippy --all-targets

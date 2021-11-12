@@ -52,6 +52,7 @@ impl Coin {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct BlindedCoins {
     /// A vector of blinded coins.

@@ -296,7 +296,7 @@ mod tests {
     fn scalar_exp_vartime_slow(x: &Scalar, n: u64) -> Scalar {
         let mut result = Scalar::one();
         for _ in 0..n {
-            result = result * x;
+            result *= x;
         }
         result
     }
@@ -358,7 +358,7 @@ mod tests {
             unsafe { slice::from_raw_parts(x.as_ptr() as *const u8, mem::size_of_val(x)) }
         }
 
-        assert_eq!(flat_slice(&v.as_slice()), &[0u8; 64][..]);
+        assert_eq!(flat_slice(v.as_slice()), &[0u8; 64][..]);
         assert_eq!(v[0], Scalar::zero());
         assert_eq!(v[1], Scalar::zero());
     }
