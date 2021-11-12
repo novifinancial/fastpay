@@ -23,24 +23,30 @@ pub mod request_tests;
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct InputAttribute {
-    /// The id of the input coin.
-    pub id: Scalar,
+    /// The seed of the input coin.
+    pub seed: Scalar,
     /// The value of the input coin.
     pub value: Scalar,
+    // The id of the input coin.
+    pub id: Scalar,
 }
 
 /// The attributes of the output coins along with their blinding factors.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
 pub struct OutputAttribute {
-    /// The id of the output coin.
-    pub id: Scalar,
-    /// The blinding factor used to hide the id of the output coin.
-    pub id_blinding_factor: Scalar,
+    /// The seed of the output coin.
+    pub seed: Scalar,
+    /// The blinding factor used to hide the seed of the output coin.
+    pub seed_blinding_factor: Scalar,
     /// The value of the output coin.
     pub value: Scalar,
     /// The blinding factor used to hide the value of the output coin.
     pub value_blinding_factor: Scalar,
+    /// The id of the output coin.
+    pub id: Scalar,
+    /// The blinding factor used to hide the id of the output coin.
+    pub id_blinding_factor: Scalar,
 }
 
 /// The randomness used in the coin request.
@@ -75,7 +81,7 @@ pub struct CoinsRequest {
     /// The common commitments Cm of the output coin values and ids.
     pub cms: Vec<G1Projective>,
     /// The blinded output coin values and ids.
-    pub cs: Vec<(G1Projective, G1Projective)>,
+    pub cs: Vec<(G1Projective, G1Projective, G1Projective)>,
     /// Commitments to the input value (used in the ZK proof).
     pub input_commitments: Vec<G1Projective>,
     /// Commitments to the output value (used in the ZK proof).
@@ -103,8 +109,8 @@ impl CoinsRequest {
         output_attributes: &[OutputAttribute],
     ) -> Self {
         assert!(sigmas.len() == input_attributes.len());
-        assert!(parameters.max_attributes() >= 2);
-        assert!(public_key.max_attributes() >= 2);
+        assert!(parameters.max_attributes() >= 3);
+        assert!(public_key.max_attributes() >= 3);
         assert!(parameters.max_attributes() >= output_attributes.len());
 
         // Generate all random values for the commitments.
@@ -127,16 +133,17 @@ impl CoinsRequest {
         let kappas = input_attributes
             .iter()
             .zip(randomness.rs.iter())
-            .map(|(x, r)| public_key.alpha + beta0 * x.value + beta1 * x.id + parameters.g2 * r)
+            .map(|(x, r)| public_key.alpha + beta0 * x.value + beta1 * x.seed + parameters.g2 * r)
             .collect();
 
         // Compute the common commitment Cm for the outputs.
         let h0 = &parameters.hs[0];
         let h1 = &parameters.hs[1];
+        let h2 = &parameters.hs[2];
         let cms: Vec<_> = output_attributes
             .iter()
             .zip(randomness.os.iter())
-            .map(|(x, o)| h0 * x.value + h1 * x.id + parameters.g1 * o)
+            .map(|(x, o)| h0 * x.value + h1 * x.seed + h2 * x.id + parameters.g1 * o)
             .collect();
 
         // Compute the base group element h.
@@ -152,6 +159,7 @@ impl CoinsRequest {
             .map(|(x, h)| {
                 (
                     h * x.value + parameters.g1 * x.value_blinding_factor,
+                    h * x.seed + parameters.g1 * x.seed_blinding_factor,
                     h * x.id + parameters.g1 * x.id_blinding_factor,
                 )
             })
@@ -219,6 +227,8 @@ impl CoinsRequest {
         parameters: &Parameters,
         // The authorities aggregated key.
         public_key: &PublicKey,
+        // The ids of the input coins.
+        input_ids: &[Scalar],
         // The offset between the input and output coins: output = input + offset.
         offset: &Scalar,
     ) -> CoconutResult<()> {
@@ -251,12 +261,19 @@ impl CoinsRequest {
         )?;
 
         // Check the pairing equations.
+        let beta2 = &public_key.betas[2];
         self.kappas
             .iter()
             .zip(self.sigmas.iter())
-            .all(|(kappa, sigma)| {
+            .zip(input_ids.iter())
+            .all(|((kappa, sigma), id)| {
                 !bool::from(sigma.0.is_identity())
-                    && Parameters::check_pairing(&sigma.0, kappa, &sigma.1, &parameters.g2)
+                    && Parameters::check_pairing(
+                        &sigma.0,
+                        &(kappa + beta2 * id),
+                        &sigma.1,
+                        &parameters.g2,
+                    )
             })
             .then(|| ())
             .ok_or(CoconutError::PairingCheckFailed)

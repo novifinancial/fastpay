@@ -11,7 +11,7 @@ use rand::SeedableRng;
 
 // Fixture
 pub fn parameters() -> Parameters {
-    Parameters::new(2, 2)
+    Parameters::new(3, 2)
 }
 
 // Fixture
@@ -42,6 +42,7 @@ pub fn aggregated_key() -> PublicKey {
 pub fn input_attribute1() -> InputAttribute {
     InputAttribute {
         value: Scalar::one(),
+        seed: Scalar::from(101),
         id: Scalar::from(1234),
     }
 }
@@ -49,6 +50,7 @@ pub fn input_attribute1() -> InputAttribute {
 pub fn input_attribute2() -> InputAttribute {
     InputAttribute {
         value: Scalar::from(3),
+        seed: Scalar::from(102),
         id: Scalar::from(5678),
     }
 }
@@ -64,12 +66,16 @@ pub fn output_attributes() -> Vec<OutputAttribute> {
         OutputAttribute {
             value: Scalar::from(2),
             value_blinding_factor: Scalar::from(10),
+            seed: Scalar::from(102),
+            seed_blinding_factor: Scalar::from(103),
             id: Scalar::from(9123),
             id_blinding_factor: Scalar::from(20),
         },
         OutputAttribute {
             value: Scalar::from(3),
             value_blinding_factor: Scalar::from(30),
+            seed: Scalar::from(104),
+            seed_blinding_factor: Scalar::from(105),
             id: Scalar::from(4567),
             id_blinding_factor: Scalar::from(40),
         },
@@ -87,6 +93,7 @@ pub fn coin1() -> Coin {
         &parameters(),
         &keypair().secret,
         &input_attribute1().value,
+        &input_attribute1().seed,
         &input_attribute1().id,
     )
 }
@@ -97,6 +104,7 @@ pub fn coin2() -> Coin {
         &parameters(),
         &keypair().secret,
         &input_attribute2().value,
+        &input_attribute2().seed,
         &input_attribute2().id,
     )
 }

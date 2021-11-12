@@ -42,8 +42,8 @@ impl RequestCoinsProof {
         output_attributes: &[OutputAttribute],
         randomness: &Randomness,
     ) -> Self {
-        assert!(parameters.max_attributes() >= 2);
-        assert!(public_key.max_attributes() >= 2);
+        assert!(parameters.max_attributes() >= 3);
+        assert!(public_key.max_attributes() >= 3);
         assert!(parameters.max_attributes() >= output_attributes.len());
 
         // Compute the witnesses.
@@ -51,7 +51,8 @@ impl RequestCoinsProof {
             .iter()
             .map(|_| InputAttribute {
                 value: Scalar::random(&mut rng),
-                id: Scalar::random(&mut rng),
+                seed: Scalar::random(&mut rng),
+                id: Scalar::zero(), // Never used, the input id is revealed.
             })
             .collect();
         let output_attributes_witnesses: Vec<_> = output_attributes
@@ -59,6 +60,8 @@ impl RequestCoinsProof {
             .map(|_| OutputAttribute {
                 value: Scalar::random(&mut rng),
                 value_blinding_factor: Scalar::random(&mut rng),
+                seed: Scalar::random(&mut rng),
+                seed_blinding_factor: Scalar::random(&mut rng),
                 id: Scalar::random(&mut rng),
                 id_blinding_factor: Scalar::random(&mut rng),
             })
@@ -66,22 +69,23 @@ impl RequestCoinsProof {
         let randomness_witnesses =
             Randomness::new(rng, input_attributes.len(), output_attributes.len());
 
-        // Compute Kappa and Nu from the witnesses.
+        // Compute Kappa from the witnesses.
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
         let kappas: Vec<_> = input_attributes_witnesses
             .iter()
             .zip(randomness_witnesses.rs.iter())
-            .map(|(x, r)| public_key.alpha + beta0 * x.value + beta1 * x.id + parameters.g2 * r)
+            .map(|(x, r)| public_key.alpha + beta0 * x.value + beta1 * x.seed + parameters.g2 * r)
             .collect();
 
         // Compute the commitments to the output attributes from the witnesses.
         let h0 = &parameters.hs[0];
         let h1 = &parameters.hs[1];
+        let h2 = &parameters.hs[2];
         let cms: Vec<_> = output_attributes_witnesses
             .iter()
             .zip(randomness_witnesses.os.iter())
-            .map(|(x, o)| h0 * x.value + h1 * x.id + parameters.g1 * o)
+            .map(|(x, o)| h0 * x.value + h1 * x.seed + h2 * x.id + parameters.g1 * o)
             .collect();
 
         let cs: Vec<_> = output_attributes_witnesses
@@ -90,6 +94,7 @@ impl RequestCoinsProof {
             .map(|(x, h)| {
                 (
                     h * x.value + parameters.g1 * x.value_blinding_factor,
+                    h * x.seed + parameters.g1 * x.seed_blinding_factor,
                     h * x.id + parameters.g1 * x.id_blinding_factor,
                 )
             })
@@ -130,7 +135,8 @@ impl RequestCoinsProof {
             .zip(input_attributes_witnesses.iter())
             .map(|(attribute, witness)| InputAttribute {
                 value: witness.value - challenge * attribute.value,
-                id: witness.id - challenge * attribute.id,
+                seed: witness.seed - challenge * attribute.seed,
+                id: Scalar::zero(), // Never user, the input id is revealed.
             })
             .collect();
 
@@ -141,6 +147,9 @@ impl RequestCoinsProof {
                 value: witness.value - challenge * attribute.value,
                 value_blinding_factor: witness.value_blinding_factor
                     - challenge * attribute.value_blinding_factor,
+                seed: witness.seed - challenge * attribute.seed,
+                seed_blinding_factor: witness.seed_blinding_factor
+                    - challenge * attribute.seed_blinding_factor,
                 id: witness.id - challenge * attribute.id,
                 id_blinding_factor: witness.id_blinding_factor
                     - challenge * attribute.id_blinding_factor,
@@ -194,7 +203,7 @@ impl RequestCoinsProof {
         sigmas: &[Coin],
         kappas: &[G2Projective],
         cms: &[G1Projective],
-        cs: &[(G1Projective, G1Projective)],
+        cs: &[(G1Projective, G1Projective, G1Projective)],
         input_commitments: &[G1Projective],
         output_commitments: &[G1Projective],
         offset: &Scalar,
@@ -210,12 +219,12 @@ impl RequestCoinsProof {
             CoconutError::MalformedProof
         );
         ensure!(
-            parameters.max_attributes() >= 2,
-            CoconutError::MalformedProof
+            parameters.max_attributes() >= 3,
+            CoconutError::TooManyAttributes
         );
         ensure!(
-            public_key.max_attributes() >= 2,
-            CoconutError::MalformedProof
+            public_key.max_attributes() >= 3,
+            CoconutError::TooManyAttributes
         );
         ensure!(
             parameters.max_attributes() >= output_commitments.len(),
@@ -233,7 +242,7 @@ impl RequestCoinsProof {
                 kappa * self.challenge
                     + public_key.alpha * (Scalar::one() - self.challenge)
                     + beta0 * attribute.value
-                    + beta1 * attribute.id
+                    + beta1 * attribute.seed
                     + parameters.g2 * r
             })
             .collect();
@@ -247,12 +256,17 @@ impl RequestCoinsProof {
         // Compute the commitments witnesses.
         let h0 = &parameters.hs[0];
         let h1 = &parameters.hs[1];
+        let h2 = &parameters.hs[2];
         let cms_reconstruct: Vec<_> = cms
             .iter()
             .zip(self.output_attributes_responses.iter())
             .zip(self.randomness_responses.os.iter())
             .map(|((cm, attribute), o)| {
-                cm * self.challenge + h0 * attribute.value + h1 * attribute.id + parameters.g1 * o
+                cm * self.challenge
+                    + h0 * attribute.value
+                    + h1 * attribute.seed
+                    + h2 * attribute.id
+                    + parameters.g1 * o
             })
             .collect();
 
@@ -260,12 +274,15 @@ impl RequestCoinsProof {
             .iter()
             .zip(self.output_attributes_responses.iter())
             .zip(base_hs.iter())
-            .map(|(((part1, part2), attribute), h)| {
+            .map(|(((part1, part2, part3), attribute), h)| {
                 (
                     part1 * self.challenge
                         + h * attribute.value
                         + parameters.g1 * attribute.value_blinding_factor,
                     part2 * self.challenge
+                        + h * attribute.seed
+                        + parameters.g1 * attribute.seed_blinding_factor,
+                    part3 * self.challenge
                         + h * attribute.id
                         + parameters.g1 * attribute.id_blinding_factor,
                 )
@@ -320,12 +337,12 @@ impl RequestCoinsProof {
         base_hs: &[G1Projective],
         kappas: &[G2Projective],
         cms: &[G1Projective],
-        cs: &[(G1Projective, G1Projective)],
+        cs: &[(G1Projective, G1Projective, G1Projective)],
         input_commitments: &[G1Projective],
         output_commitments: &[G1Projective],
         zero_sum: &G1Projective,
     ) -> Scalar {
-        assert!(public_key.max_attributes() >= 2);
+        assert!(public_key.max_attributes() >= 3);
 
         let mut hasher = Sha512::new();
         hasher.update(b"RequestCoinsProof");
@@ -341,9 +358,10 @@ impl RequestCoinsProof {
         for cm in cms {
             hasher.update(cm.to_bytes());
         }
-        for (part1, part2) in cs {
+        for (part1, part2, part3) in cs {
             hasher.update(part1.to_bytes());
             hasher.update(part2.to_bytes());
+            hasher.update(part3.to_bytes());
         }
         for c in input_commitments {
             hasher.update(c.to_bytes());
