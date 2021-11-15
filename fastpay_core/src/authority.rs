@@ -175,7 +175,7 @@ impl AuthorityState {
         {
             fp_ensure!(self.in_shard(new_id), FastPayError::WrongShard);
             assert!(!self.instances.contains_key(new_id)); // guaranteed under BFT assumptions.
-            let instance = ConsensusState::new(*functionality, accounts.clone());
+            let instance = ConsensusState::new(*functionality, accounts.clone(), certificate);
             self.instances.insert(new_id.clone(), instance);
         }
         // This concludes the confirmation of `certificate`.
@@ -501,7 +501,11 @@ impl Authority for AuthorityState {
                         FastPayError::UnsafeConsensusProposal
                     );
                 }
-                if let Some(locked) = &instance.locked {
+                if let Some(locked) = instance
+                    .locked
+                    .as_ref()
+                    .and_then(|cert| cert.value.pre_commit_proposal())
+                {
                     fp_ensure!(
                         locked.round < proposal.round && locked.decision == proposal.decision,
                         FastPayError::UnsafeConsensusProposal
@@ -516,7 +520,7 @@ impl Authority for AuthorityState {
             }
             ConsensusOrder::HandlePreCommit { certificate } => {
                 certificate.check(&self.committee)?;
-                let (proposal, requests) = match certificate.value {
+                let (proposal, requests) = match certificate.value.clone() {
                     Value::PreCommit { proposal, requests } => (proposal, requests),
                     _ => fp_bail!(FastPayError::InvalidConsensusOrder),
                 };
@@ -533,14 +537,18 @@ impl Authority for AuthorityState {
                         FastPayError::UnsafeConsensusPreCommit
                     );
                 }
-                if let Some(locked) = &instance.locked {
+                if let Some(locked) = instance
+                    .locked
+                    .as_ref()
+                    .and_then(|cert| cert.value.pre_commit_proposal())
+                {
                     fp_ensure!(
                         locked.round <= proposal.round,
                         FastPayError::UnsafeConsensusPreCommit
                     );
                 }
                 // Update locked decision.
-                instance.locked = Some(proposal.clone());
+                instance.locked = Some(certificate);
                 // Vote in favor of commit.
                 let value = Value::Commit { proposal, requests };
                 let vote = Vote::new(value, &self.key_pair);

@@ -20,12 +20,18 @@ pub struct ConsensusState {
     pub participants: BTreeSet<AccountOwner>,
     /// Pending proposal.
     pub proposed: Option<ConsensusProposal>,
-    /// Pending locked (i.e. pre-committed) proposal.
-    pub locked: Option<ConsensusProposal>,
+    /// Locked proposal and its "pre-commit" certificate.
+    pub locked: Option<Certificate>,
+    /// The certificate that created this instance.
+    pub received: Certificate,
 }
 
 impl ConsensusState {
-    pub fn new(functionality: Functionality, expected: Vec<(AccountId, SequenceNumber)>) -> Self {
+    pub fn new(
+        functionality: Functionality,
+        expected: Vec<(AccountId, SequenceNumber)>,
+        received: Certificate,
+    ) -> Self {
         let accounts: Vec<_> = expected.iter().map(|(id, _)| id.clone()).collect();
         let sequence_numbers: BTreeMap<_, _> = expected.into_iter().collect();
         assert_eq!(accounts.len(), sequence_numbers.len());
@@ -37,6 +43,7 @@ impl ConsensusState {
             participants: BTreeSet::new(),
             proposed: None,
             locked: None,
+            received,
         }
     }
 

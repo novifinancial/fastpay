@@ -510,6 +510,13 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn pre_commit_proposal(&self) -> Option<&ConsensusProposal> {
+        match self {
+            Value::PreCommit { proposal, .. } => Some(proposal),
+            _ => None,
+        }
+    }
 }
 
 /// Non-testing code should make the pattern matching explicit so that
