@@ -93,6 +93,16 @@ impl BlindedCoins {
         Self { coins }
     }
 
+    /// Number of blinded coins.
+    pub fn len(&self) -> usize {
+        self.coins.len()
+    }
+
+    /// Whether there is no coin. (Needed for https://rust-lang.github.io/rust-clippy/master/index.html#len_without_is_empty)
+    pub fn is_empty(&self) -> bool {
+        self.coins.is_empty()
+    }
+
     /// Unblinds the coins.
     pub fn unblind(
         &self,

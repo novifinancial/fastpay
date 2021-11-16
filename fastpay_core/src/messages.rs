@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{base_types::*, committee::Committee, error::FastPayError};
+use ff::Field;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 #[cfg(test)]
 #[path = "unit_tests/messages_tests.rs"]
 mod messages_tests;
-
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 /// A message sent from the smart contract on the primary chain.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -97,7 +97,7 @@ pub struct OpaqueCoin {
     /// Random seed to make sure that the value stay confidential after spending the coin.
     pub private_seed: u128,
     /// Value of the coin.
-    pub value: Amount,
+    pub amount: Amount,
 }
 
 /// An authenticated request plus additional certified assets.
@@ -259,7 +259,7 @@ impl OpaqueCoin {
             id: self.id.clone(),
             public_seed: self.public_seed,
         };
-        let value = u64::from(self.value);
+        let value = u64::from(self.amount);
         let seed = bls12_381::Scalar::from_raw([
             self.private_seed as u64,
             (self.private_seed >> 64) as u64,
@@ -270,6 +270,22 @@ impl OpaqueCoin {
             key: key.scalar(),
             value: value.into(),
             seed,
+        }
+    }
+
+    pub fn make_output_attribute(&self) -> coconut::OutputAttribute {
+        let coconut::InputAttribute { key, value, seed } = self.make_input_attribute();
+        let mut rng = coconut::rand::thread_rng();
+        let key_blinding_factor = bls12_381::Scalar::random(&mut rng);
+        let value_blinding_factor = bls12_381::Scalar::random(&mut rng);
+        let seed_blinding_factor = bls12_381::Scalar::random(&mut rng);
+        coconut::OutputAttribute {
+            key,
+            key_blinding_factor,
+            value,
+            value_blinding_factor,
+            seed,
+            seed_blinding_factor,
         }
     }
 }
@@ -295,9 +311,9 @@ impl Asset {
                 _ => Err(FastPayError::InvalidAsset),
             },
             Asset::OpaqueCoin {
-                value: OpaqueCoin { value, .. },
+                value: OpaqueCoin { amount, .. },
                 ..
-            } => Ok(*value),
+            } => Ok(*amount),
         }
     }
 

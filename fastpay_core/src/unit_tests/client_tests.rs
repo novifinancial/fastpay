@@ -406,7 +406,7 @@ fn create_and_transfer_coins(coins: Vec<TransparentCoin>) -> Result<(), failure:
         vec![0; 4],
     );
     // spend account #1 and create coins
-    let assets = rt.block_on(client1.spend_and_create_coins(coins.clone()))?;
+    let assets = rt.block_on(client1.spend_and_create_coins(coins.clone(), Vec::new()))?;
     assert!(client1.lock_certificate.is_some());
     assert_eq!(assets.len(), coins.len());
     // receive coins on account #2

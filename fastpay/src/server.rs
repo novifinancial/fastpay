@@ -5,10 +5,10 @@
 
 use fastpay::{config::*, network, transport};
 use fastpay_core::{account::AccountState, authority::*, base_types::*, committee::CoconutSetup};
-
 use futures::future::join_all;
 use log::*;
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -300,27 +300,28 @@ fn main() {
             let threshold = (2 * authorities.len() + 1) / 3;
             let (verification_key, key_pairs) =
                 coconut::KeyPair::ttp(&mut rng, &parameters, threshold, authorities.len());
+            let mut coconut_authorities = BTreeMap::new();
+            let mut config_authorities = Vec::new();
+            for (options, coconut_key_pair) in authorities.into_iter().zip(key_pairs.into_iter()) {
+                let path = options.server_config_path.clone();
+                let mut server = make_server_config(options);
+                let index = coconut_key_pair.index;
+                let public_key = coconut_key_pair.public.clone();
+                server.coconut_key = Some(coconut_key_pair);
+                server
+                    .write(&path)
+                    .expect("Unable to write server config file");
+                info!("Wrote server config {}", path.to_str().unwrap());
+                coconut_authorities.insert(server.authority.name, (index, public_key));
+                config_authorities.push(server.authority);
+            }
             let coconut_setup = CoconutSetup {
                 parameters,
                 verification_key,
+                authorities: coconut_authorities,
             };
-            let authorities = authorities
-                .into_iter()
-                .zip(key_pairs.into_iter())
-                .map(|(options, coconut_key_pair)| {
-                    let path = options.server_config_path.clone();
-                    let mut server = make_server_config(options);
-                    server.coconut_key = Some(coconut_key_pair);
-                    server
-                        .write(&path)
-                        .expect("Unable to write server config file");
-                    info!("Wrote server config {}", path.to_str().unwrap());
-                    server.authority
-                })
-                .collect();
-
             let config = CommitteeConfig {
-                authorities,
+                authorities: config_authorities,
                 coconut_setup: Some(coconut_setup),
             };
             config
