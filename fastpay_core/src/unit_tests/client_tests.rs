@@ -412,7 +412,7 @@ fn create_and_transfer_coins(coins: Vec<TransparentCoin>) -> Result<(), failure:
     // receive coins on account #2
     for (i, asset) in assets.into_iter().enumerate() {
         assert!(
-            matches!(&asset, Asset::TransparentCoin(certificate) if certificate.value == Value::Coin(coins[i].clone()))
+            matches!(&asset, Asset::TransparentCoin { certificate } if certificate.value == Value::Coin(coins[i].clone()))
         );
         rt.block_on(client2.receive_asset(asset))?;
     }

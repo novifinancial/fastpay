@@ -877,7 +877,7 @@ where
         for vector in vote_vectors {
             for (i, vote) in vector.into_iter().enumerate() {
                 if let Some(certificate) = builders[i].append(vote.authority, vote.signature)? {
-                    coins.push(Asset::TransparentCoin(certificate));
+                    coins.push(Asset::TransparentCoin { certificate });
                 }
             }
         }
@@ -1149,7 +1149,7 @@ where
                 .coins
                 .iter()
                 .filter_map(|asset| match asset {
-                    Asset::TransparentCoin(certificate) => Some(certificate.clone()),
+                    Asset::TransparentCoin { certificate } => Some(certificate.clone()),
                     _ => None,
                 })
                 .collect();
@@ -1157,9 +1157,13 @@ where
                 .coins
                 .iter()
                 .filter_map(|asset| match asset {
-                    Asset::OpaqueCoin(OpaqueCoin {
-                        id, public_seed, ..
-                    }) => {
+                    Asset::OpaqueCoin {
+                        value:
+                            OpaqueCoin {
+                                id, public_seed, ..
+                            },
+                        ..
+                    } => {
                         assert_eq!(id, &self.account_id);
                         Some(*public_seed)
                     }
@@ -1170,7 +1174,7 @@ where
                 .coins
                 .iter()
                 .filter_map(|asset| match asset {
-                    Asset::OpaqueCoin(OpaqueCoin { coin, .. }) => Some(coin.clone()),
+                    Asset::OpaqueCoin { credential, .. } => Some(credential.clone()),
                     _ => None,
                 })
                 .collect::<Vec<_>>();
@@ -1192,7 +1196,7 @@ where
                     .coins
                     .iter()
                     .filter_map(|asset| match asset {
-                        Asset::OpaqueCoin(coin) => Some(coin.make_input_attribute()),
+                        Asset::OpaqueCoin { value, .. } => Some(value.make_input_attribute()),
                         _ => None,
                     })
                     .collect::<Vec<_>>();
@@ -1221,8 +1225,11 @@ where
         let mut amount = Amount::from(0);
         for coin in &self.coins {
             let v = match coin {
-                Asset::OpaqueCoin(OpaqueCoin { value, .. }) => *value,
-                Asset::TransparentCoin(certificate) => certificate
+                Asset::OpaqueCoin {
+                    value: OpaqueCoin { value, .. },
+                    ..
+                } => *value,
+                Asset::TransparentCoin { certificate } => certificate
                     .value
                     .coin_amount()
                     .ok_or_else(|| failure::format_err!("Client state contains invalid coins"))?,
