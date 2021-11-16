@@ -639,7 +639,11 @@ fn main() {
                 let coins = coins.into_iter().map(|c| c.into()).collect();
                 info!("Starting operation to spend the account and create coins");
                 let time_start = Instant::now();
-                let assets = client_state.spend_and_create_coins(coins).await.unwrap();
+                // TODO: opaque coins
+                let assets = client_state
+                    .spend_and_create_coins(coins, Vec::new())
+                    .await
+                    .unwrap();
                 let time_total = time_start.elapsed().as_micros();
                 info!("Operation confirmed after {} us", time_total);
                 info!("{:?}", assets);

@@ -16,6 +16,7 @@ pub struct Committee {
 pub struct CoconutSetup {
     pub parameters: coconut::Parameters,
     pub verification_key: coconut::PublicKey,
+    pub authorities: BTreeMap<AuthorityName, (/* lagrange index */ u64, coconut::PublicKey)>,
 }
 
 impl Committee {

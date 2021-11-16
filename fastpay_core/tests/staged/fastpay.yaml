@@ -417,7 +417,7 @@ OpaqueCoin:
         TYPENAME: AccountId
     - public_seed: U128
     - private_seed: U128
-    - value:
+    - amount:
         TYPENAME: Amount
 Operation:
   ENUM:

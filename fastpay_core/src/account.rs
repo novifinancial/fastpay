@@ -81,7 +81,7 @@ impl AccountState {
                     value:
                         OpaqueCoin {
                             id,
-                            value,
+                            amount,
                             public_seed,
                             ..
                         },
@@ -90,7 +90,7 @@ impl AccountState {
                     // Seeds must be distinct.
                     fp_ensure!(!z_seeds.contains(public_seed), FastPayError::InvalidCoin);
                     z_seeds.insert(*public_seed);
-                    (id, *value)
+                    (id, *amount)
                 }
             };
             // Verify linked account.
