@@ -160,6 +160,12 @@ ConsensusDecision:
       Confirm: UNIT
 ConsensusInfoResponse:
   STRUCT:
+    - locked_accounts:
+        MAP:
+          KEY:
+            TYPENAME: AccountId
+          VALUE:
+            TYPENAME: PublicKeyBytes
     - proposed:
         OPTION:
           TYPENAME: ConsensusProposal

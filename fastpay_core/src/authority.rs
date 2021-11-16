@@ -464,6 +464,7 @@ impl Authority for AuthorityState {
                     .get_mut(&instance_id)
                     .ok_or(FastPayError::UnknownConsensusInstance(instance_id))?;
                 let info = ConsensusInfoResponse {
+                    locked_accounts: instance.locked_accounts.clone(),
                     proposed: instance.proposed.clone(),
                     locked: instance.locked.clone(),
                     received: instance.received.clone(),

@@ -4,7 +4,7 @@
 use super::{base_types::*, committee::Committee, error::FastPayError};
 use ff::Field;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 #[cfg(test)]
 #[path = "unit_tests/messages_tests.rs"]
@@ -251,6 +251,7 @@ pub enum ConsensusOrder {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct ConsensusInfoResponse {
+    pub locked_accounts: BTreeMap<AccountId, AccountOwner>,
     pub proposed: Option<ConsensusProposal>,
     pub locked: Option<Certificate>,
     pub received: Certificate,
