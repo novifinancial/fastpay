@@ -241,6 +241,19 @@ pub enum ConsensusOrder {
         certificate: Certificate,
         locks: Vec<Certificate>,
     },
+    GetStatus {
+        instance_id: AccountId,
+    },
+}
+
+/// Current status of a consensus instance.
+/// TODO: Information on available rounds.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct ConsensusInfoResponse {
+    pub proposed: Option<ConsensusProposal>,
+    pub locked: Option<Certificate>,
+    pub received: Certificate,
 }
 
 /// A vote on a statement from an authority.

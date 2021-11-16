@@ -7,7 +7,6 @@ use crate::{
 };
 use bls12_381::Scalar;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use either::Either;
 
 #[cfg(test)]
 #[path = "unit_tests/authority_tests.rs"]
@@ -44,6 +43,13 @@ pub enum CrossShardContinuation {
     },
 }
 
+/// The response to a consensus order.
+pub enum ConsensusResponse {
+    Info(ConsensusInfoResponse),
+    Vote(Vote),
+    Continuations(Vec<CrossShardContinuation>),
+}
+
 /// Interface provided by each (shard of an) authority.
 /// All commands return either the current account info or an error.
 /// Repeating commands produces no changes and returns no error.
@@ -71,7 +77,7 @@ pub trait Authority {
     fn handle_consensus_order(
         &mut self,
         order: ConsensusOrder,
-    ) -> Result<Either<Vote, Vec<CrossShardContinuation>>, FastPayError>;
+    ) -> Result<ConsensusResponse, FastPayError>;
 
     /// Force synchronization to finalize requests from Primary to FastPay.
     fn handle_primary_synchronization_order(
@@ -450,8 +456,20 @@ impl Authority for AuthorityState {
     fn handle_consensus_order(
         &mut self,
         order: ConsensusOrder,
-    ) -> Result<Either<Vote, Vec<CrossShardContinuation>>, FastPayError> {
+    ) -> Result<ConsensusResponse, FastPayError> {
         match order {
+            ConsensusOrder::GetStatus { instance_id } => {
+                let instance = self
+                    .instances
+                    .get_mut(&instance_id)
+                    .ok_or(FastPayError::UnknownConsensusInstance(instance_id))?;
+                let info = ConsensusInfoResponse {
+                    proposed: instance.proposed.clone(),
+                    locked: instance.locked.clone(),
+                    received: instance.received.clone(),
+                };
+                Ok(ConsensusResponse::Info(info))
+            }
             ConsensusOrder::Propose {
                 proposal,
                 owner,
@@ -516,7 +534,7 @@ impl Authority for AuthorityState {
                 // Vote in favor of pre-commit (aka lock).
                 let value = Value::PreCommit { proposal, requests };
                 let vote = Vote::new(value, &self.key_pair);
-                Ok(Either::Left(vote))
+                Ok(ConsensusResponse::Vote(vote))
             }
             ConsensusOrder::HandlePreCommit { certificate } => {
                 certificate.check(&self.committee)?;
@@ -552,7 +570,7 @@ impl Authority for AuthorityState {
                 // Vote in favor of commit.
                 let value = Value::Commit { proposal, requests };
                 let vote = Vote::new(value, &self.key_pair);
-                Ok(Either::Left(vote))
+                Ok(ConsensusResponse::Vote(vote))
             }
             ConsensusOrder::HandleCommit { certificate, locks } => {
                 certificate.check(&self.committee)?;
@@ -609,7 +627,7 @@ impl Authority for AuthorityState {
                         }
                     })
                     .collect();
-                Ok(Either::Right(continuations))
+                Ok(ConsensusResponse::Continuations(continuations))
             }
         }
     }

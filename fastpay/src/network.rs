@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::transport::*;
-use either::Either;
 use fastpay_core::{authority::*, base_types::*, client::*, error::*, messages::*, serialize::*};
 
 #[cfg(feature = "benchmark")]
@@ -192,14 +191,14 @@ impl MessageHandler for RunningServerState {
                             .server
                             .state
                             .handle_request_order(*message)
-                            .map(|info| Some(serialize_info_response(&info))),
+                            .map(|info| Some(serialize_account_info_response(&info))),
                         SerializedMessage::ConfirmationOrder(message) => {
                             match self.server.state.handle_confirmation_order(*message) {
                                 Ok((info, continuation)) => {
                                     // Cross-shard request
                                     self.handle_continuation(continuation).await;
                                     // Response
-                                    Ok(Some(serialize_info_response(&info)))
+                                    Ok(Some(serialize_account_info_response(&info)))
                                 }
                                 Err(error) => Err(error),
                             }
@@ -219,11 +218,15 @@ impl MessageHandler for RunningServerState {
                         }
                         SerializedMessage::ConsensusOrder(message) => {
                             match self.server.state.handle_consensus_order(*message) {
-                                Ok(Either::Left(vote)) => {
+                                Ok(ConsensusResponse::Info(info)) => {
+                                    // Response
+                                    Ok(Some(serialize_consensus_info_response(&info)))
+                                }
+                                Ok(ConsensusResponse::Vote(vote)) => {
                                     // Response
                                     Ok(Some(serialize_vote(&vote)))
                                 }
-                                Ok(Either::Right(continuations)) => {
+                                Ok(ConsensusResponse::Continuations(continuations)) => {
                                     // Cross-shard requests
                                     for continuation in continuations {
                                         self.handle_continuation(continuation).await;
@@ -234,11 +237,11 @@ impl MessageHandler for RunningServerState {
                                 Err(error) => Err(error),
                             }
                         }
-                        SerializedMessage::InfoQuery(message) => self
+                        SerializedMessage::AccountInfoQuery(message) => self
                             .server
                             .state
                             .handle_account_info_query(*message)
-                            .map(|info| Some(serialize_info_response(&info))),
+                            .map(|info| Some(serialize_account_info_response(&info))),
                         SerializedMessage::CrossShardRequest(request) => {
                             match self.server.state.handle_cross_shard_request(*request) {
                                 Ok(()) => (),
@@ -252,7 +255,8 @@ impl MessageHandler for RunningServerState {
                         SerializedMessage::Vote(_)
                         | SerializedMessage::CoinCreationResponse(_)
                         | SerializedMessage::Error(_)
-                        | SerializedMessage::InfoResponse(_) => {
+                        | SerializedMessage::AccountInfoResponse(_)
+                        | SerializedMessage::ConsensusInfoResponse(_) => {
                             Err(FastPayError::UnexpectedMessage)
                         }
                     }
@@ -367,7 +371,7 @@ impl Client {
             Ok(response) => {
                 // Parse reply
                 match deserialize_message(&response[..]) {
-                    Ok(SerializedMessage::InfoResponse(resp)) => Ok(*resp),
+                    Ok(SerializedMessage::AccountInfoResponse(resp)) => Ok(*resp),
                     Ok(SerializedMessage::Error(error)) => Err(*error),
                     Err(_) => Err(FastPayError::InvalidDecoding),
                     _ => Err(FastPayError::UnexpectedMessage),
@@ -450,7 +454,7 @@ impl AuthorityClient for Client {
     ) -> AsyncResult<AccountInfoResponse, FastPayError> {
         Box::pin(async move {
             let shard = AuthorityState::get_shard(self.num_shards, &request.account_id);
-            self.send_recv_info_bytes(shard, serialize_info_query(&request))
+            self.send_recv_info_bytes(shard, serialize_account_info_query(&request))
                 .await
         })
     }

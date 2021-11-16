@@ -158,6 +158,16 @@ ConsensusDecision:
       Abort: UNIT
     1:
       Confirm: UNIT
+ConsensusInfoResponse:
+  STRUCT:
+    - proposed:
+        OPTION:
+          TYPENAME: ConsensusProposal
+    - locked:
+        OPTION:
+          TYPENAME: Certificate
+    - received:
+        TYPENAME: Certificate
 ConsensusOrder:
   ENUM:
     0:
@@ -185,6 +195,11 @@ ConsensusOrder:
           - locks:
               SEQ:
                 TYPENAME: Certificate
+    3:
+      GetStatus:
+        STRUCT:
+          - instance_id:
+              TYPENAME: AccountId
 ConsensusProposal:
   STRUCT:
     - instance_id:
@@ -683,7 +698,7 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: ConsensusOrder
     4:
-      InfoQuery:
+      AccountInfoQuery:
         NEWTYPE:
           TYPENAME: AccountInfoQuery
     5:
@@ -691,7 +706,7 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: Vote
     6:
-      InfoResponse:
+      AccountInfoResponse:
         NEWTYPE:
           TYPENAME: AccountInfoResponse
     7:
@@ -699,10 +714,14 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: CoinCreationResponse
     8:
+      ConsensusInfoResponse:
+        NEWTYPE:
+          TYPENAME: ConsensusInfoResponse
+    9:
       Error:
         NEWTYPE:
           TYPENAME: FastPayError
-    9:
+    10:
       CrossShardRequest:
         NEWTYPE:
           TYPENAME: CrossShardRequest
