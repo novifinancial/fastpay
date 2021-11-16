@@ -49,14 +49,26 @@ Asset:
   ENUM:
     0:
       TransparentCoin:
-        NEWTYPE:
-          TYPENAME: Certificate
+        STRUCT:
+          - certificate:
+              TYPENAME: Certificate
     1:
       OpaqueCoin:
-        NEWTYPE:
-          TYPENAME: OpaqueCoin
+        STRUCT:
+          - value:
+              TYPENAME: OpaqueCoin
+          - credential:
+              TYPENAME: Coin
 Balance:
   NEWTYPESTRUCT: I128
+BlindedCoins:
+  STRUCT:
+    - coins:
+        SEQ:
+          TUPLEARRAY:
+            CONTENT:
+              TYPENAME: G1
+            SIZE: 2
 Certificate:
   STRUCT:
     - value:
@@ -88,6 +100,14 @@ CoinCreationOrder:
     - locks:
         SEQ:
           TYPENAME: Certificate
+CoinCreationResponse:
+  STRUCT:
+    - votes:
+        SEQ:
+          TYPENAME: Vote
+    - blinded_coins:
+        OPTION:
+          TYPENAME: BlindedCoins
 CoinCreationSource:
   STRUCT:
     - account_id:
@@ -399,8 +419,6 @@ OpaqueCoin:
     - private_seed: U128
     - value:
         TYPENAME: Amount
-    - coin:
-        TYPENAME: Coin
 Operation:
   ENUM:
     0:
@@ -577,14 +595,13 @@ SerializedMessage:
         NEWTYPE:
           TYPENAME: Vote
     5:
-      Votes:
-        NEWTYPE:
-          SEQ:
-            TYPENAME: Vote
-    6:
       InfoResponse:
         NEWTYPE:
           TYPENAME: AccountInfoResponse
+    6:
+      CoinCreationResponse:
+        NEWTYPE:
+          TYPENAME: CoinCreationResponse
     7:
       Error:
         NEWTYPE:

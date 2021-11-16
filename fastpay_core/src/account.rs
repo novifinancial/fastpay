@@ -62,7 +62,7 @@ impl AccountState {
         let mut z_seeds = BTreeSet::new();
         for asset in assets {
             let (id, value) = match asset {
-                Asset::TransparentCoin(certificate) => {
+                Asset::TransparentCoin { certificate } => {
                     if let Value::Coin(TransparentCoin {
                         account_id,
                         amount,
@@ -77,12 +77,16 @@ impl AccountState {
                         continue;
                     }
                 }
-                Asset::OpaqueCoin(OpaqueCoin {
-                    id,
-                    value,
-                    public_seed,
+                Asset::OpaqueCoin {
+                    value:
+                        OpaqueCoin {
+                            id,
+                            value,
+                            public_seed,
+                            ..
+                        },
                     ..
-                }) => {
+                } => {
                     // Seeds must be distinct.
                     fp_ensure!(!z_seeds.contains(public_seed), FastPayError::InvalidCoin);
                     z_seeds.insert(*public_seed);

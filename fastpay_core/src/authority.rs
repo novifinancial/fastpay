@@ -291,7 +291,9 @@ impl Authority for AuthorityState {
             let mut assets = Vec::new();
             for coin in &source.transparent_coins {
                 coin.check(&self.committee)?;
-                assets.push(Asset::TransparentCoin(coin.clone()));
+                assets.push(Asset::TransparentCoin {
+                    certificate: coin.clone(),
+                });
             }
             let coin_amount = AccountState::verify_linked_assets(&source.account_id, &assets)?;
             source_amount.try_add_assign(coin_amount)?;

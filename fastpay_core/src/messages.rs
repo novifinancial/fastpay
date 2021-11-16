@@ -77,11 +77,16 @@ pub struct RequestValue {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum Asset {
-    TransparentCoin(Certificate),
-    OpaqueCoin(OpaqueCoin),
+    TransparentCoin {
+        certificate: Certificate,
+    },
+    OpaqueCoin {
+        value: OpaqueCoin,
+        credential: coconut::Coin,
+    },
 }
 
-/// An opaque coin as seen by its owner (or creator).
+/// The description of an opaque coin as seen by its owner (or creator).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct OpaqueCoin {
@@ -93,8 +98,6 @@ pub struct OpaqueCoin {
     pub private_seed: u128,
     /// Value of the coin.
     pub value: Amount,
-    /// The opaque coin itself.
-    pub coin: coconut::Coin,
 }
 
 /// An authenticated request plus additional certified assets.
@@ -107,7 +110,7 @@ pub struct RequestOrder {
     pub assets: Vec<Asset>,
 }
 
-/// A transparent coin linked a given account.
+/// The description of a transparent coin linked a given account.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct TransparentCoin {
     pub account_id: AccountId,
@@ -230,7 +233,7 @@ pub enum CrossShardRequest {
 #[cfg(test)]
 impl From<Certificate> for Asset {
     fn from(certificate: Certificate) -> Self {
-        Self::TransparentCoin(certificate)
+        Self::TransparentCoin { certificate }
     }
 }
 
@@ -274,43 +277,49 @@ impl OpaqueCoin {
 impl Asset {
     pub fn account_id(&self) -> Result<&AccountId, FastPayError> {
         match self {
-            Asset::TransparentCoin(certificate) => match &certificate.value {
+            Asset::TransparentCoin { certificate } => match &certificate.value {
                 Value::Coin(coin) => Ok(&coin.account_id),
                 _ => Err(FastPayError::InvalidAsset),
             },
-            Asset::OpaqueCoin(OpaqueCoin { id, .. }) => Ok(id),
+            Asset::OpaqueCoin {
+                value: OpaqueCoin { id, .. },
+                ..
+            } => Ok(id),
         }
     }
 
     pub fn value(&self) -> Result<Amount, FastPayError> {
         match self {
-            Asset::TransparentCoin(certificate) => match &certificate.value {
+            Asset::TransparentCoin { certificate } => match &certificate.value {
                 Value::Coin(coin) => Ok(coin.amount),
                 _ => Err(FastPayError::InvalidAsset),
             },
-            Asset::OpaqueCoin(OpaqueCoin { value, .. }) => Ok(*value),
+            Asset::OpaqueCoin {
+                value: OpaqueCoin { value, .. },
+                ..
+            } => Ok(*value),
         }
     }
 
     pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
         match self {
-            Asset::TransparentCoin(certificate) => {
+            Asset::TransparentCoin { certificate } => {
                 let value = certificate.check(committee)?;
                 fp_ensure!(
                     matches!(value, Value::Coin { .. }),
                     FastPayError::InvalidAsset
                 );
             }
-            Asset::OpaqueCoin(opaque_coin) => {
+            Asset::OpaqueCoin { value, credential } => {
                 let setup = match &committee.coconut_setup {
                     Some(setup) => setup,
                     None => {
                         return Err(FastPayError::InvalidAsset);
                     }
                 };
-                let attribute = opaque_coin.make_input_attribute();
+                let attribute = value.make_input_attribute();
                 fp_ensure!(
-                    opaque_coin.coin.plain_verify(
+                    credential.plain_verify(
                         &setup.parameters,
                         &setup.verification_key,
                         attribute.value,
