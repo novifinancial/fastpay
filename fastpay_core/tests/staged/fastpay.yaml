@@ -389,7 +389,7 @@ InputAttribute:
         TYPENAME: Scalar
     - value:
         TYPENAME: Scalar
-    - id:
+    - key:
         TYPENAME: Scalar
 OpaqueCoin:
   STRUCT:
@@ -452,9 +452,9 @@ OutputAttribute:
         TYPENAME: Scalar
     - value_blinding_factor:
         TYPENAME: Scalar
-    - id:
+    - key:
         TYPENAME: Scalar
-    - id_blinding_factor:
+    - key_blinding_factor:
         TYPENAME: Scalar
 PublicKeyBytes:
   NEWTYPESTRUCT:
