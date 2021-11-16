@@ -67,8 +67,8 @@ ACCOUNT2="`tail -n -1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 # Create derived account
 ACCOUNT3="`./client --committee committee.json --accounts accounts.json open_account --from "$ACCOUNT1"`"
 
-# Create coins into the derived account
-./client --committee committee.json --accounts accounts.json spend_and_create_coins --from "$ACCOUNT2" --to-coins "$ACCOUNT3:55" "$ACCOUNT3:55"
+# Create coins (1 transparent and 1 opaque) into the derived account
+./client --committee committee.json --accounts accounts.json spend_and_create_coins --from "$ACCOUNT2" --to-coins "$ACCOUNT3:50" "($ACCOUNT3:60)"
 
 # Inspect state of derived account
 fgrep '"account_id"':"$ACCOUNT3" accounts.json

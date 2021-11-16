@@ -392,29 +392,61 @@ struct ClientOptions {
 }
 
 /// Command-line description of a coin to be created.
+#[derive(Clone)]
 struct NewCoin {
     account_id: AccountId,
     amount: Amount,
+    is_opaque: bool,
 }
 
 impl std::str::FromStr for NewCoin {
     type Err = failure::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (s, is_opaque) = if s.starts_with('(') && s.ends_with(')') {
+            (&s[1..s.len() - 1], true)
+        } else {
+            (s, false)
+        };
         let parts: Vec<&str> = s.split(':').collect();
         let account_id = parts[0].parse()?;
         let amount = parts[1].parse()?;
-        Ok(NewCoin { account_id, amount })
+        Ok(NewCoin {
+            account_id,
+            amount,
+            is_opaque,
+        })
     }
 }
 
-impl From<NewCoin> for TransparentCoin {
+impl From<NewCoin> for Option<TransparentCoin> {
     fn from(new: NewCoin) -> Self {
         use rand::Rng;
-        TransparentCoin {
-            account_id: new.account_id,
-            amount: new.amount,
-            seed: rand::thread_rng().gen(),
+        if !new.is_opaque {
+            Some(TransparentCoin {
+                account_id: new.account_id,
+                amount: new.amount,
+                seed: rand::thread_rng().gen(),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl From<NewCoin> for Option<OpaqueCoin> {
+    fn from(new: NewCoin) -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        if new.is_opaque {
+            Some(OpaqueCoin {
+                account_id: new.account_id,
+                amount: new.amount,
+                public_seed: rng.gen(),
+                private_seed: rng.gen(),
+            })
+        } else {
+            None
         }
     }
 }
@@ -478,7 +510,8 @@ enum ClientCommands {
         #[structopt(long = "from")]
         sender: AccountId,
 
-        /// Descriptions of the coins to be created
+        /// Descriptions of the coins to be created: `ID:VALUE` for transparent coins or
+        /// `(ID:VALUE)` for opaque coins.
         #[structopt(long = "to-coins")]
         coins: Vec<NewCoin>,
     },
@@ -636,12 +669,13 @@ fn main() {
         ClientCommands::SpendAndCreateCoins { sender, coins } => {
             rt.block_on(async move {
                 let mut client_state = context.make_account_client(sender);
-                let coins = coins.into_iter().map(|c| c.into()).collect();
+                let transparent_coins =
+                    coins.clone().into_iter().filter_map(|c| c.into()).collect();
+                let opaque_coins = coins.into_iter().filter_map(|c| c.into()).collect();
                 info!("Starting operation to spend the account and create coins");
                 let time_start = Instant::now();
-                // TODO: opaque coins
                 let assets = client_state
-                    .spend_and_create_coins(coins, Vec::new())
+                    .spend_and_create_coins(transparent_coins, opaque_coins)
                     .await
                     .unwrap();
                 let time_total = time_start.elapsed().as_micros();
