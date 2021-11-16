@@ -27,14 +27,14 @@ impl Coin {
         self.1 *= r;
     }
 
-    /// Verify the value and id of the coin.
+    /// Verify the value, seed, and key of the coin.
     pub fn plain_verify(
         &self,
         parameters: &Parameters,
         public_key: &PublicKey,
         value: Scalar,
         seed: Scalar,
-        id: Scalar,
+        key: Scalar,
     ) -> bool {
         if public_key.betas.len() < 3 {
             return false;
@@ -42,7 +42,7 @@ impl Coin {
         let beta0 = &public_key.betas[0];
         let beta1 = &public_key.betas[1];
         let beta2 = &public_key.betas[2];
-        let kappa = public_key.alpha + beta0 * value + beta1 * seed + beta2 * id;
+        let kappa = public_key.alpha + beta0 * value + beta1 * seed + beta2 * key;
         Parameters::check_pairing(&self.0, &kappa, &self.1, &parameters.g2)
     }
 
@@ -69,9 +69,9 @@ impl BlindedCoins {
         parameters: &Parameters,
         // The secret key of the authority.
         secret: &SecretKey,
-        // The common commitments Cm of the coin values and ids.
+        // The common commitments Cm of the coin values and keys.
         cms: &[G1Projective],
-        // The blinded output coin values and ids.
+        // The blinded output coin values and keys.
         cs: &[(G1Projective, G1Projective, G1Projective)],
     ) -> Self {
         assert!(cms.len() == cs.len());
@@ -87,7 +87,7 @@ impl BlindedCoins {
         let coins = cs
             .iter()
             .zip(base_hs.into_iter())
-            .map(|((v, seed, id), h)| (h, v * y0 + seed * y1 + id * y2 + h * secret.x))
+            .map(|((v, seed, key), h)| (h, v * y0 + seed * y1 + key * y2 + h * secret.x))
             .collect();
 
         Self { coins }
@@ -112,7 +112,7 @@ impl BlindedCoins {
                     *h,
                     b + gamma_0 * (-attribute.value_blinding_factor)
                         + gamma_1 * (-attribute.seed_blinding_factor)
-                        + gamma_2 * (-attribute.id_blinding_factor),
+                        + gamma_2 * (-attribute.key_blinding_factor),
                 )
             })
             .collect()

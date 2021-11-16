@@ -43,7 +43,7 @@ pub fn input_attribute1() -> InputAttribute {
     InputAttribute {
         value: Scalar::one(),
         seed: Scalar::from(101),
-        id: Scalar::from(1234),
+        key: Scalar::from(1234),
     }
 }
 
@@ -51,7 +51,7 @@ pub fn input_attribute2() -> InputAttribute {
     InputAttribute {
         value: Scalar::from(3),
         seed: Scalar::from(102),
-        id: Scalar::from(5678),
+        key: Scalar::from(5678),
     }
 }
 
@@ -68,16 +68,16 @@ pub fn output_attributes() -> Vec<OutputAttribute> {
             value_blinding_factor: Scalar::from(10),
             seed: Scalar::from(102),
             seed_blinding_factor: Scalar::from(103),
-            id: Scalar::from(9123),
-            id_blinding_factor: Scalar::from(20),
+            key: Scalar::from(9123),
+            key_blinding_factor: Scalar::from(20),
         },
         OutputAttribute {
             value: Scalar::from(3),
             value_blinding_factor: Scalar::from(30),
             seed: Scalar::from(104),
             seed_blinding_factor: Scalar::from(105),
-            id: Scalar::from(4567),
-            id_blinding_factor: Scalar::from(40),
+            key: Scalar::from(4567),
+            key_blinding_factor: Scalar::from(40),
         },
     ]
 }
@@ -94,7 +94,7 @@ pub fn coin1() -> Coin {
         &keypair().secret,
         &input_attribute1().value,
         &input_attribute1().seed,
-        &input_attribute1().id,
+        &input_attribute1().key,
     )
 }
 
@@ -105,7 +105,7 @@ pub fn coin2() -> Coin {
         &keypair().secret,
         &input_attribute2().value,
         &input_attribute2().seed,
-        &input_attribute2().id,
+        &input_attribute2().key,
     )
 }
 

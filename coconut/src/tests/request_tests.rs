@@ -5,8 +5,8 @@ use crate::fixtures::{input_attributes, keypair, offset, parameters, request};
 
 #[test]
 fn verify_request() {
-    let input_ids = vec![input_attributes()[0].id, input_attributes()[1].id];
+    let input_keys = vec![input_attributes()[0].key, input_attributes()[1].key];
     assert!(request()
-        .verify(&parameters(), &keypair().public, &input_ids, &offset())
+        .verify(&parameters(), &keypair().public, &input_keys, &offset())
         .is_ok());
 }

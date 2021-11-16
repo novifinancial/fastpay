@@ -254,7 +254,7 @@ impl OpaqueCoin {
             0,
         ]);
         coconut::InputAttribute {
-            id: key.scalar(),
+            key: key.scalar(),
             value: value.into(),
             seed,
         }
@@ -304,8 +304,8 @@ impl Asset {
                         &setup.parameters,
                         &setup.verification_key,
                         attribute.value,
-                        attribute.id,
-                        attribute.seed
+                        attribute.seed,
+                        attribute.key
                     ),
                     FastPayError::InvalidAsset
                 );

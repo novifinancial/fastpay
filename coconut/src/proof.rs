@@ -52,7 +52,7 @@ impl RequestCoinsProof {
             .map(|_| InputAttribute {
                 value: Scalar::random(&mut rng),
                 seed: Scalar::random(&mut rng),
-                id: Scalar::zero(), // Never used, the input id is revealed.
+                key: Scalar::zero(), // Never used, the input key is revealed.
             })
             .collect();
         let output_attributes_witnesses: Vec<_> = output_attributes
@@ -62,8 +62,8 @@ impl RequestCoinsProof {
                 value_blinding_factor: Scalar::random(&mut rng),
                 seed: Scalar::random(&mut rng),
                 seed_blinding_factor: Scalar::random(&mut rng),
-                id: Scalar::random(&mut rng),
-                id_blinding_factor: Scalar::random(&mut rng),
+                key: Scalar::random(&mut rng),
+                key_blinding_factor: Scalar::random(&mut rng),
             })
             .collect();
         let randomness_witnesses =
@@ -85,7 +85,7 @@ impl RequestCoinsProof {
         let cms: Vec<_> = output_attributes_witnesses
             .iter()
             .zip(randomness_witnesses.os.iter())
-            .map(|(x, o)| h0 * x.value + h1 * x.seed + h2 * x.id + parameters.g1 * o)
+            .map(|(x, o)| h0 * x.value + h1 * x.seed + h2 * x.key + parameters.g1 * o)
             .collect();
 
         let cs: Vec<_> = output_attributes_witnesses
@@ -95,7 +95,7 @@ impl RequestCoinsProof {
                 (
                     h * x.value + parameters.g1 * x.value_blinding_factor,
                     h * x.seed + parameters.g1 * x.seed_blinding_factor,
-                    h * x.id + parameters.g1 * x.id_blinding_factor,
+                    h * x.key + parameters.g1 * x.key_blinding_factor,
                 )
             })
             .collect();
@@ -136,7 +136,7 @@ impl RequestCoinsProof {
             .map(|(attribute, witness)| InputAttribute {
                 value: witness.value - challenge * attribute.value,
                 seed: witness.seed - challenge * attribute.seed,
-                id: Scalar::zero(), // Never user, the input id is revealed.
+                key: Scalar::zero(), // Never user, the input key is revealed.
             })
             .collect();
 
@@ -150,9 +150,9 @@ impl RequestCoinsProof {
                 seed: witness.seed - challenge * attribute.seed,
                 seed_blinding_factor: witness.seed_blinding_factor
                     - challenge * attribute.seed_blinding_factor,
-                id: witness.id - challenge * attribute.id,
-                id_blinding_factor: witness.id_blinding_factor
-                    - challenge * attribute.id_blinding_factor,
+                key: witness.key - challenge * attribute.key,
+                key_blinding_factor: witness.key_blinding_factor
+                    - challenge * attribute.key_blinding_factor,
             })
             .collect();
 
@@ -265,7 +265,7 @@ impl RequestCoinsProof {
                 cm * self.challenge
                     + h0 * attribute.value
                     + h1 * attribute.seed
-                    + h2 * attribute.id
+                    + h2 * attribute.key
                     + parameters.g1 * o
             })
             .collect();
@@ -283,8 +283,8 @@ impl RequestCoinsProof {
                         + h * attribute.seed
                         + parameters.g1 * attribute.seed_blinding_factor,
                     part3 * self.challenge
-                        + h * attribute.id
-                        + parameters.g1 * attribute.id_blinding_factor,
+                        + h * attribute.key
+                        + parameters.g1 * attribute.key_blinding_factor,
                 )
             })
             .collect();
