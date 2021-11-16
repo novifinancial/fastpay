@@ -61,7 +61,7 @@ pub trait Authority {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> Result<(Vec<Vote>, Vec<CrossShardContinuation>), FastPayError>;
+    ) -> Result<(CoinCreationResponse, Vec<CrossShardContinuation>), FastPayError>;
 
     /// Force synchronization to finalize requests from Primary to FastPay.
     fn handle_primary_synchronization_order(
@@ -241,7 +241,7 @@ impl Authority for AuthorityState {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> Result<(Vec<Vote>, Vec<CrossShardContinuation>), FastPayError> {
+    ) -> Result<(CoinCreationResponse, Vec<CrossShardContinuation>), FastPayError> {
         // No sharding is currently enforced for coin creation orders.
         let locks = order.locks;
         let description = order.description;
@@ -305,7 +305,7 @@ impl Authority for AuthorityState {
             );
             target_amount.try_add_assign(coin.amount)?;
         }
-        match &description.coconut_request {
+        let blinded_coins = match &description.coconut_request {
             None => {
                 fp_ensure!(
                     target_amount <= source_amount,
@@ -313,6 +313,8 @@ impl Authority for AuthorityState {
                         current_balance: source_amount.into()
                     }
                 );
+                // No blinded coins.
+                None
             }
             Some(request) => {
                 // Verify input coins. Note: Those must be given listed in the right order
@@ -345,17 +347,35 @@ impl Authority for AuthorityState {
                 request
                     .verify(&setup.parameters, &setup.verification_key, &keys, &offset)
                     .map_err(|_| FastPayError::InvalidCoinCreationOrder)?;
+                if request.cms.is_empty() {
+                    None
+                } else {
+                    let secret = &self
+                        .coconut_key_pair
+                        .as_ref()
+                        .ok_or(FastPayError::InvalidCoinCreationOrder)?
+                        .secret;
+                    // Build blinded shares for opaque coins.
+                    let coins = coconut::BlindedCoins::new(
+                        &setup.parameters,
+                        secret,
+                        &request.cms,
+                        &request.cs,
+                    );
+                    Some(coins)
+                }
             }
-        }
-        // Construct votes and continuations.
+        };
+        // Construct votes for transparent coins
         let mut votes = Vec::new();
-        let mut continuations = Vec::new();
         for coin in targets {
             // Create vote.
             let value = Value::Coin(coin);
             let vote = Vote::new(value, &self.key_pair);
             votes.push(vote);
         }
+        // Build cross-shard requests to delete source accounts.
+        let mut continuations = Vec::new();
         for account_id in source_accounts {
             // Send cross shard request to delete source account (if needed). This is a
             // best effort to quickly save storage.
@@ -366,7 +386,11 @@ impl Authority for AuthorityState {
             };
             continuations.push(cont);
         }
-        Ok((votes, continuations))
+        let response = CoinCreationResponse {
+            votes,
+            blinded_coins,
+        };
+        Ok((response, continuations))
     }
 
     fn handle_primary_synchronization_order(

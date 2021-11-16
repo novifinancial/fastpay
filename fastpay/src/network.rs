@@ -193,13 +193,13 @@ impl MessageHandler for RunningServerState {
                         }
                         SerializedMessage::CoinCreationOrder(message) => {
                             match self.server.state.handle_coin_creation_order(*message) {
-                                Ok((votes, continuations)) => {
+                                Ok((response, continuations)) => {
                                     // Cross-shard requests
                                     for continuation in continuations {
                                         self.handle_continuation(continuation).await;
                                     }
                                     // Response
-                                    Ok(Some(serialize_votes(&votes)))
+                                    Ok(Some(serialize_coin_creation_response(&response)))
                                 }
                                 Err(error) => Err(error),
                             }
@@ -220,7 +220,7 @@ impl MessageHandler for RunningServerState {
                             Ok(None)
                         }
                         SerializedMessage::Vote(_)
-                        | SerializedMessage::Votes(_)
+                        | SerializedMessage::CoinCreationResponse(_)
                         | SerializedMessage::Error(_)
                         | SerializedMessage::InfoResponse(_) => {
                             Err(FastPayError::UnexpectedMessage)
@@ -346,11 +346,11 @@ impl Client {
         }
     }
 
-    pub async fn send_recv_votes_bytes(
+    pub async fn send_recv_coin_bytes(
         &mut self,
         shard: ShardId,
         buf: Vec<u8>,
-    ) -> Result<Vec<Vote>, FastPayError> {
+    ) -> Result<CoinCreationResponse, FastPayError> {
         match self.send_recv_bytes_internal(shard, buf).await {
             Err(error) => Err(FastPayError::ClientIoError {
                 error: format!("{}", error),
@@ -358,7 +358,7 @@ impl Client {
             Ok(response) => {
                 // Parse reply
                 match deserialize_message(&response[..]) {
-                    Ok(SerializedMessage::Votes(votes)) => Ok(votes.to_vec()),
+                    Ok(SerializedMessage::CoinCreationResponse(resp)) => Ok(*resp),
                     Ok(SerializedMessage::Error(error)) => Err(*error),
                     Err(_) => Err(FastPayError::InvalidDecoding),
                     _ => Err(FastPayError::UnexpectedMessage),
@@ -404,11 +404,11 @@ impl AuthorityClient for Client {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> AsyncResult<Vec<Vote>, FastPayError> {
+    ) -> AsyncResult<CoinCreationResponse, FastPayError> {
         Box::pin(async move {
             // TODO: We should not let the client choose the shard.
             let shard = rand::thread_rng().gen_range(0, self.num_shards);
-            self.send_recv_votes_bytes(shard, serialize_coin_creation_order(&order))
+            self.send_recv_coin_bytes(shard, serialize_coin_creation_order(&order))
                 .await
         })
     }

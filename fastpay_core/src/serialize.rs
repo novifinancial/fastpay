@@ -20,8 +20,8 @@ pub enum SerializedMessage {
     InfoQuery(Box<AccountInfoQuery>),
     // Outbound
     Vote(Box<Vote>),
-    Votes(Vec<Vote>),
     InfoResponse(Box<AccountInfoResponse>),
+    CoinCreationResponse(Box<CoinCreationResponse>),
     Error(Box<FastPayError>),
     // Internal to an authority
     CrossShardRequest(Box<CrossShardRequest>),
@@ -39,8 +39,8 @@ enum ShallowSerializedMessage<'a> {
     InfoQuery(&'a AccountInfoQuery),
     // Outbound
     Vote(&'a Vote),
-    Votes(&'a [Vote]),
     InfoResponse(&'a AccountInfoResponse),
+    CoinCreationResponse(&'a CoinCreationResponse),
     Error(&'a FastPayError),
     // Internal to an authority
     CrossShardRequest(&'a CrossShardRequest),
@@ -116,8 +116,8 @@ pub fn serialize_coin_creation_order(value: &CoinCreationOrder) -> Vec<u8> {
     serialize(&ShallowSerializedMessage::CoinCreationOrder(value))
 }
 
-pub fn serialize_votes(value: &[Vote]) -> Vec<u8> {
-    serialize(&ShallowSerializedMessage::Votes(value))
+pub fn serialize_coin_creation_response(value: &CoinCreationResponse) -> Vec<u8> {
+    serialize(&ShallowSerializedMessage::CoinCreationResponse(value))
 }
 
 pub fn serialize_vote(value: &Vote) -> Vec<u8> {

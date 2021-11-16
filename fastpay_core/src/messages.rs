@@ -161,6 +161,16 @@ pub struct CoinCreationOrder {
     pub locks: Vec<Certificate>,
 }
 
+/// The response to a CoinCreationOrder
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationResponse {
+    /// Votes to create transparent coins.
+    pub votes: Vec<Vote>,
+    /// Blinded shares to create opaque coins.
+    pub blinded_coins: Option<coconut::BlindedCoins>,
+}
+
 /// A vote on a statement from an authority.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]

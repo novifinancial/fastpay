@@ -34,7 +34,7 @@ pub trait AuthorityClient {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> AsyncResult<Vec<Vote>, FastPayError>;
+    ) -> AsyncResult<CoinCreationResponse, FastPayError>;
 
     /// Handle information queries for this account.
     fn handle_account_info_query(
@@ -838,12 +838,12 @@ where
                 let committee = committee.clone();
                 let targets = targets.clone();
                 Box::pin(async move {
-                    let vector = client.handle_coin_creation_order(order).await?;
+                    let response = client.handle_coin_creation_order(order).await?;
                     fp_ensure!(
-                        vector.len() == coin_num,
+                        response.votes.len() == coin_num,
                         FastPayError::ClientErrorWhileProcessingCoinCreationOrder
                     );
-                    for (i, vote) in vector.iter().enumerate() {
+                    for (i, vote) in response.votes.iter().enumerate() {
                         fp_ensure!(
                             vote.authority == name,
                             FastPayError::ClientErrorWhileProcessingCoinCreationOrder
@@ -854,7 +854,8 @@ where
                         );
                         vote.check(&committee)?;
                     }
-                    Ok(vector)
+                    // TODO
+                    Ok(response.votes)
                 })
             })
             .await;

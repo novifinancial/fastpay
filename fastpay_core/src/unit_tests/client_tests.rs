@@ -44,7 +44,7 @@ impl AuthorityClient for LocalAuthorityClient {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> AsyncResult<Vec<Vote>, FastPayError> {
+    ) -> AsyncResult<CoinCreationResponse, FastPayError> {
         let state = self.0.clone();
         Box::pin(async move {
             state

@@ -525,9 +525,11 @@ fn test_handle_coin_creation_order_ok() {
         }),
     )];
 
-    let (votes, continuations) = state
+    let (response, continuations) = state
         .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .unwrap();
+    assert_eq!(response.blinded_coins, None);
+    let votes = response.votes;
     assert_eq!(votes.len(), 2);
     for i in 0..2 {
         assert!(matches!(&votes[i].value, Value::Coin(c) if c == &targets[i]));
@@ -582,9 +584,11 @@ fn test_handle_coin_creation_order_no_source_coin_ok() {
         }),
     )];
 
-    let (votes, continuations) = state
+    let (response, continuations) = state
         .handle_coin_creation_order(CoinCreationOrder { locks, description })
         .unwrap();
+    assert_eq!(response.blinded_coins, None);
+    let votes = response.votes;
     assert_eq!(votes.len(), 2);
     for i in 0..2 {
         assert!(matches!(&votes[i].value, Value::Coin(c) if c == &targets[i]));
