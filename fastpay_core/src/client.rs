@@ -1021,7 +1021,7 @@ where
             asset.check(&self.committee)?;
             ensure!(
                 asset.account_id()? == &self.account_id,
-                "TransparentCoin is not linked to this account"
+                "Coin is not linked to this account"
             );
             self.coins.push(asset);
             Ok(())
@@ -1214,7 +1214,7 @@ where
                 }
             }
             let account_balance = Amount::try_from(account_balance)?;
-            let transparent_coins = self
+            let old_transparent_coins = self
                 .coins
                 .iter()
                 .filter_map(|asset| match asset {
@@ -1222,24 +1222,26 @@ where
                     _ => None,
                 })
                 .collect();
-            let opaque_coin_public_seeds = self
+            let old_opaque_coin_public_seeds = self
                 .coins
                 .iter()
                 .filter_map(|asset| match asset {
                     Asset::OpaqueCoin {
                         value:
                             OpaqueCoin {
-                                id, public_seed, ..
+                                account_id,
+                                public_seed,
+                                ..
                             },
                         ..
                     } => {
-                        assert_eq!(id, &self.account_id);
+                        assert_eq!(account_id, &self.account_id);
                         Some(*public_seed)
                     }
                     _ => None,
                 })
                 .collect();
-            let opaque_coins = self
+            let old_opaque_coins = self
                 .coins
                 .iter()
                 .filter_map(|asset| match asset {
@@ -1250,11 +1252,11 @@ where
             let source = CoinCreationSource {
                 account_id: self.account_id.clone(),
                 account_balance,
-                transparent_coins,
-                opaque_coin_public_seeds,
+                transparent_coins: old_transparent_coins,
+                opaque_coin_public_seeds: old_opaque_coin_public_seeds,
             };
             let (coconut_request, new_opaque_coins_with_attributes) =
-                if opaque_coins.is_empty() && new_opaque_coins.is_empty() {
+                if old_opaque_coins.is_empty() && new_opaque_coins.is_empty() {
                     (None, Vec::new())
                 } else {
                     let setup = self
@@ -1281,7 +1283,7 @@ where
                         coconut::rand::thread_rng(),
                         &setup.parameters,
                         &setup.verification_key,
-                        &opaque_coins,
+                        &old_opaque_coins,
                         &input_attributes,
                         &output_attributes,
                     );

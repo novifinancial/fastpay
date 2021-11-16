@@ -413,7 +413,7 @@ InputAttribute:
         TYPENAME: Scalar
 OpaqueCoin:
   STRUCT:
-    - id:
+    - account_id:
         TYPENAME: AccountId
     - public_seed: U128
     - private_seed: U128

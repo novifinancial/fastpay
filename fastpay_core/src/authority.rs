@@ -332,7 +332,7 @@ impl Authority for AuthorityState {
                         );
                         seen.insert(*public_seed);
                         let key = CoconutKey {
-                            id: source.account_id.clone(),
+                            account_id: source.account_id.clone(),
                             public_seed: *public_seed,
                         };
                         keys.push(key.scalar());

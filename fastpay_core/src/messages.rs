@@ -91,7 +91,7 @@ pub enum Asset {
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct OpaqueCoin {
     /// The owner's account
-    pub id: AccountId,
+    pub account_id: AccountId,
     /// Unique number to distinguish coins inside an account.
     pub public_seed: u128,
     /// Random seed to make sure that the value stay confidential after spending the coin.
@@ -241,7 +241,7 @@ impl From<Certificate> for Asset {
 #[derive(Serialize, Deserialize)]
 pub(crate) struct CoconutKey {
     /// Owner account
-    pub(crate) id: AccountId,
+    pub(crate) account_id: AccountId,
     /// Number used to differentiate coins in the account.
     pub(crate) public_seed: u128,
 }
@@ -256,7 +256,7 @@ impl CoconutKey {
 impl OpaqueCoin {
     pub fn make_input_attribute(&self) -> coconut::InputAttribute {
         let key = CoconutKey {
-            id: self.id.clone(),
+            account_id: self.account_id.clone(),
             public_seed: self.public_seed,
         };
         let value = u64::from(self.amount);
@@ -298,9 +298,9 @@ impl Asset {
                 _ => Err(FastPayError::InvalidAsset),
             },
             Asset::OpaqueCoin {
-                value: OpaqueCoin { id, .. },
+                value: OpaqueCoin { account_id, .. },
                 ..
-            } => Ok(id),
+            } => Ok(account_id),
         }
     }
 
