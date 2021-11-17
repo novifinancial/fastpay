@@ -33,7 +33,7 @@ pub struct Parameters {
     pub hs: Vec<G1Projective>,
     /// A generator of G2.
     pub g2: G2Projective,
-    // Bulletproofs generators.
+    /// Bulletproofs generators.
     pub bulletproof_gens: BulletproofGens,
 }
 
@@ -56,7 +56,7 @@ impl Parameters {
         self.hs.len()
     }
 
-    /// Return the maximum number of output coins.
+    /// Return the maximum number of output coins per proof.
     pub fn max_outputs(&self) -> usize {
         self.bulletproof_gens.party_capacity
     }

@@ -1264,6 +1264,11 @@ where
                         .coconut_setup
                         .as_ref()
                         .expect("Coconut must be configured to use opaque coins");
+                    ensure!(
+                        new_opaque_coins.len() <= setup.parameters.max_outputs(),
+                        "Cannot create more than {} coins at a time in the current setup",
+                        setup.parameters.max_outputs()
+                    );
                     let input_attributes = self
                         .coins
                         .iter()

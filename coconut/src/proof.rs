@@ -44,7 +44,7 @@ impl RequestCoinsProof {
     ) -> Self {
         assert!(parameters.max_attributes() >= 3);
         assert!(public_key.max_attributes() >= 3);
-        assert!(parameters.max_attributes() >= output_attributes.len());
+        assert!(parameters.max_outputs() >= output_attributes.len());
 
         // Compute the witnesses.
         let input_attributes_witnesses: Vec<_> = input_attributes
@@ -226,7 +226,7 @@ impl RequestCoinsProof {
             CoconutError::TooManyAttributes
         );
         ensure!(
-            parameters.max_attributes() >= output_commitments.len(),
+            parameters.max_outputs() >= output_commitments.len(),
             CoconutError::MalformedProof
         );
 

@@ -215,6 +215,10 @@ enum ServerCommands {
         /// Path where to write the description of the FastPay committee
         #[structopt(long)]
         committee: PathBuf,
+
+        /// Maximum number of opaque coins created at a time
+        #[structopt(long, default_value = "20")]
+        max_output_coins: usize,
     },
 }
 
@@ -291,12 +295,10 @@ fn main() {
         ServerCommands::GenerateAll {
             authorities,
             committee,
+            max_output_coins,
         } => {
             let mut rng = coconut::rand::thread_rng();
-            let parameters = coconut::Parameters::new(
-                3,
-                /* TODO: check party capacity for bulletproofs */ authorities.len(),
-            );
+            let parameters = coconut::Parameters::new(3, max_output_coins);
             let threshold = (2 * authorities.len() + 1) / 3;
             let (verification_key, key_pairs) =
                 coconut::KeyPair::ttp(&mut rng, &parameters, threshold, authorities.len());
