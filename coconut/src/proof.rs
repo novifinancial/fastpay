@@ -209,7 +209,6 @@ impl RequestCoinsProof {
         offset: &Scalar,
     ) -> CoconutResult<()> {
         ensure!(sigmas.len() == kappas.len(), CoconutError::MalformedProof);
-        ensure!(sigmas.len() == cms.len(), CoconutError::MalformedProof);
         ensure!(
             sigmas.len() == input_commitments.len(),
             CoconutError::MalformedProof
