@@ -19,10 +19,20 @@ rm -f *.json *.txt
 # Create configuration files for 4 authorities with 4 shards each.
 # * Private server states are stored in `server*.json`.
 # * `committee.json` is the public description of the FastPay committee.
-for I in 1 2 3 4
-do
-    ./server --server server"$I".json generate --host 127.0.0.1 --port 9"$I"00 --shards 4 >> committee.json
-done
+
+# echo 'null' > committee.json  # no coconut parameters
+# for I in 1 2 3 4
+# do
+#    ./server generate --server server_"$I".json --host 127.0.0.1 --port 9"$I"00 --shards 4 >> committee.json
+# done
+
+# With coconut trusted setup:
+./server generate-all --authorities \
+   server_1.json:udp:127.0.0.1:9100:4 \
+   server_2.json:udp:127.0.0.1:9200:4 \
+   server_3.json:udp:127.0.0.1:9300:4 \
+   server_4.json:udp:127.0.0.1:9400:4 \
+--committee committee.json
 
 # Create configuration files for 1000 user accounts.
 # * Private account states are stored in one local wallet `accounts.json`.
@@ -34,7 +44,7 @@ for I in 1 2 3 4
 do
     for J in $(seq 0 3)
     do
-        ./server --server server"$I".json run --shard "$J" --initial-accounts initial_accounts.txt --committee committee.json &
+        ./server run --server server_"$I".json --shard "$J" --initial-accounts initial_accounts.txt --committee committee.json &
     done
  done
 
@@ -57,8 +67,8 @@ ACCOUNT2="`tail -n -1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 # Create derived account
 ACCOUNT3="`./client --committee committee.json --accounts accounts.json open_account --from "$ACCOUNT1"`"
 
-# Create coins into the derived account
-./client --committee committee.json --accounts accounts.json spend_and_create_coins --from "$ACCOUNT2" --to-coins "$ACCOUNT3:55" "$ACCOUNT3:55"
+# Create coins (1 transparent and 1 opaque) into the derived account
+./client --committee committee.json --accounts accounts.json spend_and_create_coins --from "$ACCOUNT2" --to-coins "$ACCOUNT3:50" "($ACCOUNT3:60)"
 
 # Inspect state of derived account
 fgrep '"account_id"':"$ACCOUNT3" accounts.json

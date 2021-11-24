@@ -91,7 +91,7 @@ impl ClientContext {
             .accounts_config
             .get(&account_id)
             .expect("Unknown account");
-        let committee = Committee::new(self.committee_config.voting_rights());
+        let committee = self.committee_config.clone().into_committee();
         let authority_clients = self.make_authority_clients();
         AccountClientState::new(
             account_id,
@@ -113,10 +113,9 @@ impl ClientContext {
     ) -> Result<(), failure::Error> {
         let recipient = match &certificate.value {
             Value::Confirm(request) => request.operation.recipient().unwrap().clone(),
-            Value::Coin(coin) => coin.account_id.clone(),
             _ => failure::bail!("unexpected value in certificate"),
         };
-        let committee = Committee::new(self.committee_config.voting_rights());
+        let committee = self.committee_config.clone().into_committee();
         let authority_clients = self.make_authority_clients();
         let account = self.accounts_config.get_or_insert(recipient.clone());
         let mut client = AccountClientState::new(
@@ -130,7 +129,32 @@ impl ClientContext {
             account.received_certificates.clone(),
             account.balance,
         );
-        client.receive_from_fastpay(certificate).await?;
+        client.receive_confirmation(certificate).await?;
+        self.update_account_from_state(&client);
+        Ok(())
+    }
+
+    async fn update_recipient_account_with_asset(
+        &mut self,
+        asset: Asset,
+        key_pair: Option<KeyPair>,
+    ) -> Result<(), failure::Error> {
+        let recipient = asset.account_id()?.clone();
+        let committee = self.committee_config.clone().into_committee();
+        let authority_clients = self.make_authority_clients();
+        let account = self.accounts_config.get_or_insert(recipient.clone());
+        let mut client = AccountClientState::new(
+            recipient,
+            account.key_pair.as_ref().map(|kp| kp.copy()).or(key_pair),
+            committee,
+            authority_clients,
+            account.next_sequence_number,
+            account.coins.clone(),
+            account.sent_certificates.clone(),
+            account.received_certificates.clone(),
+            account.balance,
+        );
+        client.receive_asset(asset).await?;
         self.update_account_from_state(&client);
         Ok(())
     }
@@ -188,10 +212,7 @@ impl ClientContext {
                 AuthorityServerConfig::read(file).expect("Fail to read server config");
             keys.push((server_config.authority.name, server_config.key));
         }
-        let committee = Committee {
-            voting_rights: keys.iter().map(|(k, _)| (*k, 1)).collect(),
-            total_votes: keys.len(),
-        };
+        let committee = Committee::make_simple(keys.iter().map(|(n, _)| *n).collect());
         assert!(
             keys.len() >= committee.quorum_threshold(),
             "Not enough server configs were provided with --server-configs"
@@ -219,7 +240,7 @@ impl ClientContext {
 
     /// Try to aggregate votes into certificates.
     fn make_benchmark_certificates_from_votes(&self, votes: Vec<Vote>) -> Vec<(AccountId, Bytes)> {
-        let committee = Committee::new(self.committee_config.voting_rights());
+        let committee = self.committee_config.clone().into_committee();
         let mut aggregators = HashMap::new();
         let mut certificates = Vec::new();
         let mut done_senders = HashSet::new();
@@ -371,29 +392,61 @@ struct ClientOptions {
 }
 
 /// Command-line description of a coin to be created.
+#[derive(Clone)]
 struct NewCoin {
     account_id: AccountId,
     amount: Amount,
+    is_opaque: bool,
 }
 
 impl std::str::FromStr for NewCoin {
     type Err = failure::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (s, is_opaque) = if s.starts_with('(') && s.ends_with(')') {
+            (&s[1..s.len() - 1], true)
+        } else {
+            (s, false)
+        };
         let parts: Vec<&str> = s.split(':').collect();
         let account_id = parts[0].parse()?;
         let amount = parts[1].parse()?;
-        Ok(NewCoin { account_id, amount })
+        Ok(NewCoin {
+            account_id,
+            amount,
+            is_opaque,
+        })
     }
 }
 
-impl From<NewCoin> for Coin {
+impl From<NewCoin> for Option<TransparentCoin> {
     fn from(new: NewCoin) -> Self {
         use rand::Rng;
-        Coin {
-            account_id: new.account_id,
-            amount: new.amount,
-            seed: rand::thread_rng().gen(),
+        if !new.is_opaque {
+            Some(TransparentCoin {
+                account_id: new.account_id,
+                amount: new.amount,
+                seed: rand::thread_rng().gen(),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl From<NewCoin> for Option<OpaqueCoin> {
+    fn from(new: NewCoin) -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        if new.is_opaque {
+            Some(OpaqueCoin {
+                account_id: new.account_id,
+                amount: new.amount,
+                public_seed: rng.gen(),
+                private_seed: rng.gen(),
+            })
+        } else {
+            None
         }
     }
 }
@@ -457,7 +510,8 @@ enum ClientCommands {
         #[structopt(long = "from")]
         sender: AccountId,
 
-        /// Descriptions of the coins to be created
+        /// Descriptions of the coins to be created: `ID:VALUE` for transparent coins or
+        /// `(ID:VALUE)` for opaque coins.
         #[structopt(long = "to-coins")]
         coins: Vec<NewCoin>,
     },
@@ -615,19 +669,24 @@ fn main() {
         ClientCommands::SpendAndCreateCoins { sender, coins } => {
             rt.block_on(async move {
                 let mut client_state = context.make_account_client(sender);
-                let coins = coins.into_iter().map(|c| c.into()).collect();
+                let transparent_coins =
+                    coins.clone().into_iter().filter_map(|c| c.into()).collect();
+                let opaque_coins = coins.into_iter().filter_map(|c| c.into()).collect();
                 info!("Starting operation to spend the account and create coins");
                 let time_start = Instant::now();
-                let certificates = client_state.spend_and_create_coins(coins).await.unwrap();
+                let assets = client_state
+                    .spend_and_create_coins(transparent_coins, opaque_coins)
+                    .await
+                    .unwrap();
                 let time_total = time_start.elapsed().as_micros();
                 info!("Operation confirmed after {} us", time_total);
-                info!("{:?}", certificates);
+                info!("{:?}", assets);
                 context.update_account_from_state(&client_state);
 
                 info!("Updating recipients' local accounts");
-                for certificate in certificates {
+                for asset in assets {
                     context
-                        .update_recipient_account(certificate, None)
+                        .update_recipient_account_with_asset(asset, None)
                         .await
                         .unwrap();
                 }

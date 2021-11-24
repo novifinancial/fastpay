@@ -548,6 +548,10 @@ impl HashValue {
         value.write(&mut hasher);
         HashValue(hasher.finalize())
     }
+
+    pub fn as_bytes(&self) -> &[u8; 64] {
+        self.0.as_ref().try_into().expect("unexpected size")
+    }
 }
 
 impl Signature {

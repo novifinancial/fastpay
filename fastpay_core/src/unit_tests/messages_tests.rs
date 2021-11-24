@@ -15,7 +15,7 @@ fn test_signed_values() {
 
     authorities.insert(name1, /* voting right */ 1);
     authorities.insert(name2, /* voting right */ 0);
-    let committee = Committee::new(authorities);
+    let committee = Committee::new(authorities, None);
 
     let request = Request {
         account_id: dbg_account(1),
@@ -49,7 +49,7 @@ fn test_certificates() {
     let mut authorities = BTreeMap::new();
     authorities.insert(name1, /* voting right */ 1);
     authorities.insert(name2, /* voting right */ 1);
-    let committee = Committee::new(authorities);
+    let committee = Committee::new(authorities, None);
 
     let request = Request {
         account_id: dbg_account(1),

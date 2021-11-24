@@ -4,7 +4,8 @@
 use crate::{
     account::AccountState, base_types::*, committee::Committee, error::FastPayError, messages::*,
 };
-use std::collections::{BTreeMap, HashSet};
+use bls12_381::Scalar;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 #[cfg(test)]
 #[path = "unit_tests/authority_tests.rs"]
@@ -18,6 +19,8 @@ pub struct AuthorityState {
     pub committee: Committee,
     /// The signature key pair of the authority.
     pub key_pair: KeyPair,
+    /// The signature key pair of the authority.
+    pub coconut_key_pair: Option<coconut::KeyPair>,
     /// States of FastPay accounts.
     pub accounts: BTreeMap<AccountId, AccountState>,
     /// The latest transaction index of the blockchain that the authority has seen.
@@ -58,7 +61,7 @@ pub trait Authority {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> Result<(Vec<Vote>, Vec<CrossShardContinuation>), FastPayError>;
+    ) -> Result<(CoinCreationResponse, Vec<CrossShardContinuation>), FastPayError>;
 
     /// Force synchronization to finalize requests from Primary to FastPay.
     fn handle_primary_synchronization_order(
@@ -175,10 +178,9 @@ impl Authority for AuthorityState {
         if let Some(authority) = &order.value.limited_to {
             fp_ensure!(self.name == *authority, FastPayError::InvalidRequestOrder);
         }
-        // Verify additional certificates in the order.
-        let mut checked_assets = Vec::new();
+        // Verify assets in the order.
         for asset in &order.assets {
-            checked_assets.push(asset.check(&self.committee)?);
+            asset.check(&self.committee)?;
         }
         // Obtain the sender's account.
         let sender = order.value.request.account_id.clone();
@@ -204,7 +206,7 @@ impl Authority for AuthorityState {
         );
         if let Some(pending) = &account.pending {
             fp_ensure!(
-                matches!(&pending.value, Value::Confirm(r) if r == &request),
+                matches!(&pending.value, Value::Confirm(r) | Value::Lock(r) if r == &request),
                 FastPayError::PreviousRequestMustBeConfirmedFirst {
                     pending: pending.value.clone()
                 }
@@ -213,7 +215,7 @@ impl Authority for AuthorityState {
             return Ok(account.make_account_info(sender));
         }
         // Verify that the request is safe, and return the value of the vote.
-        let value = account.validate_operation(request, &checked_assets)?;
+        let value = account.validate_operation(request, &order.assets)?;
         let vote = Vote::new(value, &self.key_pair);
         account.pending = Some(vote);
         Ok(account.make_account_info(sender))
@@ -239,12 +241,11 @@ impl Authority for AuthorityState {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> Result<(Vec<Vote>, Vec<CrossShardContinuation>), FastPayError> {
+    ) -> Result<(CoinCreationResponse, Vec<CrossShardContinuation>), FastPayError> {
         // No sharding is currently enforced for coin creation orders.
         let locks = order.locks;
         let description = order.description;
         let hash = HashValue::new(&description);
-
         let sources = description.sources;
         let targets = description.targets;
         fp_ensure!(
@@ -286,16 +287,18 @@ impl Authority for AuthorityState {
                 }
                 _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
             }
-            // Verify source coins.
-            let mut checked_assets = Vec::new();
-            for coin in &source.coins {
-                checked_assets.push(coin.check(&self.committee)?);
+            // Verify transparent source coins.
+            let mut assets = Vec::new();
+            for coin in &source.transparent_coins {
+                coin.check(&self.committee)?;
+                assets.push(Asset::TransparentCoin {
+                    certificate: coin.clone(),
+                });
             }
-            let coin_amount =
-                AccountState::verify_linked_coins(&source.account_id, &checked_assets)?;
+            let coin_amount = AccountState::verify_linked_assets(&source.account_id, &assets)?;
             source_amount.try_add_assign(coin_amount)?;
         }
-        // Verify target amount.
+        // Verify target amount and/or coconut proof.
         let mut target_amount = Amount::zero();
         for coin in &targets {
             fp_ensure!(
@@ -304,21 +307,77 @@ impl Authority for AuthorityState {
             );
             target_amount.try_add_assign(coin.amount)?;
         }
-        fp_ensure!(
-            target_amount <= source_amount,
-            FastPayError::InsufficientFunding {
-                current_balance: source_amount.into()
+        let blinded_coins = match &description.coconut_request {
+            None => {
+                fp_ensure!(
+                    target_amount <= source_amount,
+                    FastPayError::InsufficientFunding {
+                        current_balance: source_amount.into()
+                    }
+                );
+                // No blinded coins.
+                None
             }
-        );
-        // Construct votes and continuations.
+            Some(request) => {
+                // Verify input coins. Note: Those must be given listed in the right order
+                // in the request.
+                let mut keys = Vec::new();
+                for source in &sources {
+                    let mut seen = BTreeSet::new();
+                    for public_seed in &source.opaque_coin_public_seeds {
+                        // Seeds must be distinct within the same source.
+                        fp_ensure!(
+                            !seen.contains(public_seed),
+                            FastPayError::InvalidCoinCreationOrder
+                        );
+                        seen.insert(*public_seed);
+                        let key = CoconutKey {
+                            account_id: source.account_id.clone(),
+                            public_seed: *public_seed,
+                        };
+                        keys.push(key.scalar());
+                    }
+                }
+                // Verify coconut proof.
+                let offset =
+                    Scalar::from(u64::from(source_amount)) - Scalar::from(u64::from(target_amount));
+                let setup = &self
+                    .committee
+                    .coconut_setup
+                    .as_ref()
+                    .ok_or(FastPayError::InvalidCoinCreationOrder)?;
+                request
+                    .verify(&setup.parameters, &setup.verification_key, &keys, &offset)
+                    .map_err(|_| FastPayError::InvalidCoinCreationOrder)?;
+                if request.cms.is_empty() {
+                    None
+                } else {
+                    let secret = &self
+                        .coconut_key_pair
+                        .as_ref()
+                        .ok_or(FastPayError::InvalidCoinCreationOrder)?
+                        .secret;
+                    // Build blinded shares for opaque coins.
+                    let coins = coconut::BlindedCoins::new(
+                        &setup.parameters,
+                        secret,
+                        &request.cms,
+                        &request.cs,
+                    );
+                    Some(coins)
+                }
+            }
+        };
+        // Construct votes for transparent coins
         let mut votes = Vec::new();
-        let mut continuations = Vec::new();
         for coin in targets {
             // Create vote.
             let value = Value::Coin(coin);
             let vote = Vote::new(value, &self.key_pair);
             votes.push(vote);
         }
+        // Build cross-shard requests to delete source accounts.
+        let mut continuations = Vec::new();
         for account_id in source_accounts {
             // Send cross shard request to delete source account (if needed). This is a
             // best effort to quickly save storage.
@@ -329,7 +388,11 @@ impl Authority for AuthorityState {
             };
             continuations.push(cont);
         }
-        Ok((votes, continuations))
+        let response = CoinCreationResponse {
+            votes,
+            blinded_coins,
+        };
+        Ok((response, continuations))
     }
 
     fn handle_primary_synchronization_order(
@@ -399,11 +462,17 @@ impl Authority for AuthorityState {
 }
 
 impl AuthorityState {
-    pub fn new(committee: Committee, name: AuthorityName, key_pair: KeyPair) -> Self {
+    pub fn new(
+        committee: Committee,
+        name: AuthorityName,
+        key_pair: KeyPair,
+        coconut_key_pair: Option<coconut::KeyPair>,
+    ) -> Self {
         AuthorityState {
             committee,
             name,
             key_pair,
+            coconut_key_pair,
             accounts: BTreeMap::new(),
             last_transaction_index: SequenceNumber::new(),
             shard_id: 0,
@@ -414,6 +483,7 @@ impl AuthorityState {
     pub fn new_shard(
         committee: Committee,
         key_pair: KeyPair,
+        coconut_key_pair: Option<coconut::KeyPair>,
         shard_id: u32,
         number_of_shards: u32,
     ) -> Self {
@@ -421,6 +491,7 @@ impl AuthorityState {
             committee,
             name: key_pair.public(),
             key_pair,
+            coconut_key_pair,
             accounts: BTreeMap::new(),
             last_transaction_index: SequenceNumber::new(),
             shard_id,

@@ -53,29 +53,50 @@ impl AccountState {
         }
     }
 
-    pub(crate) fn verify_linked_coins(
-        id: &AccountId,
-        coins: &[&Value],
+    pub(crate) fn verify_linked_assets(
+        account_id: &AccountId,
+        assets: &[Asset],
     ) -> Result<Amount, FastPayError> {
         let mut total = Amount::zero();
-        let mut seeds = BTreeSet::new();
-        for coin in coins {
-            match coin {
-                Value::Coin(Coin {
-                    account_id,
-                    amount,
-                    seed,
-                }) => {
-                    // Verify linked account.
-                    fp_ensure!(account_id == id, FastPayError::InvalidCoin);
-                    // Seeds must be distinct.
-                    fp_ensure!(!seeds.contains(seed), FastPayError::InvalidCoin);
-                    // Update source amount and seeds.
-                    total.try_add_assign(*amount)?;
-                    seeds.insert(*seed);
+        let mut t_seeds = BTreeSet::new();
+        let mut z_seeds = BTreeSet::new();
+        for asset in assets {
+            let (id, value) = match asset {
+                Asset::TransparentCoin { certificate } => {
+                    if let Value::Coin(TransparentCoin {
+                        account_id,
+                        amount,
+                        seed,
+                    }) = &certificate.value
+                    {
+                        // Seeds must be distinct.
+                        fp_ensure!(!t_seeds.contains(seed), FastPayError::InvalidCoin);
+                        t_seeds.insert(*seed);
+                        (account_id, *amount)
+                    } else {
+                        continue;
+                    }
                 }
-                _ => fp_bail!(FastPayError::InvalidCoin),
-            }
+                Asset::OpaqueCoin {
+                    value:
+                        OpaqueCoin {
+                            account_id,
+                            amount,
+                            public_seed,
+                            ..
+                        },
+                    ..
+                } => {
+                    // Seeds must be distinct.
+                    fp_ensure!(!z_seeds.contains(public_seed), FastPayError::InvalidCoin);
+                    z_seeds.insert(*public_seed);
+                    (account_id, *amount)
+                }
+            };
+            // Verify linked account.
+            fp_ensure!(account_id == id, FastPayError::InvalidCoin);
+            // Update source amount.
+            total.try_add_assign(value)?;
         }
         Ok(total)
     }
@@ -84,7 +105,7 @@ impl AccountState {
     pub(crate) fn validate_operation(
         &self,
         request: Request,
-        assets: &[&Value],
+        assets: &[Asset],
     ) -> Result<Value, FastPayError> {
         let value = match &request.operation {
             Operation::Transfer { amount, .. } => {
@@ -112,9 +133,8 @@ impl AccountState {
                 Value::Lock(request)
             }
             Operation::SpendAndTransfer { amount, .. } => {
-                // Verify source coins.
-                let coin_total = Self::verify_linked_coins(&request.account_id, assets)?;
                 // Verify balance.
+                let coin_total = Self::verify_linked_assets(&request.account_id, assets)?;
                 let public_amount = amount.try_sub(coin_total)?;
                 fp_ensure!(
                     self.balance >= public_amount.into(),

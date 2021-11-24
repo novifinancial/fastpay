@@ -44,7 +44,7 @@ impl AuthorityClient for LocalAuthorityClient {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> AsyncResult<Vec<Vote>, FastPayError> {
+    ) -> AsyncResult<CoinCreationResponse, FastPayError> {
         let state = self.0.clone();
         Box::pin(async move {
             state
@@ -80,12 +80,12 @@ fn init_local_authorities(
         voting_rights.insert(key_pair.public(), 1);
         key_pairs.push(key_pair);
     }
-    let committee = Committee::new(voting_rights);
+    let committee = Committee::new(voting_rights, None);
 
     let mut clients = HashMap::new();
     for key_pair in key_pairs {
         let name = key_pair.public();
-        let state = AuthorityState::new(committee.clone(), name, key_pair);
+        let state = AuthorityState::new(committee.clone(), name, key_pair, None);
         clients.insert(name, LocalAuthorityClient::new(state));
     }
     (clients, committee)
@@ -106,12 +106,12 @@ fn init_local_authorities_bad_1(
             key_pairs.push(key_pair);
         }
     }
-    let committee = Committee::new(voting_rights);
+    let committee = Committee::new(voting_rights, None);
 
     let mut clients = HashMap::new();
     for key_pair in key_pairs {
         let name = key_pair.public();
-        let state = AuthorityState::new(committee.clone(), name, key_pair);
+        let state = AuthorityState::new(committee.clone(), name, key_pair, None);
         clients.insert(name, LocalAuthorityClient::new(state));
     }
     (clients, committee)
@@ -303,7 +303,7 @@ fn test_transfer_ownership() {
 
 #[test]
 fn test_create_single_coin() {
-    create_and_transfer_coins(vec![Coin {
+    create_and_transfer_coins(vec![TransparentCoin {
         account_id: dbg_account(2),
         amount: Amount::from(3),
         seed: 1,
@@ -314,12 +314,12 @@ fn test_create_single_coin() {
 #[test]
 fn test_create_multiple_coins() {
     create_and_transfer_coins(vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(1),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(2),
             seed: 2,
@@ -331,12 +331,12 @@ fn test_create_multiple_coins() {
 #[test]
 fn test_create_multiple_coins_repeated_seeds() {
     assert!(create_and_transfer_coins(vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(1),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(2),
             seed: 1,
@@ -348,12 +348,12 @@ fn test_create_multiple_coins_repeated_seeds() {
 #[test]
 fn test_create_multiple_coins_wrong_account() {
     assert!(create_and_transfer_coins(vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(1),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(3),
             amount: Amount::from(2),
             seed: 2,
@@ -365,12 +365,12 @@ fn test_create_multiple_coins_wrong_account() {
 #[test]
 fn test_create_multiple_coins_balance_exceeded() {
     assert!(create_and_transfer_coins(vec![
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(2),
             seed: 1,
         },
-        Coin {
+        TransparentCoin {
             account_id: dbg_account(2),
             amount: Amount::from(2),
             seed: 2,
@@ -379,7 +379,7 @@ fn test_create_multiple_coins_balance_exceeded() {
     .is_err());
 }
 
-fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
+fn create_and_transfer_coins(coins: Vec<TransparentCoin>) -> Result<(), failure::Error> {
     let rt = Runtime::new().unwrap();
     let (mut authority_clients, committee) = init_local_authorities(4);
     let mut client1 = make_client(dbg_account(1), authority_clients.clone(), committee.clone());
@@ -406,13 +406,15 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
         vec![0; 4],
     );
     // spend account #1 and create coins
-    let certificates = rt.block_on(client1.spend_and_create_coins(coins.clone()))?;
+    let assets = rt.block_on(client1.spend_and_create_coins(coins.clone(), Vec::new()))?;
     assert!(client1.lock_certificate.is_some());
-    assert_eq!(certificates.len(), coins.len());
+    assert_eq!(assets.len(), coins.len());
     // receive coins on account #2
-    for (i, certificate) in certificates.into_iter().enumerate() {
-        assert!(matches!(&certificate.value, Value::Coin(c) if c == &coins[i]));
-        rt.block_on(client2.receive_from_fastpay(certificate))?;
+    for (i, asset) in assets.into_iter().enumerate() {
+        assert!(
+            matches!(&asset, Asset::TransparentCoin { certificate } if certificate.value == Value::Coin(coins[i].clone()))
+        );
+        rt.block_on(client2.receive_asset(asset))?;
     }
     assert_eq!(client2.coins.len(), coins.len());
     assert_eq!(
@@ -438,7 +440,7 @@ fn create_and_transfer_coins(coins: Vec<Coin>) -> Result<(), failure::Error> {
         rt.block_on(client3.query_strong_majority_balance()),
         Balance::from(3)
     );
-    rt.block_on(client3.receive_from_fastpay(certificate))?;
+    rt.block_on(client3.receive_confirmation(certificate))?;
     assert_eq!(
         rt.block_on(client3.synchronize_balance()).unwrap(),
         Balance::from(3)
@@ -692,7 +694,7 @@ fn test_receiving_unconfirmed_transfer() {
         SequenceNumber::from(0)
     );
     // Let the receiver confirm in last resort.
-    rt.block_on(client2.receive_from_fastpay(certificate))
+    rt.block_on(client2.receive_confirmation(certificate))
         .unwrap();
     assert_eq!(
         rt.block_on(client2.query_strong_majority_balance()),
@@ -779,7 +781,7 @@ fn test_receiving_unconfirmed_transfer_with_lagging_sender_balances() {
         SequenceNumber::from(0)
     );
     // Let the receiver confirm in last resort.
-    rt.block_on(client2.receive_from_fastpay(certificate))
+    rt.block_on(client2.receive_confirmation(certificate))
         .unwrap();
     assert_eq!(
         rt.block_on(client2.query_strong_majority_balance()),

@@ -8,7 +8,9 @@ edition = "2018"
 [dependencies]
 bcs = "0.1.3"
 bincode = "1.3.3"
+coconut = { version = "0.1.0", path = "../coconut", features = ["with_serde"] }
 failure = "0.1.8"
+ff = "0.11.0"
 futures = "0.3.17"
 generic-array = { version = "0.14.4", features = ["serde"] }
 hex = "0.4.3"
@@ -26,6 +28,16 @@ structopt = "0.3.23"
 similar-asserts = "1.1.0"
 serde-reflection = "0.3.5"
 serde_yaml = "0.8.21"
+coconut = { version = "0.1.0", path = "../coconut", features = ["with_equality"] }
+bulletproofs = { version = "0.1.0", path = "../bulletproofs", features = ["with_equality"] }
+merlin = "2"
+ff = "0.11.0"
+
+[dependencies.bls12_381]
+version = "0.6.0"
+git = "https://github.com/matbd/bls12_381"
+branch = "serde"
+features = ["experimental"]
 
 [[example]]
 name = "generate-format"

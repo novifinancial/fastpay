@@ -102,10 +102,7 @@ impl ClientServerBenchmark {
         for _ in 0..self.committee_size {
             keys.push(KeyPair::generate());
         }
-        let committee = Committee {
-            voting_rights: keys.iter().map(|k| (k.public(), 1)).collect(),
-            total_votes: self.committee_size,
-        };
+        let committee = Committee::make_simple(keys.iter().map(|kp| kp.public()).collect());
 
         // Pick an authority and create one state per shard.
         let key_pair_auth = keys.pop().unwrap();
@@ -114,6 +111,7 @@ impl ClientServerBenchmark {
             let state = AuthorityState::new_shard(
                 committee.clone(),
                 key_pair_auth.copy(),
+                None,
                 i as u32,
                 self.num_shards,
             );

@@ -5,7 +5,8 @@ use crate::transport::NetworkProtocol;
 use fastpay_core::{
     base_types::*,
     client::AccountClientState,
-    messages::{Address, Certificate, Operation, Value},
+    committee::{CoconutSetup, Committee},
+    messages::{Address, Asset, Certificate, Operation, Value},
 };
 
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,7 @@ impl AuthorityConfig {
 pub struct AuthorityServerConfig {
     pub authority: AuthorityConfig,
     pub key: KeyPair,
+    pub coconut_key: Option<coconut::KeyPair>,
 }
 
 impl AuthorityServerConfig {
@@ -54,23 +56,36 @@ impl AuthorityServerConfig {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct CommitteeConfig {
+    pub coconut_setup: Option<CoconutSetup>,
     pub authorities: Vec<AuthorityConfig>,
 }
 
 impl CommitteeConfig {
+    pub fn into_committee(self) -> Committee {
+        Committee::new(self.voting_rights(), self.coconut_setup)
+    }
+
     pub fn read(path: &Path) -> Result<Self, std::io::Error> {
         let file = File::open(path)?;
-        let reader = BufReader::new(file);
-        let stream = serde_json::Deserializer::from_reader(reader).into_iter();
+        let mut reader = BufReader::new(file);
+        let coconut_setup = serde_json::Deserializer::from_reader(&mut reader)
+            .into_iter()
+            .next()
+            .unwrap()
+            .ok();
+        let stream = serde_json::Deserializer::from_reader(&mut reader).into_iter();
         Ok(Self {
             authorities: stream.filter_map(Result::ok).collect(),
+            coconut_setup,
         })
     }
 
     pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
         let file = OpenOptions::new().create(true).write(true).open(path)?;
         let mut writer = BufWriter::new(file);
+        serde_json::to_writer(&mut writer, &self.coconut_setup)?;
         for config in &self.authorities {
             serde_json::to_writer(&mut writer, config)?;
             writer.write_all(b"\n")?;
@@ -78,7 +93,7 @@ impl CommitteeConfig {
         Ok(())
     }
 
-    pub fn voting_rights(&self) -> BTreeMap<AuthorityName, usize> {
+    fn voting_rights(&self) -> BTreeMap<AuthorityName, usize> {
         let mut map = BTreeMap::new();
         for authority in &self.authorities {
             map.insert(authority.name, 1);
@@ -93,7 +108,7 @@ pub struct UserAccount {
     pub key_pair: Option<KeyPair>,
     pub next_sequence_number: SequenceNumber,
     pub balance: Balance,
-    pub coins: Vec<Certificate>,
+    pub coins: Vec<Asset>,
     pub sent_certificates: Vec<Certificate>,
     pub received_certificates: Vec<Certificate>,
 }

@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{base_types::*, committee::Committee, error::FastPayError};
+use ff::Field;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 #[cfg(test)]
 #[path = "unit_tests/messages_tests.rs"]
 mod messages_tests;
-
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 /// A message sent from the smart contract on the primary chain.
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -73,6 +73,33 @@ pub struct RequestValue {
     pub limited_to: Option<AuthorityName>,
 }
 
+/// A certified asset that we own.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub enum Asset {
+    TransparentCoin {
+        certificate: Certificate,
+    },
+    OpaqueCoin {
+        value: OpaqueCoin,
+        credential: coconut::Coin,
+    },
+}
+
+/// The description of an opaque coin as seen by its owner (or creator).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct OpaqueCoin {
+    /// The owner's account
+    pub account_id: AccountId,
+    /// Unique number to distinguish coins inside an account.
+    pub public_seed: u128,
+    /// Random seed to make sure that the value stay confidential after spending the coin.
+    pub private_seed: u128,
+    /// Value of the coin.
+    pub amount: Amount,
+}
+
 /// An authenticated request plus additional certified assets.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
@@ -80,13 +107,12 @@ pub struct RequestOrder {
     pub value: RequestValue,
     pub owner: AccountOwner,
     pub signature: Signature,
-    pub assets: Vec<Certificate>,
+    pub assets: Vec<Asset>,
 }
 
-/// A transparent coin linked a given account.
-// TODO: This could be an enum to allow several types of coins.
+/// The description of a transparent coin linked a given account.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Coin {
+pub struct TransparentCoin {
     pub account_id: AccountId,
     pub amount: Amount,
     pub seed: u128,
@@ -98,16 +124,21 @@ pub struct Coin {
 pub enum Value {
     Lock(Request),
     Confirm(Request),
-    Coin(Coin),
+    Coin(TransparentCoin),
 }
 
 /// The balance of an account plus linked coins to be used in a coin creation description.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CoinCreationSource {
+    /// The account being spent
     pub account_id: AccountId,
+    /// The recorded balance
     pub account_balance: Amount,
-    pub coins: Vec<Certificate>,
+    /// Known transparent coins
+    pub transparent_coins: Vec<Certificate>,
+    /// Public seeds for the coins in the coconut creation request.
+    pub opaque_coin_public_seeds: Vec<u128>,
 }
 
 /// Instructions to create a number of coins during a CoinCreationOrder.
@@ -116,8 +147,10 @@ pub struct CoinCreationSource {
 pub struct CoinCreationDescription {
     /// The sources to be used for coin creation.
     pub sources: Vec<CoinCreationSource>,
-    /// The coins to be created.
-    pub targets: Vec<Coin>,
+    /// Transparent coins to be created.
+    pub targets: Vec<TransparentCoin>,
+    /// Request to consume opaque coins and create new (blinded) ones under ZK, if needed.
+    pub coconut_request: Option<coconut::CoinsRequest>,
 }
 
 /// Same as RequestOrder but meant to create coins.
@@ -131,6 +164,16 @@ pub struct CoinCreationOrder {
     pub locks: Vec<Certificate>,
 }
 
+/// The response to a CoinCreationOrder
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
+pub struct CoinCreationResponse {
+    /// Votes to create transparent coins.
+    pub votes: Vec<Vote>,
+    /// Blinded shares to create opaque coins.
+    pub blinded_coins: Option<coconut::BlindedCoins>,
+}
+
 /// A vote on a statement from an authority.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
@@ -140,7 +183,8 @@ pub struct Vote {
     pub signature: Signature,
 }
 
-/// A certified statement from the committee.
+/// A certified statement from the committee. Note: Opaque coins have no external
+/// signatures and are authenticated at a lower level.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct Certificate {
@@ -184,6 +228,126 @@ pub struct AccountInfoResponse {
 pub enum CrossShardRequest {
     UpdateRecipient { certificate: Certificate },
     DestroyAccount { account_id: AccountId },
+}
+
+#[cfg(test)]
+impl From<Certificate> for Asset {
+    fn from(certificate: Certificate) -> Self {
+        Self::TransparentCoin { certificate }
+    }
+}
+
+/// The component of the "key" public attribute of an opaque coin.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct CoconutKey {
+    /// Owner account
+    pub(crate) account_id: AccountId,
+    /// Number used to differentiate coins in the account.
+    pub(crate) public_seed: u128,
+}
+
+impl CoconutKey {
+    pub(crate) fn scalar(&self) -> bls12_381::Scalar {
+        let hash = HashValue::new(self);
+        bls12_381::Scalar::from_bytes_wide(hash.as_bytes())
+    }
+}
+
+impl OpaqueCoin {
+    pub fn make_input_attribute(&self) -> coconut::InputAttribute {
+        let key = CoconutKey {
+            account_id: self.account_id.clone(),
+            public_seed: self.public_seed,
+        };
+        let value = u64::from(self.amount);
+        let seed = bls12_381::Scalar::from_raw([
+            self.private_seed as u64,
+            (self.private_seed >> 64) as u64,
+            0,
+            0,
+        ]);
+        coconut::InputAttribute {
+            key: key.scalar(),
+            value: value.into(),
+            seed,
+        }
+    }
+
+    pub fn make_output_attribute(&self) -> coconut::OutputAttribute {
+        let coconut::InputAttribute { key, value, seed } = self.make_input_attribute();
+        let mut rng = coconut::rand::thread_rng();
+        let key_blinding_factor = bls12_381::Scalar::random(&mut rng);
+        let value_blinding_factor = bls12_381::Scalar::random(&mut rng);
+        let seed_blinding_factor = bls12_381::Scalar::random(&mut rng);
+        coconut::OutputAttribute {
+            key,
+            key_blinding_factor,
+            value,
+            value_blinding_factor,
+            seed,
+            seed_blinding_factor,
+        }
+    }
+}
+
+impl Asset {
+    pub fn account_id(&self) -> Result<&AccountId, FastPayError> {
+        match self {
+            Asset::TransparentCoin { certificate } => match &certificate.value {
+                Value::Coin(coin) => Ok(&coin.account_id),
+                _ => Err(FastPayError::InvalidAsset),
+            },
+            Asset::OpaqueCoin {
+                value: OpaqueCoin { account_id, .. },
+                ..
+            } => Ok(account_id),
+        }
+    }
+
+    pub fn value(&self) -> Result<Amount, FastPayError> {
+        match self {
+            Asset::TransparentCoin { certificate } => match &certificate.value {
+                Value::Coin(coin) => Ok(coin.amount),
+                _ => Err(FastPayError::InvalidAsset),
+            },
+            Asset::OpaqueCoin {
+                value: OpaqueCoin { amount, .. },
+                ..
+            } => Ok(*amount),
+        }
+    }
+
+    pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
+        match self {
+            Asset::TransparentCoin { certificate } => {
+                let value = certificate.check(committee)?;
+                fp_ensure!(
+                    matches!(value, Value::Coin { .. }),
+                    FastPayError::InvalidAsset
+                );
+            }
+            Asset::OpaqueCoin { value, credential } => {
+                let setup = match &committee.coconut_setup {
+                    Some(setup) => setup,
+                    None => {
+                        return Err(FastPayError::InvalidAsset);
+                    }
+                };
+                let attribute = value.make_input_attribute();
+                fp_ensure!(
+                    credential.plain_verify(
+                        &setup.parameters,
+                        &setup.verification_key,
+                        attribute.value,
+                        attribute.seed,
+                        attribute.key
+                    ),
+                    FastPayError::InvalidAsset
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Operation {
@@ -298,7 +462,7 @@ impl From<Request> for RequestValue {
 }
 
 impl RequestOrder {
-    pub fn new(value: RequestValue, secret: &KeyPair, assets: Vec<Certificate>) -> Self {
+    pub fn new(value: RequestValue, secret: &KeyPair, assets: Vec<Asset>) -> Self {
         let signature = Signature::new(&value, secret);
         Self {
             value,
@@ -424,4 +588,5 @@ impl ConfirmationOrder {
 
 impl BcsSignable for RequestValue {}
 impl BcsSignable for Value {}
+impl BcsSignable for CoconutKey {}
 impl BcsSignable for CoinCreationDescription {}

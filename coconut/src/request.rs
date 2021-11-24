@@ -27,8 +27,8 @@ pub struct InputAttribute {
     pub seed: Scalar,
     /// The value of the input coin.
     pub value: Scalar,
-    // The id of the input coin.
-    pub id: Scalar,
+    /// The key of the input coin.
+    pub key: Scalar,
 }
 
 /// The attributes of the output coins along with their blinding factors.
@@ -43,10 +43,10 @@ pub struct OutputAttribute {
     pub value: Scalar,
     /// The blinding factor used to hide the value of the output coin.
     pub value_blinding_factor: Scalar,
-    /// The id of the output coin.
-    pub id: Scalar,
-    /// The blinding factor used to hide the id of the output coin.
-    pub id_blinding_factor: Scalar,
+    /// The key of the output coin.
+    pub key: Scalar,
+    /// The blinding factor used to hide the key of the output coin.
+    pub key_blinding_factor: Scalar,
 }
 
 /// The randomness used in the coin request.
@@ -78,9 +78,9 @@ pub struct CoinsRequest {
     pub sigmas: Vec<Coin>,
     /// Kappa group elements associated with the input credentials (`sigmas`).
     pub kappas: Vec<G2Projective>,
-    /// The common commitments Cm of the output coin values and ids.
+    /// The common commitments Cm of the output coin values and keys.
     pub cms: Vec<G1Projective>,
-    /// The blinded output coin values and ids.
+    /// The blinded output coin values and keys.
     pub cs: Vec<(G1Projective, G1Projective, G1Projective)>,
     /// Commitments to the input value (used in the ZK proof).
     pub input_commitments: Vec<G1Projective>,
@@ -101,7 +101,7 @@ impl CoinsRequest {
         // The aggregated public key of the authorities.
         public_key: &PublicKey,
         // The credentials representing the input coins. Each credential has two attributes, a coin
-        // value and a id.
+        // value and a key.
         sigmas: &[Coin],
         // The attributes of the input coins (i.e., credentials `sigmas`).
         input_attributes: &[InputAttribute],
@@ -143,7 +143,7 @@ impl CoinsRequest {
         let cms: Vec<_> = output_attributes
             .iter()
             .zip(randomness.os.iter())
-            .map(|(x, o)| h0 * x.value + h1 * x.seed + h2 * x.id + parameters.g1 * o)
+            .map(|(x, o)| h0 * x.value + h1 * x.seed + h2 * x.key + parameters.g1 * o)
             .collect();
 
         // Compute the base group element h.
@@ -160,7 +160,7 @@ impl CoinsRequest {
                 (
                     h * x.value + parameters.g1 * x.value_blinding_factor,
                     h * x.seed + parameters.g1 * x.seed_blinding_factor,
-                    h * x.id + parameters.g1 * x.id_blinding_factor,
+                    h * x.key + parameters.g1 * x.key_blinding_factor,
                 )
             })
             .collect();
@@ -227,8 +227,8 @@ impl CoinsRequest {
         parameters: &Parameters,
         // The authorities aggregated key.
         public_key: &PublicKey,
-        // The ids of the input coins.
-        input_ids: &[Scalar],
+        // The keys of the input coins.
+        input_keys: &[Scalar],
         // The offset between the input and output coins: output = input + offset.
         offset: &Scalar,
     ) -> CoconutResult<()> {
@@ -265,12 +265,12 @@ impl CoinsRequest {
         self.kappas
             .iter()
             .zip(self.sigmas.iter())
-            .zip(input_ids.iter())
-            .all(|((kappa, sigma), id)| {
+            .zip(input_keys.iter())
+            .all(|((kappa, sigma), key)| {
                 !bool::from(sigma.0.is_identity())
                     && Parameters::check_pairing(
                         &sigma.0,
-                        &(kappa + beta2 * id),
+                        &(kappa + beta2 * key),
                         &sigma.1,
                         &parameters.g2,
                     )

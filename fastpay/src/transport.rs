@@ -20,7 +20,7 @@ pub const DEFAULT_MAX_DATAGRAM_SIZE: &str = "65507";
 
 // Supported transport protocols.
 arg_enum! {
-    #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+    #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
     pub enum NetworkProtocol {
         Udp,
         Tcp,

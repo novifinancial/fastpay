@@ -34,7 +34,7 @@ pub trait AuthorityClient {
     fn handle_coin_creation_order(
         &mut self,
         order: CoinCreationOrder,
-    ) -> AsyncResult<Vec<Vote>, FastPayError>;
+    ) -> AsyncResult<CoinCreationResponse, FastPayError>;
 
     /// Handle information queries for this account.
     fn handle_account_info_query(
@@ -63,9 +63,12 @@ pub trait AccountClient {
         user_data: UserData,
     ) -> AsyncResult<Certificate, failure::Error>;
 
-    /// Receive money or a coin from FastPay.
-    fn receive_from_fastpay(&mut self, certificate: Certificate)
+    /// Process confirmed operation for which this account is a recipient.
+    fn receive_confirmation(&mut self, certificate: Certificate)
         -> AsyncResult<(), failure::Error>;
+
+    /// Process an asset linked top this account.
+    fn receive_asset(&mut self, asset: Asset) -> AsyncResult<(), failure::Error>;
 
     /// Rotate the key of the account.
     fn rotate_key_pair(&mut self, key_pair: KeyPair) -> AsyncResult<Certificate, failure::Error>;
@@ -94,14 +97,16 @@ pub trait AccountClient {
     fn create_coins(
         &mut self,
         description: CoinCreationDescription,
+        new_opaque_coins: Vec<(OpaqueCoin, coconut::OutputAttribute)>,
         locked_accounts: Vec<Certificate>,
-    ) -> AsyncResult<Vec<Certificate>, failure::Error>;
+    ) -> AsyncResult<Vec<Asset>, failure::Error>;
 
     /// Spend a single account and create new coins.
     fn spend_and_create_coins(
         &mut self,
-        new_coins: Vec<Coin>,
-    ) -> AsyncResult<Vec<Certificate>, failure::Error>;
+        new_transparent_coins: Vec<TransparentCoin>,
+        new_opaque_coins: Vec<OpaqueCoin>,
+    ) -> AsyncResult<Vec<Asset>, failure::Error>;
 
     /// Spend the account and transfer the value to a receiver.
     fn spend_and_transfer(
@@ -165,7 +170,7 @@ pub struct AccountClientState<AuthorityClient> {
     /// Known key pairs (past and future).
     known_key_pairs: BTreeMap<AccountOwner, KeyPair>,
     /// The coins linked to this account.
-    coins: Vec<Certificate>,
+    coins: Vec<Asset>,
 
     // The remaining fields are used to minimize networking, and may not always be persisted locally.
     /// Confirmed requests that we have created ("sent") and already included in the state
@@ -189,7 +194,7 @@ impl<A> AccountClientState<A> {
         committee: Committee,
         authority_clients: HashMap<AuthorityName, A>,
         next_sequence_number: SequenceNumber,
-        coins: Vec<Certificate>,
+        coins: Vec<Asset>,
         sent_certificates: Vec<Certificate>,
         received_certificates: Vec<Certificate>,
         balance: Balance,
@@ -230,7 +235,7 @@ impl<A> AccountClientState<A> {
         self.next_sequence_number
     }
 
-    pub fn coins(&self) -> &Vec<Certificate> {
+    pub fn coins(&self) -> &Vec<Asset> {
         &self.coins
     }
 
@@ -614,7 +619,7 @@ where
                 for (name, response) in responses {
                     // Process received certificates.
                     for certificate in response.queried_received_certificates {
-                        self.receive_from_fastpay(certificate).await.unwrap_or(());
+                        self.receive_confirmation(certificate).await.unwrap_or(());
                     }
                     // Update tracker.
                     self.received_certificate_trackers
@@ -824,21 +829,27 @@ where
     async fn execute_coin_creation(
         &mut self,
         order: CoinCreationOrder,
-    ) -> Result<Vec<Certificate>, failure::Error> {
-        let coin_num = order.description.targets.len();
+        new_opaque_coins: Vec<(OpaqueCoin, coconut::OutputAttribute)>,
+    ) -> Result<Vec<Asset>, failure::Error> {
+        let targets = order.description.targets.clone();
+        let coin_num = targets.len();
         let committee = self.committee.clone();
         let result = self
             .communicate_with_quorum(|name, client| {
                 let order = order.clone();
                 let committee = committee.clone();
-                let targets = order.description.targets.clone();
+                let targets = targets.clone();
+                let output_attributes = new_opaque_coins
+                    .iter()
+                    .map(|(_, attribute)| attribute.clone())
+                    .collect::<Vec<_>>();
                 Box::pin(async move {
-                    let vector = client.handle_coin_creation_order(order).await?;
+                    let response = client.handle_coin_creation_order(order).await?;
                     fp_ensure!(
-                        vector.len() == coin_num,
+                        response.votes.len() == coin_num,
                         FastPayError::ClientErrorWhileProcessingCoinCreationOrder
                     );
-                    for (i, vote) in vector.iter().enumerate() {
+                    for (i, vote) in response.votes.iter().enumerate() {
                         fp_ensure!(
                             vote.authority == name,
                             FastPayError::ClientErrorWhileProcessingCoinCreationOrder
@@ -849,12 +860,43 @@ where
                         );
                         vote.check(&committee)?;
                     }
-                    Ok(vector)
+                    let (index, verified_shares) = match response.blinded_coins {
+                        None => (/* unused */ 0, Vec::new()),
+                        Some(blinded_coins) => {
+                            let setup = committee
+                                .coconut_setup
+                                .as_ref()
+                                .ok_or(FastPayError::ClientErrorWhileProcessingCoinCreationOrder)?;
+                            fp_ensure!(
+                                blinded_coins.len() == output_attributes.len(),
+                                FastPayError::ClientErrorWhileProcessingCoinCreationOrder
+                            );
+                            let (index, public_key) = &setup
+                                .authorities
+                                .get(&name)
+                                .ok_or(FastPayError::ClientErrorWhileProcessingCoinCreationOrder)?;
+                            let shares = blinded_coins.unblind(public_key, &output_attributes);
+                            for (share, attributes) in shares.iter().zip(output_attributes.iter()) {
+                                fp_ensure!(
+                                    share.plain_verify(
+                                        &setup.parameters,
+                                        public_key,
+                                        attributes.value,
+                                        attributes.seed,
+                                        attributes.key
+                                    ),
+                                    FastPayError::ClientErrorWhileProcessingCoinCreationOrder
+                                );
+                            }
+                            (*index, shares)
+                        }
+                    };
+                    Ok((response.votes, index, verified_shares))
                 })
             })
             .await;
-        let vote_vectors = match result {
-            Ok(vectors) => vectors,
+        let responses = match result {
+            Ok(responses) => responses,
             Err(Some(err)) => bail!(
                 "Failed to communicate with a quorum of authorities: {}",
                 err
@@ -863,27 +905,37 @@ where
                 bail!("Failed to communicate with a quorum of authorities (multiple errors)")
             }
         };
-        let mut builders = order
-            .description
-            .targets
+        let mut builders = targets
             .into_iter()
             .map(|coin| SignatureAggregator::new(Value::Coin(coin), &committee))
             .collect::<Vec<_>>();
-        let mut certificates = Vec::new();
-        for vector in vote_vectors {
-            for (i, vote) in vector.into_iter().enumerate() {
+        let mut coin_shares = std::iter::repeat_with(Vec::new)
+            .take(new_opaque_coins.len())
+            .collect::<Vec<_>>();
+        let mut coins = Vec::new();
+        for (votes, index, shares) in responses {
+            // Votes for transparent coins.
+            for (i, vote) in votes.into_iter().enumerate() {
                 if let Some(certificate) = builders[i].append(vote.authority, vote.signature)? {
-                    certificates.push(certificate);
+                    coins.push(Asset::TransparentCoin { certificate });
                 }
             }
+            // Organize Lagrange shares of opaque coins.
+            for (i, share) in shares.into_iter().enumerate() {
+                coin_shares[i].push((share, index));
+            }
         }
-        Ok(certificates)
+        for (shares, (value, _)) in coin_shares.into_iter().zip(new_opaque_coins.into_iter()) {
+            let credential = coconut::Coin::aggregate(&shares);
+            coins.push(Asset::OpaqueCoin { value, credential });
+        }
+        Ok(coins)
     }
 
     fn make_request_order_with_assets(
         &self,
         request: Request,
-        assets: Vec<Certificate>,
+        assets: Vec<Asset>,
     ) -> Result<RequestOrder, failure::Error> {
         let key_pair = self.key_pair.as_ref().ok_or_else(|| {
             failure::format_err!("Cannot make request for an account that we don't own")
@@ -964,24 +1016,26 @@ where
         })
     }
 
-    fn receive_from_fastpay(
+    fn receive_asset(&mut self, asset: Asset) -> AsyncResult<(), failure::Error> {
+        Box::pin(async move {
+            asset.check(&self.committee)?;
+            ensure!(
+                asset.account_id()? == &self.account_id,
+                "Coin is not linked to this account"
+            );
+            self.coins.push(asset);
+            Ok(())
+        })
+    }
+
+    fn receive_confirmation(
         &mut self,
         certificate: Certificate,
     ) -> AsyncResult<(), failure::Error> {
         Box::pin(async move {
-            certificate.check(&self.committee)?;
-            let request = match &certificate.value {
-                Value::Confirm(r) => r,
-                Value::Coin(coin) => {
-                    ensure!(
-                        coin.account_id == self.account_id,
-                        "Coin is not linked to this account"
-                    );
-                    self.coins.push(certificate);
-                    return Ok(());
-                }
-                _ => bail!("This type of certificate cannot be received"),
-            };
+            let request = certificate.value.confirm_request().ok_or_else(|| {
+                failure::format_err!("Was expecting a confirmed account operation")
+            })?;
             let account_id = &request.account_id;
             ensure!(
                 request.operation.recipient() == Some(&self.account_id),
@@ -1110,44 +1164,149 @@ where
     fn create_coins(
         &mut self,
         description: CoinCreationDescription,
+        new_opaque_coins: Vec<(OpaqueCoin, coconut::OutputAttribute)>,
         locks: Vec<Certificate>,
-    ) -> AsyncResult<Vec<Certificate>, failure::Error> {
+    ) -> AsyncResult<Vec<Asset>, failure::Error> {
         Box::pin(async move {
             let creation_order = CoinCreationOrder { description, locks };
-            let coin_certificates = self.execute_coin_creation(creation_order).await?;
-            Ok(coin_certificates)
+            let coins = self
+                .execute_coin_creation(creation_order, new_opaque_coins)
+                .await?;
+            Ok(coins)
         })
     }
 
     fn spend_and_create_coins(
         &mut self,
-        new_coins: Vec<Coin>,
-    ) -> AsyncResult<Vec<Certificate>, failure::Error> {
+        new_transparent_coins: Vec<TransparentCoin>,
+        new_opaque_coins: Vec<OpaqueCoin>,
+    ) -> AsyncResult<Vec<Asset>, failure::Error> {
         Box::pin(async move {
             let account_balance = self.synchronize_balance().await?;
             let mut amount =
                 Amount::try_from(account_balance.try_add(self.get_coins_value()?.into())?)?;
-            let mut seeds = BTreeSet::new();
-            for coin in &new_coins {
-                ensure!(!seeds.contains(&coin.seed), "Coin seeds must be unique");
-                seeds.insert(coin.seed);
-                amount
-                    .try_sub_assign(coin.amount)
-                    .map_err(|_| failure::format_err!("Insufficient balance to create coins"))?;
+            // Check description for new transparent coins.
+            {
+                let mut seeds = BTreeSet::new();
+                for coin in &new_transparent_coins {
+                    ensure!(
+                        !seeds.contains(&coin.seed),
+                        "TransparentCoin seeds must be unique"
+                    );
+                    seeds.insert(coin.seed);
+                    amount.try_sub_assign(coin.amount).map_err(|_| {
+                        failure::format_err!("Insufficient balance to create coins")
+                    })?;
+                }
+            }
+            // Check description for new opaque coins.
+            {
+                let mut seeds = BTreeSet::new();
+                for coin in &new_opaque_coins {
+                    ensure!(
+                        !seeds.contains(&coin.public_seed),
+                        "TransparentCoin seeds must be unique"
+                    );
+                    seeds.insert(coin.public_seed);
+                    amount.try_sub_assign(coin.amount).map_err(|_| {
+                        failure::format_err!("Insufficient balance to create coins")
+                    })?;
+                }
             }
             let account_balance = Amount::try_from(account_balance)?;
+            let old_transparent_coins = self
+                .coins
+                .iter()
+                .filter_map(|asset| match asset {
+                    Asset::TransparentCoin { certificate } => Some(certificate.clone()),
+                    _ => None,
+                })
+                .collect();
+            let old_opaque_coin_public_seeds = self
+                .coins
+                .iter()
+                .filter_map(|asset| match asset {
+                    Asset::OpaqueCoin {
+                        value:
+                            OpaqueCoin {
+                                account_id,
+                                public_seed,
+                                ..
+                            },
+                        ..
+                    } => {
+                        assert_eq!(account_id, &self.account_id);
+                        Some(*public_seed)
+                    }
+                    _ => None,
+                })
+                .collect();
+            let old_opaque_coins = self
+                .coins
+                .iter()
+                .filter_map(|asset| match asset {
+                    Asset::OpaqueCoin { credential, .. } => Some(credential.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
             let source = CoinCreationSource {
                 account_id: self.account_id.clone(),
                 account_balance,
-                coins: self.coins.clone(),
+                transparent_coins: old_transparent_coins,
+                opaque_coin_public_seeds: old_opaque_coin_public_seeds,
             };
+            let (coconut_request, new_opaque_coins_with_attributes) =
+                if old_opaque_coins.is_empty() && new_opaque_coins.is_empty() {
+                    (None, Vec::new())
+                } else {
+                    let setup = self
+                        .committee
+                        .coconut_setup
+                        .as_ref()
+                        .expect("Coconut must be configured to use opaque coins");
+                    ensure!(
+                        new_opaque_coins.len() <= setup.parameters.max_outputs(),
+                        "Cannot create more than {} coins at a time in the current setup",
+                        setup.parameters.max_outputs()
+                    );
+                    let input_attributes = self
+                        .coins
+                        .iter()
+                        .filter_map(|asset| match asset {
+                            Asset::OpaqueCoin { value, .. } => Some(value.make_input_attribute()),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>();
+                    let mut new_opaque_coins_with_attributes = Vec::new();
+                    let mut output_attributes = Vec::new();
+                    for coin in new_opaque_coins {
+                        let attribute = coin.make_output_attribute();
+                        output_attributes.push(attribute.clone());
+                        new_opaque_coins_with_attributes.push((coin, attribute));
+                    }
+                    let request = coconut::CoinsRequest::new(
+                        coconut::rand::thread_rng(),
+                        &setup.parameters,
+                        &setup.verification_key,
+                        &old_opaque_coins,
+                        &input_attributes,
+                        &output_attributes,
+                    );
+                    (Some(request), new_opaque_coins_with_attributes)
+                };
             let description = CoinCreationDescription {
                 sources: vec![source],
-                targets: new_coins,
+                targets: new_transparent_coins,
+                coconut_request,
             };
             let description_hash = HashValue::new(&description);
             let lock_certificate = self.spend_unsafe(account_balance, description_hash).await?;
-            self.create_coins(description, vec![lock_certificate]).await
+            self.create_coins(
+                description,
+                new_opaque_coins_with_attributes,
+                vec![lock_certificate],
+            )
+            .await
         })
     }
 
@@ -1155,9 +1314,8 @@ where
         let mut amount = Amount::from(0);
         for coin in &self.coins {
             let v = coin
-                .value
-                .coin_amount()
-                .ok_or_else(|| failure::format_err!("Client state contains invalid coins"))?;
+                .value()
+                .map_err(|_| failure::format_err!("Client state contains invalid coins"))?;
             amount.try_add_assign(v)?;
         }
         Ok(amount)
