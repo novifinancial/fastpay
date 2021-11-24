@@ -1,3 +1,8 @@
+// Copyright (c) 2018 Chain, Inc.
+// SPDX-License-Identifier: MIT
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use bls12_381::{
     hash_to_curve::{ExpandMsgXmd, HashToCurve},
     G1Projective, Scalar,
