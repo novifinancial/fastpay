@@ -1,3 +1,8 @@
+// Copyright (c) 2018 Chain, Inc.
+// SPDX-License-Identifier: MIT
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::inner_product_proof::inner_product;
 use bls12_381::Scalar;
 use clear_on_drop::clear::Clear;

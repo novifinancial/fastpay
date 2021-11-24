@@ -43,7 +43,8 @@ impl Coin {
         let beta1 = &public_key.betas[1];
         let beta2 = &public_key.betas[2];
         let kappa = public_key.alpha + beta0 * value + beta1 * seed + beta2 * id;
-        Parameters::check_pairing(&self.0, &kappa, &self.1, &parameters.g2)
+        !bool::from(self.0.is_identity())
+            && Parameters::check_pairing(&self.0, &kappa, &self.1, &parameters.g2)
     }
 
     /// Aggregates multiple shares of coins into a single coin.

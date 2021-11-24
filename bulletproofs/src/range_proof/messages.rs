@@ -1,3 +1,8 @@
+// Copyright (c) 2018 Chain, Inc.
+// SPDX-License-Identifier: MIT
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::generators::{BulletproofGens, PedersenGens};
 use bls12_381::{G1Projective, Scalar};
 use core::iter;
