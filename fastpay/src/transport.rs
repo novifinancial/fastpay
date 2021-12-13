@@ -53,8 +53,8 @@ pub trait MessageHandler {
 
 /// The result of spawning a server is oneshot channel to kill it and a handle to track completion.
 pub struct SpawnedServer {
-    complete: futures::channel::oneshot::Sender<()>,
-    handle: tokio::task::JoinHandle<Result<(), std::io::Error>>,
+    pub complete: futures::channel::oneshot::Sender<()>,
+    pub handle: tokio::task::JoinHandle<Result<(), std::io::Error>>,
 }
 
 impl SpawnedServer {
