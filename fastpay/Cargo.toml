@@ -19,9 +19,14 @@ serde_json = "1.0.68"
 structopt = "0.3.23"
 tempfile = "3.2.0"
 tokio = { version = "1.12.0", features = ["full"] }
+anyhow = { version = "1.0.51", optional = true }
+tokio-util = { version = "0.6.9", features = ["codec"], optional = true }
 
 fastpay_core = { path = "../fastpay_core" }
 coconut = { path = "../coconut", features = ["with_serde"] }
+
+[features]
+benchmark = ["fastpay_core/benchmark", "anyhow", "tokio-util"]
 
 [[bin]]
 name = "client"
@@ -34,3 +39,8 @@ path = "src/server.rs"
 [[bin]]
 name = "bench"
 path = "src/bench.rs"
+
+[[bin]]         
+name = "benchmark_client"   
+path = "src/benchmark_client.rs" 
+required-features = ["benchmark"] 

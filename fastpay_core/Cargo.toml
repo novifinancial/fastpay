@@ -44,3 +44,6 @@ name = "generate-format"
 path = "src/generate_format.rs"
 test = false
 
+[features]
+benchmark = []
+

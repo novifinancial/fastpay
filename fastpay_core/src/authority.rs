@@ -169,7 +169,8 @@ impl Authority for AuthorityState {
         &mut self,
         order: RequestOrder,
     ) -> Result<AccountInfoResponse, FastPayError> {
-        // Verify sharding.
+        // Verify sharding. Disable this check for benchmarks.
+        #[cfg(not(feature = "benchmark"))]
         fp_ensure!(
             self.in_shard(&order.value.request.account_id),
             FastPayError::WrongShard
@@ -182,8 +183,16 @@ impl Authority for AuthorityState {
         for asset in &order.assets {
             asset.check(&self.committee)?;
         }
-        // Obtain the sender's account.
+        // Obtain the sender's account. If we are running a benchmark, the sender account is random and does not exist,
+        // so we create it here on the spot.
         let sender = order.value.request.account_id.clone();
+
+        #[cfg(feature = "benchmark")]
+        {
+            let state = AccountState::new(order.owner, Balance::from(10));
+            self.accounts.insert(sender.clone(), state);
+        }
+
         let account = self
             .accounts
             .get_mut(&sender)
