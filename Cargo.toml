@@ -3,7 +3,8 @@ members = [
         "fastpay_core",
         "fastpay",
         "coconut",
-        "bulletproofs"
+        "bulletproofs",
+        "benchmark_client"
 ]
 
 [profile.release]

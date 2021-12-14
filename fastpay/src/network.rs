@@ -158,7 +158,7 @@ impl Server {
         if cfg!(feature = "benchmark") {
             let _buffer_size = buffer_size;
             let _protocol = protocol;
-            use crate::benchmark_server::BenchmarkServer;
+            use crate::network_server::BenchmarkServer;
             BenchmarkServer::spawn(address, state)
         } else {
             protocol.spawn_server(&address, state, buffer_size).await

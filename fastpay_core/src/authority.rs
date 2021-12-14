@@ -89,7 +89,8 @@ impl AuthorityState {
         request: Request,
         certificate: Certificate, // For logging purpose
     ) -> Result<(AccountInfoResponse, CrossShardContinuation), FastPayError> {
-        // Verify sharding.
+        // Verify sharding. Disable this check for benchmarks.
+        #[cfg(not(feature = "benchmark"))]
         fp_ensure!(self.in_shard(&request.account_id), FastPayError::WrongShard);
         // Obtain the sender's account.
         let sender = request.account_id.clone();

@@ -43,7 +43,7 @@ pub enum Operation {
     CloseAccount,
     /// Change the authentication key of the account.
     ChangeOwner { new_owner: AccountOwner },
-    /// Lock the account so that the balance and linked coins may be eventually transfered
+    /// Lock the account so that the balance and linked coins may be eventually transferred
     /// to new coins (according to the "coin creation description" behind `description_hash`).
     Spend {
         account_balance: Amount,
@@ -434,7 +434,7 @@ impl Value {
 }
 
 /// Non-testing code should make the pattern matching explicit so that
-/// we kwow where to add protocols in the future.
+/// we know where to add protocols in the future.
 #[cfg(test)]
 impl Request {
     pub(crate) fn amount(&self) -> Option<Amount> {

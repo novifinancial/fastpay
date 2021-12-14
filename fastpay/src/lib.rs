@@ -8,4 +8,4 @@ pub mod network;
 pub mod transport;
 
 #[cfg(feature = "benchmark")]
-mod benchmark_server;
+mod network_server;

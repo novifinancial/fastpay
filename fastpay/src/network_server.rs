@@ -1,8 +1,6 @@
 use crate::transport::{MessageHandler, SpawnedServer};
 use bytes::Bytes;
-use futures::future;
-use futures::stream::StreamExt as _;
-use futures::SinkExt as _;
+use futures::{future, stream::StreamExt as _, SinkExt as _};
 use log::{debug, info, warn};
 use tokio::net::TcpListener;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
