@@ -545,6 +545,7 @@ impl<'a> SignatureAggregator<'a> {
         self.partial.signatures.push((authority, signature));
 
         if self.weight >= self.committee.quorum_threshold() {
+            self.weight = 0; // Prevent from creating the certificate twice.
             Ok(Some(self.partial.clone()))
         } else {
             Ok(None)

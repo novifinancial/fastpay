@@ -133,10 +133,12 @@ impl BenchmarkClient {
                     SerializedMessage::InfoResponse(response) => {
                         if let Some(bytes) = self.try_make_certificate(response, &mut aggregators)? {
                             for handler in &connection_handlers {
+                                /*
                                 handler
                                     .send(bytes.clone())
                                     .await
                                     .map_err(|_| NetworkError::ConnectionDropped)?;
+                                    */
                             }
                         }
                     },
@@ -189,13 +191,12 @@ impl BenchmarkClient {
         Bytes::from(serialized_order)
     }
 
-    // Try to assemble a certificate from votes.
+    /// Try to assemble a certificate from votes.
     fn try_make_certificate<'a>(
         &'a self,
         response: Box<AccountInfoResponse>,
         aggregators: &mut HashMap<AccountId, SignatureAggregator<'a>>,
     ) -> Result<Option<Bytes>, NetworkError> {
-        warn!("{:?}", response);
         let vote = response
             .pending
             .ok_or_else(|| NetworkError::ResponseWithoutVote)?;

@@ -49,7 +49,6 @@ impl BenchmarkServer {
 
             info!("Incoming connection established with {}", peer);
 
-            // TODO: This is bad, the server can handle a single client at the time.
             let transport = Framed::new(socket, LengthDelimitedCodec::new());
             let (mut writer, mut reader) = transport.split();
             while let Some(frame) = reader.next().await {
