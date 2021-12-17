@@ -235,6 +235,9 @@ fn main() {
             initial_accounts,
             shard,
         } => {
+            #[cfg(feature = "benchmark")]
+            warn!("The server is running in benchmark mode: Do not use it in production");
+
             // Run the server
             let servers = match shard {
                 Some(shard) => {
@@ -283,10 +286,10 @@ fn main() {
         }
 
         ServerCommands::Generate { options } => {
-            let path = options.server_config_path.clone();
+            let mut path = options.server_config_path.clone();
             let server = make_server_config(options);
             server
-                .write(&path)
+                .write(&mut path)
                 .expect("Unable to write server config file");
             info!("Wrote server config file");
             server.authority.print();

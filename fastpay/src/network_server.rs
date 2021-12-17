@@ -5,8 +5,9 @@ use log::{debug, info, warn};
 use tokio::net::TcpListener;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-/// A bad server that can accept only one connection at the time.
+/// A simple network server used for benchmarking.
 pub struct BenchmarkServer {
+    /// The network address of the server.
     address: String,
 }
 

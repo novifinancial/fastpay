@@ -4,6 +4,8 @@
 use crate::transport::*;
 use fastpay_core::{authority::*, base_types::*, client::*, error::*, messages::*, serialize::*};
 
+#[cfg(feature = "benchmark")]
+use crate::network_server::BenchmarkServer;
 use bytes::Bytes;
 use futures::{channel::mpsc, future::FutureExt, sink::SinkExt, stream::StreamExt};
 use log::*;
@@ -155,12 +157,15 @@ impl Server {
             cross_shard_sender,
         };
         // Launch server for the appropriate protocol.
-        if cfg!(feature = "benchmark") {
+        #[cfg(feature = "benchmark")]
+        {
             let _buffer_size = buffer_size;
             let _protocol = protocol;
-            use crate::network_server::BenchmarkServer;
             BenchmarkServer::spawn(address, state)
-        } else {
+        }
+
+        #[cfg(not(feature = "benchmark"))]
+        {
             protocol.spawn_server(&address, state, buffer_size).await
         }
     }

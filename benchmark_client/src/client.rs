@@ -195,6 +195,7 @@ impl BenchmarkClient {
         response: Box<AccountInfoResponse>,
         aggregators: &mut HashMap<AccountId, SignatureAggregator<'a>>,
     ) -> Result<Option<Bytes>, NetworkError> {
+        warn!("{:?}", response);
         let vote = response
             .pending
             .ok_or_else(|| NetworkError::ResponseWithoutVote)?;

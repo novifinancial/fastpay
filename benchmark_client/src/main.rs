@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use clap::{crate_name, crate_version, App, AppSettings};
 use env_logger::Env;
 use fastpay::config::CommitteeConfig;
+use fastpay::config::Import as _;
 use std::{net::SocketAddr, path::Path};
 
 #[tokio::main]
@@ -41,6 +42,10 @@ async fn main() -> Result<()> {
     let committee = CommitteeConfig::read(committee_config_path)
         .expect("Fail to read committee config")
         .into_committee();
+    log::warn!(
+        "{:?}",
+        CommitteeConfig::read(committee_config_path).unwrap()
+    );
 
     let others = matches
         .values_of("others")
