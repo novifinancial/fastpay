@@ -29,7 +29,12 @@ class Committee:
                 "shards": {
                     "0": x.x.x.x:x,
                     ...
-                }
+                },
+
+                # TODO: Remove the following fields.
+                host: x.x.x.x,
+                base_port: x,
+                num_shards: x
             },
             ...
         }
@@ -58,8 +63,11 @@ class Committee:
             shards = [f'{host}:{base_port+i}' for i, host in enumerate(hosts)]
             self.json['authorities'][name] = {
                 'name': name,
-                "network_protocol": network_protocol,
-                'shards': shards
+                'network_protocol': network_protocol,
+                'shards': shards,
+                'host': hosts[0],
+                'base_port': base_port,
+                'num_shards': len(addresses)
             }
 
     def addresses(self, faults=0):
