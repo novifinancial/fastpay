@@ -1,4 +1,4 @@
-use crate::error::NetworkError;
+use crate::error::BenchError;
 use bytes::Bytes;
 use futures::{stream::StreamExt as _, SinkExt as _};
 use log::{info, warn};
@@ -38,7 +38,7 @@ impl Connection {
         let (mut writer, mut reader) = match TcpStream::connect(self.address).await {
             Ok(stream) => Framed::new(stream, LengthDelimitedCodec::new()).split(),
             Err(e) => {
-                warn!("{}", NetworkError::FailedToConnect(self.address, e));
+                warn!("{}", BenchError::FailedToConnect(self.address, e));
                 return;
             }
         };
@@ -50,7 +50,7 @@ impl Connection {
             tokio::select! {
                 Some(data) = self.rx_request.recv() => {
                     if let Err(e) = writer.send(data).await {
-                        warn!("{}", NetworkError::FailedToSendMessage(self.address, e));
+                        warn!("{}", BenchError::FailedToSendMessage(self.address, e));
                         return;
                     }
                 },
@@ -59,7 +59,7 @@ impl Connection {
                         Some(Ok(bytes)) => self.tx_reply.send(bytes.freeze()).await.expect("Failed to send reply"),
                         _ => {
                             // Something has gone wrong (either the channel dropped or we failed to read from it).
-                            warn!("{}", NetworkError::FailedToReceiveReply(self.address));
+                            warn!("{}", BenchError::FailedToReceiveReply(self.address));
                             return;
                         }
                     }

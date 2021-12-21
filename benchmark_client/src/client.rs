@@ -1,6 +1,6 @@
 use crate::{
     connection::Connection,
-    error::NetworkError,
+    error::BenchError,
     transaction_maker::{DumbCertificateMaker, DumbRequestMaker},
 };
 use bytes::Bytes;
@@ -14,7 +14,7 @@ use std::{collections::HashMap, net::SocketAddr};
 use tokio::{
     net::TcpStream,
     sync::mpsc::{channel, Receiver, Sender},
-    task::{JoinError, JoinHandle},
+    task::JoinHandle,
     time::{interval, sleep, Duration, Instant},
 };
 
@@ -110,11 +110,19 @@ impl BenchmarkClient {
                 let now = Instant::now();
                 for x in 0..burst {
                     let bytes = tx_maker.make_request(x, counter, burst);
+
+                    if x == counter % burst {
+                        // NOTE: This log entry is used to compute performance.
+                        info!("Sending sample transaction {}", counter);
+                    } else {
+                        info!("00000");
+                    }
+
                     for handler in &connection_handlers {
                         handler
                             .send(bytes.clone())
                             .await
-                            .map_err(|_| NetworkError::ConnectionDropped)
+                            .map_err(|_| BenchError::ConnectionDropped)
                             .unwrap();
                     }
                 }
@@ -142,23 +150,50 @@ impl BenchmarkClient {
         // Try to assemble certificates and disseminate them.
         tokio::spawn(async move {
             let mut aggregators = HashMap::new();
+            let mut last_id = 0;
             loop {
                 tokio::select! {
                     Some(bytes) = rx_certificate.recv() => {
                         match deserialize_message(&*bytes).unwrap() {
                             SerializedMessage::InfoResponse(response) => {
+                                let id = response
+                                    .account_id
+                                    .sequence_number()
+                                    .unwrap()
+                                    .0;
+                                let sample = response.account_id.0[0].0; // TODO: This is unreadable.
+
+                                // Ensures `aggregators` does not make use run out of memory.
+                                if id <= last_id {
+                                    continue;
+                                }
+
+                                // Check if we got a certificate.
+                                let account_id = response.account_id.clone();
                                 if let Some(bytes) = tx_maker.try_make_certificate(response, &mut aggregators).unwrap() {
+                                    let _ = aggregators.remove(&account_id);
+                                    last_id = id;
+
+                                    // NOTE: This log entry is used to compute performance.
+                                    info!("Assembled certificate {:?}", id);
+
+                                    if sample != 0 {
+                                        // NOTE: This log entry is used to compute performance.
+                                        info!("Assembled certificate for tx {:?}", sample);
+                                    }
+
                                     for handler in &connection_handlers {
                                         handler
                                             .send(bytes.clone())
                                             .await
-                                            .map_err(|_| NetworkError::ConnectionDropped).unwrap();
+                                            .map_err(|_| BenchError::ConnectionDropped)
+                                            .unwrap();
                                     }
                                 }
                                 Ok(())
                             },
-                            SerializedMessage::Error(e) => Err(NetworkError::SerializationError(e.to_string())),
-                            reply @ _ => Err(NetworkError::UnexpectedReply(reply))
+                            SerializedMessage::Error(e) => Err(BenchError::SerializationError(e.to_string())),
+                            reply @ _ => Err(BenchError::UnexpectedReply(reply))
                         }
                         .unwrap()
                     },
@@ -171,10 +206,13 @@ impl BenchmarkClient {
     }
 
     /// Run the benchmark.
-    pub async fn benchmark(&self) -> Result<(), JoinError> {
+    pub async fn benchmark(&self) -> Result<(), BenchError> {
         let (tx_certificate, rx_certificate) = channel(CHANNEL_CAPACITY);
         let handler_1 = self.send_requests(tx_certificate);
         let handler_2 = self.send_certificates(rx_certificate);
-        try_join(handler_1, handler_2).await.map(|_| ())
+        try_join(handler_1, handler_2)
+            .await
+            .map(|_| ())
+            .map_err(BenchError::from)
     }
 }

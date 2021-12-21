@@ -1,9 +1,10 @@
 use fastpay_core::{error::FastPayError, serialize::SerializedMessage};
 use std::{fmt::Debug, net::SocketAddr};
 use thiserror::Error;
+use tokio::task::JoinError;
 
 #[derive(Error, Debug)]
-pub enum NetworkError {
+pub enum BenchError {
     #[error("Failed to connect to {0}: {1}")]
     FailedToConnect(SocketAddr, std::io::Error),
 
@@ -27,16 +28,19 @@ pub enum NetworkError {
 
     #[error("Connection dropped")]
     ConnectionDropped,
+
+    #[error(transparent)]
+    ClientError(#[from] JoinError),
 }
 
-impl From<failure::Error> for NetworkError {
+impl From<failure::Error> for BenchError {
     fn from(error: failure::Error) -> Self {
-        NetworkError::SerializationError(error.to_string())
+        BenchError::SerializationError(error.to_string())
     }
 }
 
-impl From<FastPayError> for NetworkError {
+impl From<FastPayError> for BenchError {
     fn from(error: FastPayError) -> Self {
-        NetworkError::FastPayError(error)
+        BenchError::FastPayError(error)
     }
 }

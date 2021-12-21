@@ -1,4 +1,4 @@
-use crate::error::NetworkError;
+use crate::error::BenchError;
 use bytes::Bytes;
 use fastpay_core::{
     base_types::{AccountId, Amount, KeyPair, SequenceNumber, UserData},
@@ -9,7 +9,6 @@ use fastpay_core::{
     },
     serialize::{serialize_confirmation_order, serialize_request_order},
 };
-use log::info;
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -31,9 +30,14 @@ impl DumbRequestMaker {
 
     /// Make a dummy (but valid) request order.
     pub fn make_request(&self, x: u64, counter: u64, burst: u64) -> Bytes {
+        let sample = match x == counter % burst {
+            true => counter,
+            false => 0,
+        };
+
         // Create the sender and receiver ensuring they don't clash.
         let sender = AccountId::new(vec![
-            SequenceNumber::new(),
+            SequenceNumber::from(sample),
             SequenceNumber::from(x),
             SequenceNumber::from(self.r + counter),
         ]);
@@ -43,31 +47,18 @@ impl DumbRequestMaker {
             SequenceNumber::new(),
         ]);
 
-        // We will use the user-data to distinguish sample transactions.
-        let user_data = (x == counter % burst).then(|| {
-            let mut data = [0u8; 32];
-            data[..8].clone_from_slice(&counter.to_le_bytes());
-            data
-        });
-
         // Make a transfer request for 1 coin.
         let request = Request {
             account_id: sender,
             operation: Operation::Transfer {
                 recipient: Address::FastPay(recipient),
                 amount: Amount::from(1),
-                user_data: UserData(user_data.clone()),
+                user_data: UserData::default(),
             },
             sequence_number: SequenceNumber::new(),
         };
         let order = RequestOrder::new(request.into(), &self.keypair, Vec::new());
         let serialized_order = serialize_request_order(&order);
-
-        if user_data.is_some() {
-            // NOTE: This log entry is used to compute performance.
-            info!("Sending sample transaction {}", counter);
-        }
-
         Bytes::from(serialized_order)
     }
 }
@@ -84,27 +75,16 @@ impl DumbCertificateMaker {
         &'a self,
         response: Box<AccountInfoResponse>,
         aggregators: &mut HashMap<AccountId, SignatureAggregator<'a>>,
-    ) -> Result<Option<Bytes>, NetworkError> {
+    ) -> Result<Option<Bytes>, BenchError> {
         let vote = response
             .pending
-            .ok_or_else(|| NetworkError::ResponseWithoutVote)?;
+            .ok_or_else(|| BenchError::ResponseWithoutVote)?;
 
         aggregators
             .entry(response.account_id.clone())
             .or_insert_with(|| SignatureAggregator::new(vote.value.clone(), &self.committee))
             .append(vote.authority, vote.signature)?
             .map_or(Ok(None), |certificate| {
-                let identifier = certificate
-                    .value
-                    .confirm_account_id()
-                    .unwrap()
-                    .sequence_number()
-                    .unwrap()
-                    .0;
-
-                // NOTE: This log entry is used to compute performance.
-                info!("Assembled certificate {:?}", identifier);
-
                 let serialized = serialize_confirmation_order(&ConfirmationOrder { certificate });
                 Ok(Some(Bytes::from(serialized)))
             })
