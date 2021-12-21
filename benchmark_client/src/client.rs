@@ -114,8 +114,6 @@ impl BenchmarkClient {
                     if x == counter % burst {
                         // NOTE: This log entry is used to compute performance.
                         info!("Sending sample transaction {}", counter);
-                    } else {
-                        info!("00000");
                     }
 
                     for handler in &connection_handlers {
@@ -161,22 +159,23 @@ impl BenchmarkClient {
                                     .sequence_number()
                                     .unwrap()
                                     .0;
-                                let sample = response.account_id.0[0].0; // TODO: This is unreadable.
 
                                 // Ensures `aggregators` does not make use run out of memory.
-                                if id <= last_id {
+                                if id < last_id {
                                     continue;
                                 }
 
                                 // Check if we got a certificate.
                                 let account_id = response.account_id.clone();
                                 if let Some(bytes) = tx_maker.try_make_certificate(response, &mut aggregators).unwrap() {
-                                    let _ = aggregators.remove(&account_id);
+                                    aggregators.retain(|k, _| k.origin().unwrap() >= account_id.origin().unwrap());
                                     last_id = id;
 
                                     // NOTE: This log entry is used to compute performance.
-                                    info!("Assembled certificate {:?}", id);
+                                    info!("Assembled certificate");
 
+                                    // Check of this certificate comes from a sample transaction.
+                                    let sample = account_id.origin().unwrap().0;
                                     if sample != 0 {
                                         // NOTE: This log entry is used to compute performance.
                                         info!("Assembled certificate for tx {:?}", sample);
