@@ -1,5 +1,4 @@
-use fastpay_core::error::FastPayError;
-use fastpay_core::serialize::SerializedMessage;
+use fastpay_core::{error::FastPayError, serialize::SerializedMessage};
 use std::{fmt::Debug, net::SocketAddr};
 use thiserror::Error;
 

@@ -1,13 +1,13 @@
 mod client;
 mod connection;
 mod error;
+mod transaction_maker;
 
 use crate::client::BenchmarkClient;
 use anyhow::{Context, Result};
 use clap::{crate_name, crate_version, App, AppSettings};
 use env_logger::Env;
-use fastpay::config::CommitteeConfig;
-use fastpay::config::Import as _;
+use fastpay::config::{CommitteeConfig, Import as _};
 use std::{net::SocketAddr, path::Path};
 
 #[tokio::main]
