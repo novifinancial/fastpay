@@ -283,6 +283,11 @@ impl AccountId {
         id.0.push(num);
         id
     }
+
+    #[cfg(feature = "benchmark")]
+    pub fn origin(&self) -> Option<SequenceNumber> {
+        self.0.first().cloned()
+    }
 }
 
 impl Amount {
