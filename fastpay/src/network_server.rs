@@ -66,7 +66,7 @@ impl BenchmarkServer {
                 Some((peer, bytes)) = rx_request.recv() => {
                     if let Some(sender) = self.handles.get(&peer) {
                         if let Some(reply) = handler.handle_message(&bytes).await {
-                            if Err(e) = sender
+                            if let Err(e) = sender
                                 .send(Bytes::from(reply))
                                 .await 
                             {
@@ -79,6 +79,7 @@ impl BenchmarkServer {
                 else => break
             }
         }
+        Ok(())
     }
 
     fn spawn_connection(
@@ -98,7 +99,7 @@ impl BenchmarkServer {
                             .await
                             .expect("Failed to send message to main network task"),
                         Err(e) => {
-                            warn!("Error while reading TCP stream: {}", e);
+                            warn!("Failed to read TCP stream: {}", e);
                             break;
                         }
                     },
@@ -107,7 +108,8 @@ impl BenchmarkServer {
                             warn!("Failed to send reply to client: {}", e);
                             break;
                         }
-                    }
+                    },
+                    else => break
                 }
             }
             info!("Connection closed");
