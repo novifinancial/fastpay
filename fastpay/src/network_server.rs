@@ -94,10 +94,14 @@ impl BenchmarkServer {
             loop {
                 tokio::select! {
                     Some(frame) = reader.next() => match frame {
-                        Ok(message) => tx_request
+                        Ok(message) => {
+                            if let Err(e) = tx_request
                             .send((peer, message.freeze()))
-                            .await
-                            .expect("Failed to send message to main network task"),
+                            .await {
+                                warn!("Failed to send message to main network task: {}", e);
+                                break;
+                            }
+                        },
                         Err(e) => {
                             warn!("Failed to read TCP stream: {}", e);
                             break;

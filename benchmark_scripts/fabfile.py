@@ -88,7 +88,7 @@ def remote(ctx, debug=False):
         'nodes': [10],
         'shards': 1,
         'collocate': True,
-        'rate': [5_000],
+        'rate': [2_000],
         'duration': 30,
         'runs': 1,
     }

@@ -351,7 +351,7 @@ class Bench:
                         logger.print(PathMaker.result_file(
                             faults,
                             n,
-                            bench_parameters.workers,
+                            bench_parameters.shard,
                             bench_parameters.collocate,
                             r,
                             bench_parameters.tx_size,
