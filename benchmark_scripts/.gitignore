@@ -1,7 +1,8 @@
-node
+server
 benchmark_client
 results
 plots
+.empty.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
