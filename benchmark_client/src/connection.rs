@@ -59,7 +59,12 @@ impl Connection {
                 },
                 response = reader.next() => {
                     match response {
-                        Some(Ok(bytes)) => self.tx_reply.send(bytes.freeze()).await.expect("Failed to send reply"),
+                        Some(Ok(bytes)) => {
+                            if let Err(e) = self.tx_reply.send(bytes.freeze()).await {
+                                warn!("Failed to send reply: {}", e);
+                                return;
+                            }
+                        },
                         _ => {
                             // Something has gone wrong (either the channel dropped or we failed to read from it).
                             warn!("{}", BenchError::FailedToReceiveReply(self.address));

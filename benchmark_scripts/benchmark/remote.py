@@ -368,7 +368,7 @@ class Bench:
 
         # Run benchmarks.
         for n in bench_parameters.nodes:
-            Print.heading(f'\nRunning {n} nodes')
+            Print.heading(f'\nBenchmarking {n} nodes')
 
             # Upload all configuration files.
             try:
