@@ -108,7 +108,7 @@ impl BenchmarkClient {
             // NOTE: This log entry is used to compute performance.
             info!("Start sending transactions");
 
-            loop {
+            'main: loop {
                 interval.tick().await;
                 let now = Instant::now();
                 for x in 0..burst {
@@ -120,11 +120,14 @@ impl BenchmarkClient {
                     }
 
                     for handler in &connection_handlers {
-                        handler
+                        if let Err(e) = handler
                             .send(bytes.clone())
                             .await
                             .map_err(|_| BenchError::ConnectionDropped)
-                            .unwrap();
+                        {
+                            warn!("{}", e);
+                            break 'main;
+                        }
                     }
                 }
                 counter += 1;
@@ -152,7 +155,7 @@ impl BenchmarkClient {
         tokio::spawn(async move {
             let mut aggregators = HashMap::new();
             let mut last_id = 0;
-            loop {
+            'main: loop {
                 tokio::select! {
                     Some(bytes) = rx_certificate.recv() => {
                         match deserialize_message(&*bytes).unwrap() {
@@ -179,11 +182,14 @@ impl BenchmarkClient {
                                     info!("Assembled certificate {}", id);
 
                                     for handler in &connection_handlers {
-                                        handler
+                                        if let Err(e) = handler
                                             .send(bytes.clone())
                                             .await
-                                            .map_err(|_| BenchError::ConnectionDropped)
-                                            .unwrap();
+                                            .map_err(|_| BenchError::ConnectionDropped) 
+                                        {
+                                            warn!("{}", e);
+                                            break 'main;
+                                        }
                                     }
                                 }
                                 Ok(())

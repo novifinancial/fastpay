@@ -100,7 +100,7 @@ class Committee:
         for authority in self.json['authorities']:
             if name is None or authority['name'] == name:
                 for shard in authority['shards']:
-                    ips.add(shard)
+                    ips.add(self.ip(shard))
         return list(ips)
 
     def remove_nodes(self, nodes):

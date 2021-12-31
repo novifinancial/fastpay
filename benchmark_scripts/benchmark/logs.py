@@ -111,7 +111,7 @@ class LogParser:
 
     def _parse_shards(self, log):
         if search(r'(?:panic|Error)', log) is not None:
-            raise ParseError('Worker(s) panicked')
+            raise ParseError('Shard(s) panicked')
 
         ip = search(r'booted on (\d+.\d+.\d+.\d+)', log).group(1)
 

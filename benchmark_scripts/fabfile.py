@@ -3,10 +3,10 @@ from fabric import task
 
 from benchmark.local import LocalBench
 from benchmark.logs import ParseError, LogParser
-from benchmark.utils import Print
+from benchmark.utils import Print, BenchError
 from benchmark.plot import Ploter, PlotError
 from benchmark.instance import InstanceManager
-#from benchmark.remote import Bench, BenchError
+from benchmark.remote import Bench
 
 
 @task
@@ -45,7 +45,7 @@ def destroy(ctx):
 
 
 @task
-def start(ctx, max=2):
+def start(ctx, max=1):
     ''' Start at most `max` machines per data center '''
     try:
         InstanceManager.make().start_instances(max)
@@ -84,26 +84,16 @@ def install(ctx):
 def remote(ctx, debug=False):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'faults': 3,
-        'nodes': [10],
-        'workers': 1,
+        'faults': 0,
+        'nodes': [4],
+        'shards': 1,
         'collocate': True,
-        'rate': [10_000, 110_000],
-        'tx_size': 512,
-        'duration': 300,
-        'runs': 2,
-    }
-    node_params = {
-        'header_size': 1_000,  # bytes
-        'max_header_delay': 200,  # ms
-        'gc_depth': 50,  # rounds
-        'sync_retry_delay': 10_000,  # ms
-        'sync_retry_nodes': 3,  # number of nodes
-        'batch_size': 500_000,  # bytes
-        'max_batch_delay': 200  # ms
+        'rate': [1_000],
+        'duration': 30,
+        'runs': 1,
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug)
+        Bench(ctx).run(bench_params, debug)
     except BenchError as e:
         Print.error(e)
 

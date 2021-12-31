@@ -243,7 +243,7 @@ impl MessageHandler for RunningServerState {
 
             self.server.packets_processed += 1;
             if self.server.packets_processed % 5000 == 0 {
-                info!(
+                debug!(
                     "{}:{} (shard {}) has processed {} packets",
                     self.server.base_address,
                     self.server.base_port + self.server.state.shard_id,
