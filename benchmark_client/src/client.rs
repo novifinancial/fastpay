@@ -201,7 +201,8 @@ impl BenchmarkClient {
                     },
                     Some(_) = rx_response.recv() => {
                         // Sink responses.
-                    }
+                    },
+                    else => break
                 }
             }
         })
