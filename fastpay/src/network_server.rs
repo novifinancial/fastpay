@@ -66,13 +66,17 @@ impl BenchmarkServer {
                 Some((peer, bytes)) = rx_request.recv() => {
                     if let Some(sender) = self.handles.get(&peer) {
                         if let Some(reply) = handler.handle_message(&bytes).await {
-                            sender
+                            if Err(e) = sender
                                 .send(Bytes::from(reply))
-                                .await
-                                .expect("Failed to send reply to connection task");
+                                .await 
+                            {
+                                warn!("Failed to send reply to connection task: {}", e);
+                                break;
+                            }
                         }
                     }
-                }
+                },
+                else => break
             }
         }
     }
