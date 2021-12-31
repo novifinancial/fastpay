@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 mod client;
 mod connection;
 mod error;
@@ -42,10 +45,6 @@ async fn main() -> Result<()> {
     let committee = CommitteeConfig::read(committee_config_path)
         .expect("Fail to read committee config")
         .into_committee();
-    log::warn!(
-        "{:?}",
-        CommitteeConfig::read(committee_config_path).unwrap()
-    );
 
     let others = matches
         .values_of("others")

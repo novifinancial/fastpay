@@ -114,7 +114,7 @@ impl Server {
                 }
             }
             if queries_sent % 2000 == 0 {
-                info!(
+                debug!(
                     "{}:{} (shard {}) has sent {} cross-shard queries",
                     base_address,
                     base_port + this_shard,

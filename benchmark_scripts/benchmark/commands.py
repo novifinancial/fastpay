@@ -21,39 +21,53 @@ class CommandMaker:
         return 'cargo build --quiet --release --features benchmark'
 
     @staticmethod
-    def generate_key(filename):
-        assert isinstance(filename, str)
-        return f'./node generate_keys --filename {filename}'
+    def generate_keys(key_files, hosts, base_ports, shards, committee_file):
+        assert isinstance(key_files, list)
+        assert all(isinstance(x, str) for x in key_files)
+        assert isinstance(hosts, list)
+        assert all(isinstance(x, str) for x in hosts)
+        assert isinstance(base_ports, list)
+        assert all(isinstance(x, int) for x in base_ports)
+        assert isinstance(shards, int)
+        assert len(key_files) == len(hosts) and len(hosts) == len(base_ports)
+        assert isinstance(committee_file, str)
+        authorities = ''
+        for (key_file, host, port) in zip(key_files, hosts, base_ports):
+            authorities += f'{key_file}:Tcp:{host}:{port}:{shards} '
+        return (
+            f'./server generate-all --authorities {authorities}'
+            f'--committee {committee_file} --max-output-coins 2'
+        )
 
     @staticmethod
-    def run_primary(keys, committee, store, parameters, debug=False):
+    def run_shard(keys, committee, store, shard, debug=False):
         assert isinstance(keys, str)
         assert isinstance(committee, str)
-        assert isinstance(parameters, str)
+        assert isinstance(store, str)
+        assert isinstance(shard, int)
         assert isinstance(debug, bool)
-        v = '-vvv' if debug else '-vv'
-        return (f'./node {v} run --keys {keys} --committee {committee} '
-                f'--store {store} --parameters {parameters} primary')
+        #v = '-vvv' if debug else '-vv'
+        return (
+            'touch .empty.txt && '
+            f'./server run --server {keys} --committee {committee} '
+            f'--initial-accounts .empty.txt --shard {shard}'
+        )
 
     @staticmethod
-    def run_worker(keys, committee, store, parameters, id, debug=False):
-        assert isinstance(keys, str)
-        assert isinstance(committee, str)
-        assert isinstance(parameters, str)
-        assert isinstance(debug, bool)
-        v = '-vvv' if debug else '-vv'
-        return (f'./node {v} run --keys {keys} --committee {committee} '
-                f'--store {store} --parameters {parameters} worker --id {id}')
-
-    @staticmethod
-    def run_client(address, size, rate, nodes):
-        assert isinstance(address, str)
-        assert isinstance(size, int) and size > 0
+    def run_client(targets, rate, nodes, committee):
+        assert isinstance(targets, list)
+        assert all(isinstance(x, str) for x in targets)
+        assert len(targets) > 1
         assert isinstance(rate, int) and rate >= 0
         assert isinstance(nodes, list)
         assert all(isinstance(x, str) for x in nodes)
-        nodes = f'--nodes {" ".join(nodes)}' if nodes else ''
-        return f'./benchmark_client {address} --size {size} --rate {rate} {nodes}'
+        assert isinstance(committee, str)
+        targets = ' '.join(targets)
+        nodes = ' '.join(nodes) if nodes else ''
+        return (
+            f'./benchmark_client {targets} --rate {rate} '
+            f'--committee {committee} --others {nodes}'
+        )
 
     @staticmethod
     def kill():
@@ -62,5 +76,5 @@ class CommandMaker:
     @staticmethod
     def alias_binaries(origin):
         assert isinstance(origin, str)
-        node, client = join(origin, 'node'), join(origin, 'benchmark_client')
-        return f'rm node ; rm benchmark_client ; ln -s {node} . ; ln -s {client} .'
+        node, client = join(origin, 'server'), join(origin, 'benchmark_client')
+        return f'rm server ; rm benchmark_client ; ln -s {node} . ; ln -s {client} .'

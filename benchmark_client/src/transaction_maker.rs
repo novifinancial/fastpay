@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::error::BenchError;
 use bytes::Bytes;
 use fastpay_core::{
@@ -29,23 +32,11 @@ impl DumbRequestMaker {
     }
 
     /// Make a dummy (but valid) request order.
-    pub fn make_request(&self, x: u64, counter: u64, burst: u64) -> Bytes {
-        let sample = match x == counter % burst {
-            true => counter,
-            false => 0,
-        };
-
+    pub fn make_request(&self, x: u64, counter: u64, burst: u64) -> (Bytes, u64) {
         // Create the sender and receiver ensuring they don't clash.
-        let sender = AccountId::new(vec![
-            SequenceNumber::from(sample),
-            SequenceNumber::from(x),
-            SequenceNumber::from(self.r + counter),
-        ]);
-        let recipient = AccountId::new(vec![
-            SequenceNumber::from(self.r + counter),
-            SequenceNumber::from(x),
-            SequenceNumber::new(),
-        ]);
+        let id = self.r + counter * burst + x;
+        let sender = AccountId::new(vec![SequenceNumber::new(), SequenceNumber::from(id)]);
+        let recipient = AccountId::new(vec![SequenceNumber::from(id), SequenceNumber::new()]);
 
         // Make a transfer request for 1 coin.
         let request = Request {
@@ -59,7 +50,7 @@ impl DumbRequestMaker {
         };
         let order = RequestOrder::new(request.into(), &self.keypair, Vec::new());
         let serialized_order = serialize_request_order(&order);
-        Bytes::from(serialized_order)
+        (Bytes::from(serialized_order), id)
     }
 }
 
@@ -76,9 +67,7 @@ impl DumbCertificateMaker {
         response: Box<AccountInfoResponse>,
         aggregators: &mut HashMap<AccountId, SignatureAggregator<'a>>,
     ) -> Result<Option<Bytes>, BenchError> {
-        let vote = response
-            .pending
-            .ok_or_else(|| BenchError::ResponseWithoutVote)?;
+        let vote = response.pending.ok_or(BenchError::ResponseWithoutVote)?;
 
         aggregators
             .entry(response.account_id.clone())

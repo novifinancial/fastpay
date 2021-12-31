@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::{
     connection::Connection,
     error::BenchError,
@@ -9,7 +12,7 @@ use fastpay_core::{
     serialize::{deserialize_message, SerializedMessage},
 };
 use futures::future::{join_all, try_join};
-use log::{info, warn};
+use log::{debug, info, warn};
 use std::{collections::HashMap, net::SocketAddr};
 use tokio::{
     net::TcpStream,
@@ -109,11 +112,11 @@ impl BenchmarkClient {
                 interval.tick().await;
                 let now = Instant::now();
                 for x in 0..burst {
-                    let bytes = tx_maker.make_request(x, counter, burst);
+                    let (bytes, id) = tx_maker.make_request(x, counter, burst);
 
                     if x == counter % burst {
                         // NOTE: This log entry is used to compute performance.
-                        info!("Sending sample transaction {}", counter);
+                        info!("Sending sample transaction {}", id);
                     }
 
                     for handler in &connection_handlers {
@@ -162,24 +165,18 @@ impl BenchmarkClient {
 
                                 // Ensures `aggregators` does not make use run out of memory.
                                 if id < last_id {
+                                    debug!("Drop vote {} (<{})", id, last_id);
                                     continue;
                                 }
 
                                 // Check if we got a certificate.
                                 let account_id = response.account_id.clone();
                                 if let Some(bytes) = tx_maker.try_make_certificate(response, &mut aggregators).unwrap() {
-                                    aggregators.retain(|k, _| k.origin().unwrap() >= account_id.origin().unwrap());
+                                    aggregators.retain(|k, _| k.sequence_number().unwrap() >= account_id.sequence_number().unwrap());
                                     last_id = id;
 
                                     // NOTE: This log entry is used to compute performance.
-                                    info!("Assembled certificate");
-
-                                    // Check of this certificate comes from a sample transaction.
-                                    let sample = account_id.origin().unwrap().0;
-                                    if sample != 0 {
-                                        // NOTE: This log entry is used to compute performance.
-                                        info!("Assembled certificate for tx {:?}", sample);
-                                    }
+                                    info!("Assembled certificate {}", id);
 
                                     for handler in &connection_handlers {
                                         handler
@@ -192,7 +189,7 @@ impl BenchmarkClient {
                                 Ok(())
                             },
                             SerializedMessage::Error(e) => Err(BenchError::SerializationError(e.to_string())),
-                            reply @ _ => Err(BenchError::UnexpectedReply(reply))
+                            reply => Err(BenchError::UnexpectedReply(reply))
                         }
                         .unwrap()
                     },

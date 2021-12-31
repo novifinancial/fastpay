@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use fastpay_core::{error::FastPayError, serialize::SerializedMessage};
 use std::{fmt::Debug, net::SocketAddr};
 use thiserror::Error;

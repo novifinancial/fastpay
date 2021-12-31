@@ -32,6 +32,9 @@ fn make_shard_server(
     let initial_accounts_config = InitialStateConfig::read(initial_accounts_config_path)
         .expect("Fail to read initial account config");
 
+    // NOTE: This log entry is used to compute performance.
+    info!("Shard booted on {}", server_config.authority.host);
+
     let committee = committee_config.into_committee();
     let num_shards = server_config.authority.num_shards;
 
@@ -107,7 +110,7 @@ struct AuthorityOptions {
     server_config_path: PathBuf,
 
     /// Chooses a network protocol between Udp and Tcp
-    #[structopt(long, default_value = "Udp")]
+    #[structopt(long, default_value = "Tcp")]
     protocol: transport::NetworkProtocol,
 
     /// Sets the public name of the host
@@ -223,7 +226,9 @@ enum ServerCommands {
 }
 
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_millis()
+        .init();
     let options = ServerOptions::from_args();
 
     match options.cmd {
@@ -286,10 +291,10 @@ fn main() {
         }
 
         ServerCommands::Generate { options } => {
-            let mut path = options.server_config_path.clone();
+            let path = options.server_config_path.clone();
             let server = make_server_config(options);
             server
-                .write(&mut path)
+                .write(&path)
                 .expect("Unable to write server config file");
             info!("Wrote server config file");
             server.authority.print();
@@ -316,6 +321,7 @@ fn main() {
                 server
                     .write(&path)
                     .expect("Unable to write server config file");
+                #[cfg(not(feature = "benchmark"))]
                 info!("Wrote server config {}", path.to_str().unwrap());
                 coconut_authorities.insert(server.authority.name, (index, public_key));
                 config_authorities.push(server.authority);
@@ -332,6 +338,7 @@ fn main() {
             config
                 .write(&committee)
                 .expect("Unable to write committee description");
+            #[cfg(not(feature = "benchmark"))]
             info!("Wrote committee config {}", committee.to_str().unwrap());
         }
     }

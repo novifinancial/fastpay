@@ -6,7 +6,7 @@ from benchmark.logs import ParseError, LogParser
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
 from benchmark.instance import InstanceManager
-from benchmark.remote import Bench, BenchError
+#from benchmark.remote import Bench, BenchError
 
 
 @task
@@ -15,8 +15,8 @@ def local(ctx, debug=True):
     bench_params = {
         'faults': 0,
         'nodes': 4,
-        'workers': 1,
-        'rate': 50_000,
+        'shards': 1,
+        'rate': 1_000,
         'duration': 20,
     }
     try:
@@ -138,6 +138,6 @@ def kill(ctx):
 def logs(ctx):
     ''' Print a summary of the logs '''
     try:
-        print(LogParser.process('./logs', faults='?').result())
+        print(LogParser.process('./logs', num_nodes='?', faults='?').result())
     except ParseError as e:
         Print.error(BenchError('Failed to parse logs', e))

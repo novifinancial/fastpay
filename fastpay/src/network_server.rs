@@ -1,14 +1,20 @@
 use crate::transport::{MessageHandler, SpawnedServer};
 use bytes::Bytes;
-use futures::{future, stream::StreamExt as _, SinkExt as _};
+use futures::{stream::StreamExt as _, SinkExt as _};
 use log::{debug, info, warn};
-use tokio::net::TcpListener;
+use std::{collections::HashMap, net::SocketAddr};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::mpsc::{channel, Receiver, Sender},
+};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 /// A simple network server used for benchmarking.
 pub struct BenchmarkServer {
     /// The network address of the server.
     address: String,
+    /// Keeps a channel to each client connection.
+    handles: HashMap<SocketAddr, Sender<Bytes>>,
 }
 
 impl BenchmarkServer {
@@ -17,58 +23,90 @@ impl BenchmarkServer {
         H: MessageHandler + Send + 'static,
     {
         let (complete, receiver) = futures::channel::oneshot::channel();
-        let handle = tokio::spawn(async move { Self { address }.run(handler, receiver).await });
+        let handle = tokio::spawn(async move {
+            Self {
+                address,
+                handles: HashMap::new(),
+            }
+            .run(handler, receiver)
+            .await
+        });
         Ok(SpawnedServer { complete, handle })
     }
 
     async fn run<H>(
-        &self,
+        &mut self,
         mut handler: H,
-        mut exit_future: futures::channel::oneshot::Receiver<()>,
+        _exit_future: futures::channel::oneshot::Receiver<()>,
     ) -> Result<(), std::io::Error>
     where
         H: MessageHandler + Send + 'static,
     {
+        let (tx_request, mut rx_request) = channel(1_000);
         let listener = TcpListener::bind(&self.address)
             .await
             .expect("Failed to bind TCP port");
 
         debug!("Listening on {}", self.address);
         loop {
-            let (socket, peer) =
-                match future::select(exit_future, Box::pin(listener.accept())).await {
-                    future::Either::Left(_) => {
-                        warn!("Failed to listen to client request");
-                        break;
-                    }
-                    future::Either::Right((value, new_exit_future)) => {
-                        exit_future = new_exit_future;
-                        value?
-                    }
-                };
+            tokio::select! {
+                result = listener.accept() => match result {
+                    Ok((socket, peer)) => {
+                        info!("Incoming connection established with {}", peer);
+                        let (tx_reply, rx_reply) = channel(1_000);
+                        self.handles.insert(peer, tx_reply);
 
-            info!("Incoming connection established with {}", peer);
-
-            let transport = Framed::new(socket, LengthDelimitedCodec::new());
-            let (mut writer, mut reader) = transport.split();
-            while let Some(frame) = reader.next().await {
-                match frame {
-                    Ok(message) => {
-                        if let Some(reply) = handler.handle_message(&message.freeze()).await {
-                            if let Err(e) = writer.send(Bytes::from(reply)).await {
-                                warn!("Failed to send reply to client: {}", e);
-                                break;
-                            }
-                        }
-                    }
+                        // TODO: cleanup the hashmap self.handles when this task ends.
+                        Self::spawn_connection(socket, peer, tx_request.clone(), rx_reply);
+                    },
                     Err(e) => {
-                        warn!("Error while reading TCP stream: {}", e);
-                        break;
+                        warn!("Failed to listen to client request: {}", e);
+                    }
+                },
+                Some((peer, bytes)) = rx_request.recv() => {
+                    if let Some(sender) = self.handles.get(&peer) {
+                        if let Some(reply) = handler.handle_message(&bytes).await {
+                            sender
+                                .send(Bytes::from(reply))
+                                .await
+                                .expect("Failed to send reply to connection task");
+                        }
                     }
                 }
             }
-            info!("Connection closed by peer {}", peer);
         }
-        Ok(())
+    }
+
+    fn spawn_connection(
+        socket: TcpStream,
+        peer: SocketAddr,
+        tx_request: Sender<(SocketAddr, Bytes)>,
+        mut rx_reply: Receiver<Bytes>,
+    ) {
+        tokio::spawn(async move {
+            let transport = Framed::new(socket, LengthDelimitedCodec::new());
+            let (mut writer, mut reader) = transport.split();
+            loop {
+                tokio::select! {
+                    Some(frame) = reader.next() => match frame {
+                        Ok(message) => tx_request
+                            .send((peer, message.freeze()))
+                            .await
+                            .expect("Failed to send message to main network task"),
+                        Err(e) => {
+                            warn!("Error while reading TCP stream: {}", e);
+                            break;
+                        }
+                    },
+                    Some(reply) = rx_reply.recv() => {
+                        if let Err(e) = writer.send(reply).await {
+                            warn!("Failed to send reply to client: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+            info!("Connection closed");
+        });
     }
 }

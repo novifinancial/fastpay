@@ -5,7 +5,7 @@ from os.path import basename, splitext
 from time import sleep
 
 from benchmark.commands import CommandMaker
-from benchmark.config import Key, LocalCommittee, BenchParameters, ConfigError
+from benchmark.config import Key, Committee, BenchParameters, ConfigError
 from benchmark.logs import LogParser, ParseError
 from benchmark.utils import Print, BenchError, PathMaker
 
@@ -59,57 +59,44 @@ class LocalBench:
             subprocess.run([cmd], shell=True)
 
             # Generate configuration files.
-            keys = []
             key_files = [PathMaker.key_file(i) for i in range(nodes)]
-            for filename in key_files:
-                cmd = CommandMaker.generate_key(filename).split()
-                subprocess.run(cmd, check=True)
-                keys += [Key.from_file(filename)]
+            cmd = CommandMaker.generate_keys(
+                key_files,
+                ['127.0.0.1' for _ in range(len(key_files))],
+                [self.BASE_PORT + 100*i for i in range(len(key_files))],
+                self.shards,
+                PathMaker.committee_file()
+            )
+            subprocess.run(cmd.split(), check=True)
 
-            names = [x.name for x in keys]
-            committee = LocalCommittee(names, self.BASE_PORT, self.workers)
-            committee.print(PathMaker.committee_file())
-
-            self.node_parameters.print(PathMaker.parameters_file())
+            # Load the generated committee file.
+            committee = Committee(PathMaker.committee_file())
 
             # Run the clients (they will wait for the nodes to be ready).
-            workers_addresses = committee.workers_addresses(self.faults)
-            rate_share = ceil(rate / committee.workers())
-            for i, addresses in enumerate(workers_addresses):
-                for (id, address) in addresses:
+            nodes_addresses = committee.addresses(self.faults)
+            rate_share = ceil(rate / committee.shards() / committee.size())
+            for i in range(committee.size()):
+                for j in range(committee.shards()):
                     cmd = CommandMaker.run_client(
-                        address,
-                        self.tx_size,
+                        [x[j] for x in nodes_addresses],
                         rate_share,
-                        [x for y in workers_addresses for _, x in y]
+                        [x for y in nodes_addresses for x in y],
+                        PathMaker.committee_file()
                     )
-                    log_file = PathMaker.client_log_file(i, id)
+                    log_file = PathMaker.client_log_file(i, j)
                     self._background_run(cmd, log_file)
 
-            # Run the primaries (except the faulty ones).
-            for i, address in enumerate(committee.primary_addresses(self.faults)):
-                cmd = CommandMaker.run_primary(
-                    PathMaker.key_file(i),
-                    PathMaker.committee_file(),
-                    PathMaker.db_path(i),
-                    PathMaker.parameters_file(),
-                    debug=debug
-                )
-                log_file = PathMaker.primary_log_file(i)
-                self._background_run(cmd, log_file)
-
-            # Run the workers (except the faulty ones).
-            for i, addresses in enumerate(workers_addresses):
-                for (id, address) in addresses:
-                    cmd = CommandMaker.run_worker(
+            # Run the shards (except the faulty ones).
+            for i, shards in enumerate(nodes_addresses):
+                for j in range(len(shards)):
+                    cmd = CommandMaker.run_shard(
                         PathMaker.key_file(i),
                         PathMaker.committee_file(),
-                        PathMaker.db_path(i, id),
-                        PathMaker.parameters_file(),
-                        id,  # The worker's id.
+                        PathMaker.db_path(i, j),
+                        j,  # The shard's id.
                         debug=debug
                     )
-                    log_file = PathMaker.worker_log_file(i, id)
+                    log_file = PathMaker.shard_log_file(i, j)
                     self._background_run(cmd, log_file)
 
             # Wait for all transactions to be processed.

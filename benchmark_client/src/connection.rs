@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::error::BenchError;
 use bytes::Bytes;
 use futures::{stream::StreamExt as _, SinkExt as _};

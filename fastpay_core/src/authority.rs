@@ -238,6 +238,15 @@ impl Authority for AuthorityState {
     ) -> Result<(AccountInfoResponse, CrossShardContinuation), FastPayError> {
         // Verify that the certified value is a confirmation.
         let certificate = confirmation_order.certificate;
+
+        #[cfg(feature = "benchmark")]
+        {
+            let account_id = certificate.value.confirm_account_id().unwrap();
+            let id = account_id.sequence_number().unwrap().0;
+            // NOTE: This log entry is used to compute performance.
+            log::info!("Received certificate {}", id);
+        }
+
         let request = certificate
             .value
             .confirm_request()
