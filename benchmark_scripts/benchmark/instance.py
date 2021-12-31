@@ -17,8 +17,8 @@ class AWSError(Exception):
 
 
 class InstanceManager:
-    INSTANCE_NAME = 'dag-node'
-    SECURITY_GROUP_NAME = 'dag'
+    INSTANCE_NAME = 'fastpay'
+    SECURITY_GROUP_NAME = 'fastpay'
 
     def __init__(self, settings):
         assert isinstance(settings, Settings)

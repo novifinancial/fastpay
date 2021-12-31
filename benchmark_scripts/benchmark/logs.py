@@ -73,7 +73,7 @@ class LogParser:
     def _keep_earliest_validity(self, input):
         # Keep the earliest f+1 timestamp.
         if isinstance(self.committee_size, int):
-            validity = (self.committee_size + 2) / 3
+            validity = int((self.committee_size + 2) / 3)
         else:
             validity = 1
 
