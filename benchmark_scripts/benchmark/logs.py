@@ -53,7 +53,7 @@ class LogParser:
         )
 
         # Determine whether the primary and the workers are collocated.
-        self.collocate = num_nodes == set(shards_ips)
+        self.collocate = num_nodes == len(set(shards_ips))
 
         # Check whether clients missed their target rate.
         if self.misses != 0:
@@ -176,14 +176,13 @@ class LogParser:
             f' Faults: {self.faults} node(s)\n'
             f' Committee size: {self.committee_size} node(s)\n'
             f' Shard(s) per node: {self.shards} shard(s)\n'
-            f' Collocate primary and workers: {self.collocate}\n'
+            f' Collocate shards: {self.collocate}\n'
             f' Input rate: {sum(self.rate):,} tx/s\n'
             f' Execution time: {round(duration):,} s\n'
             '\n'
             ' + RESULTS:\n'
             f' Client TPS: {round(client_tps):,} tx/s\n'
             f' Client latency: {round(client_latency):,} ms\n'
-            '\n'
             f' End-to-end TPS: {round(end_to_end_tps):,} tx/s\n'
             f' End-to-end latency: {round(end_to_end_latency):,} ms\n'
             '-----------------------------------------\n'

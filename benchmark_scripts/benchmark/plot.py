@@ -69,16 +69,6 @@ class Ploter:
     def _variable(self, data):
         return [int(x) for x in findall(r'Variable value: X=(\d+)', data)]
 
-    def _tps2bps(self, x):
-        data = self.results[0]
-        size = int(search(r'Transaction size: (\d+)', data).group(1))
-        return x * size / 10**6
-
-    def _bps2tps(self, x):
-        data = self.results[0]
-        size = int(search(r'Transaction size: (\d+)', data).group(1))
-        return x * 10**6 / size
-
     def _plot(self, x_label, y_label, y_axis, z_axis, type):
         plt.figure()
         markers = cycle(['o', 'v', 's', 'p', 'D', 'P'])
@@ -107,13 +97,6 @@ class Ploter:
         ax.yaxis.set_major_formatter(default_major_formatter)
         if 'latency' in type:
             ax.yaxis.set_major_formatter(sec_major_formatter)
-        if len(y_label) > 1:
-            secaxy = ax.secondary_yaxis(
-                'right', functions=(self._tps2bps, self._bps2tps)
-            )
-            secaxy.set_ylabel(y_label[1])
-            secaxy.yaxis.set_major_formatter(mb_major_formatter)
-
         for x in ['pdf', 'png']:
             plt.savefig(PathMaker.plot_file(type, x), bbox_inches='tight')
 
@@ -125,11 +108,11 @@ class Ploter:
         return f'{x} nodes {faults}'
 
     @staticmethod
-    def workers(data):
-        x = search(r'Workers per node: (\d+)', data).group(1)
+    def shards(data):
+        x = search(r'Shards per node: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
-        return f'{x} workers {faults}'
+        return f'{x} shards {faults}'
 
     @staticmethod
     def max_latency(data):
@@ -142,7 +125,7 @@ class Ploter:
     def plot_latency(cls, files, scalability):
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
-        z_axis = cls.workers if scalability else cls.nodes
+        z_axis = cls.shards if scalability else cls.nodes
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (s)']
         ploter = cls(files)
@@ -153,8 +136,8 @@ class Ploter:
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.max_latency
-        x_label = 'Workers per node' if scalability else 'Committee size'
-        y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
+        x_label = 'Shards per node' if scalability else 'Committee size'
+        y_label = ['Throughput (tx/s)']
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
 
@@ -178,10 +161,9 @@ class Ploter:
                         'latency',
                         f,
                         x if not params.scalability() else params.nodes[0],
-                        x if params.scalability() else params.workers[0],
+                        x if params.scalability() else params.shards[0],
                         params.collocate,
                         'any',
-                        params.tx_size,
                     )
                 )
 
@@ -191,10 +173,9 @@ class Ploter:
                         'tps',
                         f,
                         'x' if not params.scalability() else params.nodes[0],
-                        'x' if params.scalability() else params.workers[0],
+                        'x' if params.scalability() else params.shards[0],
                         params.collocate,
                         'any',
-                        params.tx_size,
                         max_latency=l
                     )
                 )

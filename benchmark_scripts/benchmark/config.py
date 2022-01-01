@@ -199,8 +199,6 @@ class PlotParameters:
             else:
                 self.collocate = True
 
-            self.tx_size = int(json['tx_size'])
-
             max_lat = json['max_latency']
             max_lat = max_lat if isinstance(max_lat, list) else [max_lat]
             if not max_lat:

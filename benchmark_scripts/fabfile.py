@@ -88,9 +88,9 @@ def remote(ctx, debug=False):
         'nodes': [10],
         'shards': 1,
         'collocate': True,
-        'rate': [2_000],
-        'duration': 30,
-        'runs': 1,
+        'rate': [1_000, 2_000],
+        'duration': 300,
+        'runs': 2,
     }
     try:
         Bench(ctx).run(bench_params, debug)
@@ -104,10 +104,9 @@ def plot(ctx):
     plot_params = {
         'faults': [0],
         'nodes': [10, 20, 50],
-        'workers': [1],
+        'shards': [1],
         'collocate': True,
-        'tx_size': 512,
-        'max_latency': [3_500, 4_500]
+        'max_latency': [200, 1_000]
     }
     try:
         Ploter.plot(plot_params)

@@ -11,12 +11,11 @@ from benchmark.utils import PathMaker
 
 
 class Setup:
-    def __init__(self, faults, nodes, workers, collocate, rate, tx_size):
+    def __init__(self, faults, nodes, shards, collocate, rate):
         self.nodes = nodes
-        self.workers = workers
+        self.shards = shards
         self.collocate = collocate
         self.rate = rate
-        self.tx_size = tx_size
         self.faults = faults
         self.max_latency = 'any'
 
@@ -24,10 +23,9 @@ class Setup:
         return (
             f' Faults: {self.faults}\n'
             f' Committee size: {self.nodes}\n'
-            f' Workers per node: {self.workers}\n'
-            f' Collocate primary and workers: {self.collocate}\n'
+            f' Shards per node: {self.shards}\n'
+            f' Collocate primary and shards: {self.collocate}\n'
             f' Input rate: {self.rate} tx/s\n'
-            f' Transaction size: {self.tx_size} B\n'
             f' Max latency: {self.max_latency} ms\n'
         )
 
@@ -41,13 +39,12 @@ class Setup:
     def from_str(cls, raw):
         faults = int(search(r'Faults: (\d+)', raw).group(1))
         nodes = int(search(r'Committee size: (\d+)', raw).group(1))
-        workers = int(search(r'Worker\(s\) per node: (\d+)', raw).group(1))
+        shards = int(search(r'Shard\(s\) per node: (\d+)', raw).group(1))
         collocate = 'True' == search(
-            r'Collocate primary and workers: (True|False)', raw
+            r'Collocate shards: (True|False)', raw
         ).group(1)
         rate = int(search(r'Input rate: (\d+)', raw).group(1))
-        tx_size = int(search(r'Transaction size: (\d+)', raw).group(1))
-        return cls(faults, nodes, workers, collocate, rate, tx_size)
+        return cls(faults, nodes, shards, collocate, rate)
 
 
 class Result:
@@ -130,10 +127,9 @@ class LogAggregator:
                     name,
                     setup.faults,
                     setup.nodes,
-                    setup.workers,
+                    setup.shards,
                     setup.collocate,
                     setup.rate,
-                    setup.tx_size,
                     max_latency=None if max_lat == 'any' else max_lat,
                 )
                 with open(filename, 'w') as f:
@@ -163,8 +159,8 @@ class LogAggregator:
                     setup.rate = 'any'
                     setup.max_latency = max_latency
                     if scalability:
-                        variable = setup.workers
-                        setup.workers = 'x'
+                        variable = setup.shards
+                        setup.shards = 'x'
                     else:
                         variable = setup.nodes
                         setup.nodes = 'x'
