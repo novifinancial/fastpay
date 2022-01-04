@@ -15,8 +15,8 @@ from benchmark.aggregate import LogAggregator
 def default_major_formatter(x, pos):
     if pos is None:
         return
-    if x >= 1_000:
-        return f'{x/1000:.0f}k'
+    # if x >= 1_000:
+    #    return f'{x/1000:.0f}k'
     else:
         return f'{x:.0f}'
 

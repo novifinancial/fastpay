@@ -15,7 +15,7 @@ def local(ctx, debug=True):
     bench_params = {
         'faults': 0,
         'nodes': 4,
-        'shards': 1,
+        'shards': 2,
         'rate': 1_000,
         'duration': 20,
     }
@@ -88,7 +88,7 @@ def remote(ctx, debug=False):
         'nodes': [10],
         'shards': 1,
         'collocate': True,
-        'rate': [1_000, 2_000],
+        'rate': [2_600],
         'duration': 300,
         'runs': 2,
     }
