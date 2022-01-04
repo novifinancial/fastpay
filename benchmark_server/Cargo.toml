@@ -1,0 +1,22 @@
+[package]
+name = "benchmark_server"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+tokio = { version = "1.5.0", features = ["rt", "net", "sync", "macros", "time"] }
+tokio-util = { version = "0.6.6", features = ["codec"] }
+thiserror = "1.0.24"
+bytes = "1.0.1"
+log = "0.4.14"
+futures = "0.3.14"
+rand = { version = "0.7.3", features = ["small_rng"] }
+async-trait = "0.1.50"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.64"
+anyhow = "1.0.40"
+clap = "2.33.3"
+env_logger = "0.7.1"
+
+fastpay_core = { path = "../fastpay_core" }
+coconut = { path = "../coconut" }

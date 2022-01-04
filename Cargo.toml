@@ -4,7 +4,8 @@ members = [
         "fastpay",
         "coconut",
         "bulletproofs",
-        "benchmark_client"
+        "benchmark_client",
+        "benchmark_server"
 ]
 
 [profile.release]

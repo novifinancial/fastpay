@@ -185,7 +185,7 @@ impl BenchmarkClient {
                                         if let Err(e) = handler
                                             .send(bytes.clone())
                                             .await
-                                            .map_err(|_| BenchError::ConnectionDropped) 
+                                            .map_err(|_| BenchError::ConnectionDropped)
                                         {
                                             warn!("{}", e);
                                             break 'main;

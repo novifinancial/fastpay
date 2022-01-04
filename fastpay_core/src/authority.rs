@@ -13,7 +13,7 @@ mod authority_tests;
 
 /// State of an authority.
 pub struct AuthorityState {
-    /// The name of this autority.
+    /// The name of this authority.
     pub name: AuthorityName,
     /// Committee of this FastPay instance.
     pub committee: Committee,

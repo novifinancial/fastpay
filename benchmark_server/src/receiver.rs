@@ -1,5 +1,6 @@
-use crate::transport::{MessageHandler, SpawnedServer};
+use async_trait::async_trait;
 use bytes::Bytes;
+use fastpay_core::serialize::{deserialize_message, SerializedMessage};
 use futures::{stream::StreamExt as _, SinkExt as _};
 use log::{debug, info, warn};
 use std::{collections::HashMap, net::SocketAddr};
@@ -9,36 +10,33 @@ use tokio::{
 };
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
+#[async_trait]
+pub trait MessageHandler {
+    async fn handle_message(&mut self, message: SerializedMessage) -> Option<Vec<u8>>;
+}
+
 /// A simple network server used for benchmarking.
-pub struct BenchmarkServer {
+pub struct NetworkReceiver {
     /// The network address of the server.
     address: String,
     /// Keeps a channel to each client connection.
     handles: HashMap<SocketAddr, Sender<Bytes>>,
 }
 
-impl BenchmarkServer {
-    pub fn spawn<H>(address: String, handler: H) -> Result<SpawnedServer, std::io::Error>
+impl NetworkReceiver {
+    pub async fn spawn<H>(address: String, handler: H)
     where
         H: MessageHandler + Send + 'static,
     {
-        let (complete, receiver) = futures::channel::oneshot::channel();
-        let handle = tokio::spawn(async move {
-            Self {
-                address,
-                handles: HashMap::new(),
-            }
-            .run(handler, receiver)
-            .await
-        });
-        Ok(SpawnedServer { complete, handle })
+        Self {
+            address,
+            handles: HashMap::new(),
+        }
+        .run(handler)
+        .await
     }
 
-    async fn run<H>(
-        &mut self,
-        mut handler: H,
-        _exit_future: futures::channel::oneshot::Receiver<()>,
-    ) -> Result<(), std::io::Error>
+    async fn run<H>(&mut self, mut handler: H)
     where
         H: MessageHandler + Send + 'static,
     {
@@ -65,13 +63,21 @@ impl BenchmarkServer {
                 },
                 Some((peer, bytes)) = rx_request.recv() => {
                     if let Some(sender) = self.handles.get(&peer) {
-                        if let Some(reply) = handler.handle_message(&bytes).await {
-                            if let Err(e) = sender
-                                .send(Bytes::from(reply))
-                                .await
-                            {
-                                warn!("Failed to send reply to connection task: {}", e);
-                                break;
+                        match deserialize_message(&*bytes) {
+                            Ok(message) => {
+                                if let Some(reply) = handler.handle_message(message).await {
+                                    if let Err(e) = sender
+                                        .send(Bytes::from(reply))
+                                        .await
+                                    {
+                                        warn!("Failed to send reply to connection task: {}", e);
+                                        break;
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                warn!("Invalid message encoding: {}", e);
+                                continue;
                             }
                         }
                     }
@@ -79,7 +85,6 @@ impl BenchmarkServer {
                 else => break
             }
         }
-        Ok(())
     }
 
     fn spawn_connection(
