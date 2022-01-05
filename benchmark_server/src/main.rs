@@ -125,11 +125,9 @@ impl Server {
         let num_shards = committee
             .num_shards(&name)
             .expect("Our key is not in the committee");
-        let address = committee
+        let mut address = committee
             .shard(&name, &shard_id)
             .expect("Our key is not in the committee");
-
-        info!("ADD IS {:?}", address);
 
         // NOTE: This log entry is used to compute performance.
         info!("Shard booted on {}", address.ip());
@@ -144,6 +142,7 @@ impl Server {
 
         let core = Core::new(name, committee, state);
 
+        address.set_ip("0.0.0.0".parse().unwrap());
         NetworkReceiver::spawn(address.to_string(), core).await;
     }
 }

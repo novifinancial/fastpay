@@ -91,7 +91,7 @@ def remote(ctx, debug=False):
         'collocate': True,
         'coconut': False,
         'rate': [1_000],
-        'duration': 30,
+        'duration': 10,
         'runs': 1,
     }
     try:
