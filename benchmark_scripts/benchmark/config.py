@@ -84,7 +84,7 @@ class Committee:
 
         ips = set()
         for name in names:
-            for shard in self.json['authorities'][name]['shards']:
+            for shard in self.json['authorities'][name]['shards'].values():
                 ips.add(self.ip(shard))
 
         return list(ips)

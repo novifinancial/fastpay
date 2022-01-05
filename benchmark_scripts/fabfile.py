@@ -91,8 +91,8 @@ def remote(ctx, debug=False):
         'collocate': True,
         'coconut': False,
         'rate': [1_000],
-        'duration': 300,
-        'runs': 2,
+        'duration': 30,
+        'runs': 1,
     }
     try:
         Bench(ctx).run(bench_params, debug)

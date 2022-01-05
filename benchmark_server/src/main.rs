@@ -129,6 +129,8 @@ impl Server {
             .shard(&name, &shard_id)
             .expect("Our key is not in the committee");
 
+        info!("ADD IS {:?}", address);
+
         // NOTE: This log entry is used to compute performance.
         info!("Shard booted on {}", address.ip());
 

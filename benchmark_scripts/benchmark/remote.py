@@ -269,18 +269,18 @@ class Bench:
             nodes_addresses, prefix='Downloading shards logs:'
         )
         for i, addresses in enumerate(progress):
-            for id, address in enumerate(addresses):
+            for j, address in addresses:
                 host = Committee.ip(address)
                 c = Connection(
                     host, user='ubuntu', connect_kwargs=self.connect
                 )
                 c.get(
-                    PathMaker.client_log_file(i, id),
-                    local=PathMaker.client_log_file(i, id)
+                    PathMaker.client_log_file(i, j),
+                    local=PathMaker.client_log_file(i, j)
                 )
                 c.get(
-                    PathMaker.shard_log_file(i, id),
-                    local=PathMaker.shard_log_file(i, id)
+                    PathMaker.shard_log_file(i, j),
+                    local=PathMaker.shard_log_file(i, j)
                 )
 
         # Parse logs and return the parser.
