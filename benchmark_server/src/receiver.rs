@@ -41,6 +41,7 @@ impl NetworkReceiver {
         H: MessageHandler + Send + 'static,
     {
         let (tx_request, mut rx_request) = channel(1_000);
+        info!("ADDR is {}", self.address);
         let listener = TcpListener::bind(&self.address)
             .await
             .expect("Failed to bind TCP port");
