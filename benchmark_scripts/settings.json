@@ -7,7 +7,7 @@
     "repo": {
         "name": "fastpay",
         "url": "https://github.com/asonnino/fastpay",
-        "branch": "bench"
+        "branch": "bench-net"
     },
     "instances": {
         "type": "m5d.8xlarge",

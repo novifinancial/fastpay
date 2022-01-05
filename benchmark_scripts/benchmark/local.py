@@ -5,7 +5,7 @@ from os.path import basename, splitext
 from time import sleep
 
 from benchmark.commands import CommandMaker
-from benchmark.config import Committee, BenchParameters, ConfigError
+from benchmark.config import BenchParameters, ConfigError, LocalCommittee, Key
 from benchmark.logs import LogParser, ParseError
 from benchmark.utils import Print, BenchError, PathMaker
 
@@ -60,38 +60,42 @@ class LocalBench:
 
             # Generate configuration files.
             key_files = [PathMaker.key_file(i) for i in range(nodes)]
-            cmd = CommandMaker.generate_keys(
-                key_files,
-                ['127.0.0.1' for _ in range(len(key_files))],
-                [self.BASE_PORT + 100*i for i in range(len(key_files))],
-                self.shards,
-                PathMaker.committee_file()
+            cmd = CommandMaker.generate_all(
+                key_files, PathMaker.parameters_file()
             )
             subprocess.run(cmd.split(), check=True)
 
-            # Load the generated committee file.
-            committee = Committee(PathMaker.committee_file())
+            # Generate the committee file.
+            names = [Key.from_file(x).name for x in key_files]
+            committee = LocalCommittee(names, self.BASE_PORT, self.shards)
+            committee.print(PathMaker.committee_file())
 
             # Run the clients (they will wait for the nodes to be ready).
             nodes_addresses = committee.addresses(self.faults)
-            rate_share = ceil(rate / committee.shards() / committee.size())
-            for i in range(committee.size()):
-                for j in range(committee.shards()):
+            rate_share = ceil(rate / committee.total_shards())
+            for i, shards in enumerate(nodes_addresses):
+                for j, _ in shards:
                     cmd = CommandMaker.run_client(
-                        [x[j] for x in nodes_addresses],
+                        [x[j][1] for x in nodes_addresses],
                         rate_share,
-                        [x for y in nodes_addresses for x in y],
+                        [x for y in nodes_addresses for _, x in y],
                         PathMaker.committee_file()
                     )
                     log_file = PathMaker.client_log_file(i, j)
                     self._background_run(cmd, log_file)
 
             # Run the shards (except the faulty ones).
+            if self.coconut:
+                parameters = PathMaker.parameters_file()
+            else:
+                parameters = None
+
             for i, shards in enumerate(nodes_addresses):
-                for j in range(len(shards)):
+                for j, _ in shards:
                     cmd = CommandMaker.run_shard(
                         PathMaker.key_file(i),
                         PathMaker.committee_file(),
+                        parameters,
                         PathMaker.db_path(i, j),
                         j,  # The shard's id.
                         debug=debug

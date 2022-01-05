@@ -1,13 +1,7 @@
-mod config;
-mod core;
-mod error;
-mod receiver;
-mod reliable_sender;
-
-use crate::config::{CommitteeConfig, KeyConfig, Parameters};
-use crate::config::{Export, Import};
-use crate::core::Core;
-use crate::receiver::NetworkReceiver;
+use benchmark_server::config::{CommitteeConfig, KeyConfig, Parameters};
+use benchmark_server::config::{Export, Import};
+use benchmark_server::core::Core;
+use benchmark_server::receiver::NetworkReceiver;
 use anyhow::{Context, Result};
 use clap::{crate_name, crate_version, App, AppSettings, ArgMatches, SubCommand};
 use env_logger::Env;
@@ -22,12 +16,12 @@ async fn main() -> Result<()> {
         .about("A research implementation of Zef.")
         .args_from_usage("-v... 'Sets the level of verbosity'")
         .subcommand(
-            SubCommand::with_name("generate_all")
+            SubCommand::with_name("generate")
                 .about("Print a fresh key pair to file")
                 .args_from_usage(
                     "<FILE>... 'The filenames containing the private config of each authority'
-                    --committee_size=<INT> 'The committee size'",
-                ),
+                    --parameters=<FILE> 'The file where to print the coconut parameters'",
+                )
         )
         .subcommand(
             SubCommand::with_name("run")
@@ -37,9 +31,8 @@ async fn main() -> Result<()> {
                     --committee=<FILE> 'The file containing committee information'
                     --parameters=[FILE] 'The file containing the node parameters'
                     --store=<PATH> 'The path where to create the data store'
-                    --id=<INT> 'The worker id'",
+                    --shard=<INT> 'The shard id'",
                 )
-                .setting(AppSettings::SubcommandRequiredElseHelp),
         )
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
@@ -56,7 +49,7 @@ async fn main() -> Result<()> {
         .init();
 
     match matches.subcommand() {
-        ("generate_all", Some(sub_matches)) => generate_all(sub_matches)?,
+        ("generate", Some(sub_matches)) => generate_all(sub_matches)?,
         ("run", Some(sub_matches)) => run(sub_matches).await?,
         _ => unreachable!(),
     }
@@ -65,13 +58,9 @@ async fn main() -> Result<()> {
 
 fn generate_all(matches: &ArgMatches<'_>) -> Result<()> {
     let filenames = matches.values_of("FILE").unwrap();
-    let committee_size = matches
-        .value_of("committee_size")
-        .unwrap()
-        .parse::<usize>()
-        .context("The committee size must be a positive integer")?;
+    let parameters_file = matches.value_of("parameters").unwrap();
 
-    let (keypairs, coconut_setup) = KeyConfig::new(committee_size);
+    let (keypairs, coconut_setup) = KeyConfig::new(filenames.len());
     for (filename, keypair) in filenames.into_iter().zip(keypairs.into_iter()) {
         keypair
             .export(filename)
@@ -80,7 +69,7 @@ fn generate_all(matches: &ArgMatches<'_>) -> Result<()> {
     Parameters {
         coconut_setup: Some(coconut_setup),
     }
-    .export("parameters.json")
+    .export(parameters_file)
     .context("Failed to export coconut setup")
 }
 
@@ -90,7 +79,7 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
     let parameters_file = matches.value_of("parameters");
     let _store_path = matches.value_of("store").unwrap();
     let shard_id = matches
-        .value_of("id")
+        .value_of("shard")
         .unwrap()
         .parse::<ShardId>()
         .context("The worker id must be a positive integer")?;

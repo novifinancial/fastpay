@@ -10,8 +10,8 @@ use crate::client::BenchmarkClient;
 use anyhow::{Context, Result};
 use clap::{crate_name, crate_version, App, AppSettings};
 use env_logger::Env;
-use fastpay::config::{CommitteeConfig, Import as _};
-use std::{net::SocketAddr, path::Path};
+use benchmark_server::config::{CommitteeConfig, Import};
+use std::{net::SocketAddr};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -41,10 +41,10 @@ async fn main() -> Result<()> {
         .collect::<Result<Vec<_>, _>>()
         .context("Invalid socket address format")?;
 
-    let committee_config_path = Path::new(matches.value_of("committee").unwrap());
-    let committee = CommitteeConfig::read(committee_config_path)
+    let committee_config_path = matches.value_of("committee").unwrap();
+    let committee = CommitteeConfig::import(committee_config_path)
         .expect("Fail to read committee config")
-        .into_committee();
+        .into_committee(None);
 
     let others = matches
         .values_of("others")

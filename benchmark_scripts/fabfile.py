@@ -15,7 +15,8 @@ def local(ctx, debug=True):
     bench_params = {
         'faults': 0,
         'nodes': 4,
-        'shards': 2,
+        'shards': 1,
+        'coconut': False,
         'rate': 1_000,
         'duration': 20,
     }
@@ -85,10 +86,11 @@ def remote(ctx, debug=False):
     ''' Run benchmarks on AWS '''
     bench_params = {
         'faults': 0,
-        'nodes': [10],
+        'nodes': [4],
         'shards': 1,
         'collocate': True,
-        'rate': [2_600],
+        'coconut': False,
+        'rate': [1_000],
         'duration': 300,
         'runs': 2,
     }

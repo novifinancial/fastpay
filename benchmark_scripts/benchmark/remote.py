@@ -175,34 +175,17 @@ class Bench:
 
         # Generate configuration files.
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
-        cmd = CommandMaker.generate_keys(
-            key_files,
-            hosts,
-            [self.settings.base_port for _ in range(len(hosts))],
-            bench_parameters.shards,
-            PathMaker.committee_file()
+        cmd = CommandMaker.generate_all(
+            key_files, PathMaker.parameters_file()
         )
         subprocess.run(cmd.split(), check=True)
 
-        # Load the generated committee file.
-        committee = Committee(PathMaker.committee_file())
-
         names = [Key.from_file(x).name for x in key_files]
 
-        '''
-        keys = []
-        key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
-        for filename in key_files:
-            cmd = CommandMaker.generate_key(filename).split()
-            subprocess.run(cmd, check=True)
-            keys += [Key.from_file(filename)]
-
-        names = [x.name for x in keys]
-
         if bench_parameters.collocate:
-            workers = bench_parameters.workers
+            shards = bench_parameters.shards
             addresses = OrderedDict(
-                (x, [y] * (workers + 1)) for x, y in zip(names, hosts)
+                (x, [y] * shards) for x, y in zip(names, hosts)
             )
         else:
             addresses = OrderedDict(
@@ -210,7 +193,6 @@ class Bench:
             )
         committee = Committee(addresses, self.settings.base_port)
         committee.print(PathMaker.committee_file())
-        '''
 
         # Cleanup all nodes and upload configuration files.
         names = names[:len(names)-bench_parameters.faults]
@@ -236,14 +218,14 @@ class Bench:
         # for the faulty nodes to be online).
         Print.info('Booting clients...')
         nodes_addresses = committee.addresses(faults)
-        rate_share = ceil(rate / committee.shards() / committee.size())
+        rate_share = ceil(rate / committee.total_shards())
         for i, shards in enumerate(nodes_addresses):
-            for j, address in enumerate(shards):
+            for j, address in shards:
                 host = Committee.ip(address)
                 cmd = CommandMaker.run_client(
-                    [x[j] for x in nodes_addresses],
+                    [x[j][1] for x in nodes_addresses],
                     rate_share,
-                    [x for y in nodes_addresses for x in y],
+                    [x for y in nodes_addresses for _, x in y],
                     PathMaker.committee_file()
                 )
                 log_file = PathMaker.client_log_file(i, j)
@@ -251,12 +233,18 @@ class Bench:
 
         # Run the shards (except the faulty ones).
         Print.info('Booting shards...')
+        if bench_parameters.coconut:
+            parameters = PathMaker.parameters_file()
+        else:
+            parameters = None
+
         for i, shards in enumerate(nodes_addresses):
-            for j, address in enumerate(shards):
+            for j, address in shards:
                 host = Committee.ip(address)
                 cmd = CommandMaker.run_shard(
                     PathMaker.key_file(i),
                     PathMaker.committee_file(),
+                    parameters,
                     PathMaker.db_path(i, j),
                     j,  # The shard's id.
                     debug=debug

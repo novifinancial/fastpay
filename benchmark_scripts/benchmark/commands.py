@@ -21,36 +21,28 @@ class CommandMaker:
         return 'cargo build --quiet --release --features benchmark'
 
     @staticmethod
-    def generate_keys(key_files, hosts, base_ports, shards, committee_file):
+    def generate_all(key_files, parameters_file):
         assert isinstance(key_files, list)
-        assert all(isinstance(x, str) for x in key_files)
-        assert isinstance(hosts, list)
-        assert all(isinstance(x, str) for x in hosts)
-        assert isinstance(base_ports, list)
-        assert all(isinstance(x, int) for x in base_ports)
-        assert isinstance(shards, int)
-        assert len(key_files) == len(hosts) and len(hosts) == len(base_ports)
-        assert isinstance(committee_file, str)
-        authorities = ''
-        for (key_file, host, port) in zip(key_files, hosts, base_ports):
-            authorities += f'{key_file}:Tcp:{host}:{port}:{shards} '
+        assert isinstance(parameters_file, str)
+        key_files = ' '.join(key_files)
         return (
-            f'./server generate-all --authorities {authorities}'
-            f'--committee {committee_file} --max-output-coins 2'
+            f'./benchmark_server generate {key_files} '
+            f'--parameters {parameters_file}'
         )
 
     @staticmethod
-    def run_shard(keys, committee, store, shard, debug=False):
+    def run_shard(keys, committee, parameters, store, shard, debug=False):
         assert isinstance(keys, str)
         assert isinstance(committee, str)
+        assert isinstance(parameters, str) or parameters is None
         assert isinstance(store, str)
         assert isinstance(shard, int)
         assert isinstance(debug, bool)
-        #v = '-vvv' if debug else '-vv'
+        v = '-vvv' if debug else '-vv'
+        params = f'--parameters {parameters} ' if parameters is not None else ''
         return (
-            'touch .empty.txt && '
-            f'./server run --server {keys} --committee {committee} '
-            f'--initial-accounts .empty.txt --shard {shard}'
+            f'./benchmark_server {v} run --keys {keys} --committee {committee} '
+            f'{params}--store {store} --shard {shard}'
         )
 
     @staticmethod
@@ -76,5 +68,9 @@ class CommandMaker:
     @staticmethod
     def alias_binaries(origin):
         assert isinstance(origin, str)
-        node, client = join(origin, 'server'), join(origin, 'benchmark_client')
-        return f'rm server ; rm benchmark_client ; ln -s {node} . ; ln -s {client} .'
+        node = join(origin, 'benchmark_server')
+        client = join(origin, 'benchmark_client')
+        return (
+            'rm benchmark_server ; rm benchmark_client '
+            f'; ln -s {node} . ; ln -s {client} .'
+        )
