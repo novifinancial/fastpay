@@ -102,9 +102,6 @@ async fn run(matches: &ArgMatches<'_>) -> Result<()> {
 
     // Spawn a shard.
     Server::spawn(keypair, shard_id, committee, parameters).await;
-
-    // If this expression is reached, the program ends and all other tasks terminate.
-    unreachable!();
 }
 
 pub struct Server;
