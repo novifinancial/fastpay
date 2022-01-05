@@ -71,7 +71,7 @@ impl NetworkReceiver {
                                         .await
                                     {
                                         warn!("Failed to send reply to connection task: {}", e);
-                                        break;
+                                        continue;
                                     }
                                 }
                             },
