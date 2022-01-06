@@ -53,7 +53,8 @@ class LogParser:
         )
 
         # Determine whether the primary and the workers are collocated.
-        self.collocate = num_nodes == len(set(shards_ips))
+        print(set(shards_ips))
+        self.collocate = num_nodes >= len(set(shards_ips))
 
         # Check whether clients missed their target rate.
         if self.misses != 0:
