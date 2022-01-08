@@ -16,8 +16,8 @@ def local(ctx, debug=False):
         'faults': 0,
         'nodes': 4,
         'shards': 2,
-        'coconut': True,
-        'rate': 20,
+        'coconut': False,
+        'rate': 1000,
         'duration': 20,
     }
     try:

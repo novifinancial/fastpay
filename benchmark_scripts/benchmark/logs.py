@@ -159,8 +159,10 @@ class LogParser:
     def _end_to_end_throughput(self):
         if self.commits:
             final = self.commits
-        else:
+        elif self.coins:
             final = self.coins
+        else:
+            return 0, 0
 
         start, end = min(self.start), max(final.values())
         duration = end - start
