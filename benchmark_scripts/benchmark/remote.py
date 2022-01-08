@@ -176,7 +176,9 @@ class Bench:
         # Generate configuration files.
         key_files = [PathMaker.key_file(i) for i in range(len(hosts))]
         cmd = CommandMaker.generate_all(
-            key_files, PathMaker.parameters_file()
+            key_files,
+            PathMaker.parameters_file(),
+            PathMaker.master_secret_file()
         )
         subprocess.run(cmd.split(), check=True)
 
@@ -203,6 +205,7 @@ class Bench:
                 c.run(f'{CommandMaker.cleanup()} || true', hide=True)
                 c.put(PathMaker.committee_file(), '.')
                 c.put(PathMaker.key_file(i), '.')
+                c.put(PathMaker.master_secret_file(), '.')
 
         return committee
 
@@ -212,6 +215,14 @@ class Bench:
         # Kill any potentially unfinished run and delete logs.
         hosts = committee.ips()
         self.kill(hosts=hosts, delete_logs=True)
+
+        # Check whether to run coconut or not.
+        if bench_parameters.coconut:
+            parameters = PathMaker.parameters_file()
+            master_secret = PathMaker.master_secret_file()
+        else:
+            parameters = None
+            master_secret = None
 
         # Run the clients (they will wait for the nodes to be ready).
         # Filter all faulty nodes from the client addresses (or they will wait
@@ -226,18 +237,15 @@ class Bench:
                     [x[j][1] for x in nodes_addresses],
                     rate_share,
                     [x for y in nodes_addresses for _, x in y],
-                    PathMaker.committee_file()
+                    PathMaker.committee_file(),
+                    parameters,
+                    master_secret
                 )
                 log_file = PathMaker.client_log_file(i, j)
                 self._background_run(host, cmd, log_file)
 
         # Run the shards (except the faulty ones).
         Print.info('Booting shards...')
-        if bench_parameters.coconut:
-            parameters = PathMaker.parameters_file()
-        else:
-            parameters = None
-
         for i, shards in enumerate(nodes_addresses):
             for j, address in shards:
                 host = Committee.ip(address)
