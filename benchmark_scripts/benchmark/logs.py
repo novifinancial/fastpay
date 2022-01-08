@@ -53,8 +53,11 @@ class LogParser:
             [x.items() for x in commits]
         )
 
-        # Determine whether the primary and the workers are collocated.
+        # Determine whether the shards are collocated.
         self.collocate = num_nodes >= len(set(shards_ips))
+
+        # Determine whether we are running Coconut.
+        self.coconut = len(self.coins) > 0
 
         # Check whether clients missed their target rate.
         if self.misses != 0:
@@ -200,6 +203,7 @@ class LogParser:
             f' Committee size: {self.committee_size} node(s)\n'
             f' Shard(s) per node: {self.shards} shard(s)\n'
             f' Collocate shards: {self.collocate}\n'
+            f' Coconut: {self.coconut}\n'
             f' Input rate: {sum(self.rate):,} tx/s\n'
             f' Execution time: {round(duration):,} s\n'
             '\n'

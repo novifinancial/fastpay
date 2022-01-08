@@ -164,6 +164,7 @@ class Ploter:
                         x if params.scalability() else params.shards[0],
                         params.collocate,
                         'any',
+                        coconut=params.coconut
                     )
                 )
 
@@ -176,7 +177,8 @@ class Ploter:
                         'x' if params.scalability() else params.shards[0],
                         params.collocate,
                         'any',
-                        max_latency=l
+                        max_latency=l,
+                        coconut=params.coconut
                     )
                 )
 

@@ -151,7 +151,7 @@ class BenchParameters:
             if 'coconut' in json:
                 self.coconut = bool(json['coconut'])
             else:
-                self.coconut = True
+                self.coconut = False
 
             self.duration = int(json['duration'])
 
@@ -195,6 +195,11 @@ class PlotParameters:
             if not max_lat:
                 raise ConfigError('Missing max latency')
             self.max_latency = [int(x) for x in max_lat]
+
+            if 'coconut' in json:
+                self.coconut = bool(json['coconut'])
+            else:
+                self.coconut = False
 
         except KeyError as e:
             raise ConfigError(f'Malformed bench parameters: missing key {e}')

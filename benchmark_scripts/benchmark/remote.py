@@ -350,6 +350,7 @@ class Bench:
                             bench_parameters.shards,
                             bench_parameters.collocate,
                             r,
+                            bench_parameters.coconut
                         ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=selected_hosts)

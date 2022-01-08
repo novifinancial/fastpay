@@ -108,6 +108,7 @@ def plot(ctx):
         'nodes': [10, 20, 50],
         'shards': [35],
         'collocate': True,
+        'coconut': False,
         'max_latency': [200, 1_000]
     }
     try:
