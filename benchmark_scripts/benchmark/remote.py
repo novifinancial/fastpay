@@ -205,6 +205,7 @@ class Bench:
                 c.run(f'{CommandMaker.cleanup()} || true', hide=True)
                 c.put(PathMaker.committee_file(), '.')
                 c.put(PathMaker.key_file(i), '.')
+                c.put(PathMaker.parameters_file(), '.')
                 c.put(PathMaker.master_secret_file(), '.')
 
         return committee
