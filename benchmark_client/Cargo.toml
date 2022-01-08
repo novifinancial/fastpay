@@ -19,3 +19,4 @@ tokio-util = { version = "0.6.9", features = ["codec"] }
 thiserror = "1.0.30"
 benchmark_server = { path = "../benchmark_server" }
 fastpay_core = { path = "../fastpay_core" }
+coconut = {path = "../coconut", features = ["benchmark"] }

@@ -28,6 +28,10 @@ class PathMaker:
         return '.parameters.json'
 
     @staticmethod
+    def master_secret_file():
+        return '.master_secret.json'
+
+    @staticmethod
     def key_file(i):
         assert isinstance(i, int) and i >= 0
         return f'.node-{i}.json'

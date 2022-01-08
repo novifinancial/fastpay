@@ -56,6 +56,14 @@ impl Parameters {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct MasterSecret {
+    pub master_secret: coconut::SecretKey,
+}
+
+impl Import for MasterSecret {}
+impl Export for MasterSecret {}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthorityConfig {
     shards: HashMap<ShardId, SocketAddr>,
@@ -106,12 +114,12 @@ pub struct KeyConfig {
 }
 
 impl KeyConfig {
-    pub fn new(num_authorities: usize) -> (Vec<KeyConfig>, CoconutSetup) {
+    pub fn new(num_authorities: usize) -> (Vec<KeyConfig>, CoconutSetup, MasterSecret) {
         let mut rng = coconut::rand::thread_rng();
         let parameters = coconut::Parameters::new(3, /* max_output_coins */ 2);
         let threshold = (2 * num_authorities + 1) / 3;
-        let (verification_key, key_pairs) =
-            coconut::KeyPair::ttp(&mut rng, &parameters, threshold, num_authorities);
+        let (verification_key, key_pairs, master_secret) =
+            coconut::KeyPair::ttp_and_master_key(&mut rng, &parameters, threshold, num_authorities);
 
         let mut coconut_authorities = BTreeMap::new();
         let mut config_authorities = Vec::new();
@@ -135,7 +143,8 @@ impl KeyConfig {
             verification_key,
             authorities: coconut_authorities,
         };
-        (config_authorities, coconut_setup)
+        let master_secret = MasterSecret { master_secret };
+        (config_authorities, coconut_setup, master_secret)
     }
 }
 

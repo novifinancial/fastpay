@@ -1,8 +1,8 @@
+use anyhow::{Context, Result};
 use benchmark_server::config::{CommitteeConfig, KeyConfig, Parameters};
 use benchmark_server::config::{Export, Import};
 use benchmark_server::core::Core;
 use benchmark_server::receiver::NetworkReceiver;
-use anyhow::{Context, Result};
 use clap::{crate_name, crate_version, App, AppSettings, ArgMatches, SubCommand};
 use env_logger::Env;
 use fastpay_core::authority::AuthorityState;
@@ -20,8 +20,9 @@ async fn main() -> Result<()> {
                 .about("Print a fresh key pair to file")
                 .args_from_usage(
                     "<FILE>... 'The filenames containing the private config of each authority'
-                    --parameters=<FILE> 'The file where to print the coconut parameters'",
-                )
+                    --parameters=<FILE> 'The file where to print the coconut parameters'
+                    --master_secret=<FILE> 'The file storing the master secret key'",
+                ),
         )
         .subcommand(
             SubCommand::with_name("run")
@@ -32,7 +33,7 @@ async fn main() -> Result<()> {
                     --parameters=[FILE] 'The file containing the node parameters'
                     --store=<PATH> 'The path where to create the data store'
                     --shard=<INT> 'The shard id'",
-                )
+                ),
         )
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .get_matches();
@@ -59,8 +60,9 @@ async fn main() -> Result<()> {
 fn generate_all(matches: &ArgMatches<'_>) -> Result<()> {
     let filenames = matches.values_of("FILE").unwrap();
     let parameters_file = matches.value_of("parameters").unwrap();
+    let master_secret_file = matches.value_of("master_secret").unwrap();
 
-    let (keypairs, coconut_setup) = KeyConfig::new(filenames.len());
+    let (keypairs, coconut_setup, master_secret) = KeyConfig::new(filenames.len());
     for (filename, keypair) in filenames.into_iter().zip(keypairs.into_iter()) {
         keypair
             .export(filename)
@@ -71,6 +73,12 @@ fn generate_all(matches: &ArgMatches<'_>) -> Result<()> {
     }
     .export(parameters_file)
     .context("Failed to export coconut setup")
+    .unwrap();
+    master_secret
+        .export(master_secret_file)
+        .context("Failed to export coconut setup")
+        .unwrap();
+    Ok(())
 }
 
 async fn run(matches: &ArgMatches<'_>) -> Result<()> {

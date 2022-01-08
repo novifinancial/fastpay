@@ -10,14 +10,14 @@ from benchmark.remote import Bench
 
 
 @task
-def local(ctx, debug=True):
+def local(ctx, debug=False):
     ''' Run benchmarks on localhost '''
     bench_params = {
         'faults': 0,
         'nodes': 4,
-        'shards': 1,
-        'coconut': False,
-        'rate': 1_000,
+        'shards': 2,
+        'coconut': True,
+        'rate': 20,
         'duration': 20,
     }
     try:
@@ -106,7 +106,7 @@ def plot(ctx):
     plot_params = {
         'faults': [0],
         'nodes': [10, 20, 50],
-        'shards': [1],
+        'shards': [35],
         'collocate': True,
         'max_latency': [200, 1_000]
     }

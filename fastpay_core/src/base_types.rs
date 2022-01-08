@@ -47,7 +47,7 @@ pub struct KeyPair(dalek::Keypair);
 pub struct PublicKeyBytes(pub [u8; dalek::PUBLIC_KEY_LENGTH]);
 
 /// The unique identifier (UID) of an account.
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Serialize, Deserialize, Default)]
 pub struct AccountId(pub Vec<SequenceNumber>);
 
 /// A Sha512 value.

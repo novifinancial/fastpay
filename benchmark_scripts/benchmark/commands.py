@@ -21,13 +21,14 @@ class CommandMaker:
         return 'cargo build --quiet --release --features benchmark'
 
     @staticmethod
-    def generate_all(key_files, parameters_file):
+    def generate_all(key_files, parameters_file, master_secret_file):
         assert isinstance(key_files, list)
         assert isinstance(parameters_file, str)
         key_files = ' '.join(key_files)
         return (
             f'./benchmark_server generate {key_files} '
-            f'--parameters {parameters_file}'
+            f'--parameters {parameters_file} '
+            f'--master_secret {master_secret_file} '
         )
 
     @staticmethod
@@ -46,7 +47,7 @@ class CommandMaker:
         )
 
     @staticmethod
-    def run_client(targets, rate, nodes, committee):
+    def run_client(targets, rate, nodes, committee, parameters=None, master_secret=None):
         assert isinstance(targets, list)
         assert all(isinstance(x, str) for x in targets)
         assert len(targets) > 1
@@ -54,11 +55,15 @@ class CommandMaker:
         assert isinstance(nodes, list)
         assert all(isinstance(x, str) for x in nodes)
         assert isinstance(committee, str)
+        assert isinstance(parameters, str) or parameters is None
+        assert isinstance(master_secret, str) or master_secret is None
         targets = ' '.join(targets)
         nodes = ' '.join(nodes) if nodes else ''
+        params = f'--parameters {parameters} ' if parameters is not None else ''
+        secret = f'--master_secret {master_secret} ' if master_secret is not None else ''
         return (
             f'./benchmark_client {targets} --rate {rate} '
-            f'--committee {committee} --others {nodes}'
+            f'--committee {committee} --others {nodes} {params}{secret}'
         )
 
     @staticmethod

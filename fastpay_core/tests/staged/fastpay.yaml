@@ -108,6 +108,8 @@ CoinCreationResponse:
     - blinded_coins:
         OPTION:
           TYPENAME: BlindedCoins
+    - tracking_id:
+        TYPENAME: AccountId
 CoinCreationSource:
   STRUCT:
     - account_id:

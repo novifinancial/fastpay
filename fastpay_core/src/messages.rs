@@ -172,6 +172,8 @@ pub struct CoinCreationResponse {
     pub votes: Vec<Vote>,
     /// Blinded shares to create opaque coins.
     pub blinded_coins: Option<coconut::BlindedCoins>,
+    /// Id used to track the response during benchmarks.
+    pub tracking_id: AccountId,
 }
 
 /// A vote on a statement from an authority.
@@ -428,6 +430,13 @@ impl Value {
     pub fn confirm_key(&self) -> Option<(AccountId, SequenceNumber)> {
         match self {
             Value::Confirm(r) => Some((r.account_id.clone(), r.sequence_number)),
+            _ => None,
+        }
+    }
+
+    pub fn lock_account_id(&self) -> Option<&AccountId> {
+        match self {
+            Value::Lock(r) => Some(&r.account_id),
             _ => None,
         }
     }

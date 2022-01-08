@@ -2,16 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod client;
+mod coco_client;
 mod connection;
 mod error;
 mod transaction_maker;
 
 use crate::client::BenchmarkClient;
+use crate::coco_client::CocoBenchmarkClient;
 use anyhow::{Context, Result};
+use benchmark_server::config::{CommitteeConfig, Import, MasterSecret, Parameters};
 use clap::{crate_name, crate_version, App, AppSettings};
 use env_logger::Env;
-use benchmark_server::config::{CommitteeConfig, Import};
-use std::{net::SocketAddr};
+use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -22,7 +24,9 @@ async fn main() -> Result<()> {
             "<ADDR>... 'The network addresses of the shard where to send txs'
             --committee=<FILE> 'The file containing committee information'
             --others=[ADDR]... 'Network addresses that must be reachable before starting the benchmark.'
-            --rate=<INT> 'The rate (txs/s) at which to send the transactions'"
+            --rate=<INT> 'The rate (txs/s) at which to send the transactions'
+            --parameters=[FILE] 'The file containing the node parameters'
+            --master_secret=[FILE] 'The file containing the coconut master secret key"
         )
         .setting(AppSettings::ArgRequiredElseHelp)
         .get_matches();
@@ -60,16 +64,57 @@ async fn main() -> Result<()> {
         .parse::<u64>()
         .context("The rate of transactions must be a non-negative integer")?;
 
-    // Build the benchmark client and print its parameters.
-    let client = BenchmarkClient::new(targets, committee, others, rate);
-    client.print_parameters();
+    match matches.value_of("parameters") {
+        Some(filename) => {
+            let coconut_setup = Parameters::import(filename)
+                .context("Failed to load the node's parameters")?
+                .coconut_setup
+                .unwrap();
+            let coconut_parameters = coconut_setup.parameters;
+            let verification_key = coconut_setup.verification_key;
 
-    // Wait for all authorities to be online and synchronized.
-    client.wait().await;
+            let master_secret_file = matches
+                .value_of("master_secret")
+                .context("provided parameters but not master secret")
+                .unwrap();
+            let master_secret = MasterSecret::import(master_secret_file)
+                .context("Failed to load master secret key")?
+                .master_secret;
 
-    // Start the benchmark.
-    client
-        .benchmark()
-        .await
-        .context("Failed to submit transactions")
+            // Build the benchmark client and print its parameters.
+            let client = CocoBenchmarkClient::new(
+                targets,
+                committee,
+                others,
+                rate,
+                master_secret,
+                coconut_parameters,
+                verification_key,
+            );
+            client.print_parameters();
+
+            // Wait for all authorities to be online and synchronized.
+            client.wait().await;
+
+            // Start the benchmark.
+            client
+                .benchmark()
+                .await
+                .context("Failed to submit transactions")
+        }
+        None => {
+            // Build the benchmark client and print its parameters.
+            let client = BenchmarkClient::new(targets, committee, others, rate);
+            client.print_parameters();
+
+            // Wait for all authorities to be online and synchronized.
+            client.wait().await;
+
+            // Start the benchmark.
+            client
+                .benchmark()
+                .await
+                .context("Failed to submit transactions")
+        }
+    }
 }

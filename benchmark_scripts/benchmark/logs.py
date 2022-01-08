@@ -35,11 +35,12 @@ class LogParser:
                 results = p.map(self._parse_clients, clients)
         except (ValueError, IndexError, AttributeError) as e:
             raise ParseError(f'Failed to parse clients\' logs: {e}')
-        self.rate, self.start, misses, sent_samples, certificates = \
+        self.rate, self.start, misses, sent_samples, certificates, coins = \
             zip(*results)
         self.misses = sum(misses)
         self.sent_samples = {k: v for x in sent_samples for k, v in x.items()}
         self.certificates = {k: v for x in certificates for k, v in x.items()}
+        self.coins = {k: v for x in coins for k, v in x.items()}
 
         # Parse the shards logs.
         try:
@@ -53,7 +54,6 @@ class LogParser:
         )
 
         # Determine whether the primary and the workers are collocated.
-        print(set(shards_ips))
         self.collocate = num_nodes >= len(set(shards_ips))
 
         # Check whether clients missed their target rate.
@@ -104,11 +104,23 @@ class LogParser:
         tmp = findall(r'\[(.*Z) .* sample transaction (\d+)', log)
         samples = {int(d): self._to_posix(t) for t, d in tmp}
 
-        tmp = findall(r'\[(.*Z) .* certificate (\d+)', log)
+        tmp = findall(r'\[(.*Z) .* Assembled certificate (\d+)', log)
         tmp = [(int(d), self._to_posix(t)) for t, d in tmp]
         certificates = self._keep_earliest([tmp])  # Unnecessary
 
-        return rate, start, misses, samples, certificates
+        coins = {}
+
+        # The following are necessary for coconut benchmarks.
+        if not tmp:
+            tmp = findall(r'\[(.*Z) .* Assembled lock certificate (\d+)', log)
+            tmp = [(int(d), self._to_posix(t)) for t, d in tmp]
+            certificates = self._keep_earliest([tmp])  # Unnecessary
+
+            tmp = findall(r'\[(.*Z) .* Assembled coin (\d+)', log)
+            tmp = [(int(d), self._to_posix(t)) for t, d in tmp]
+            coins = self._keep_earliest([tmp])  # Unnecessary
+
+        return rate, start, misses, samples, certificates, coins
 
     def _parse_shards(self, log):
         if search(r'(?:panic|Error)', log) is not None:
@@ -145,19 +157,27 @@ class LogParser:
         return mean(latency) if latency else 0
 
     def _end_to_end_throughput(self):
-        if not self.commits:
-            return 0, 0
-        start, end = min(self.start), max(self.commits.values())
+        if self.commits:
+            final = self.commits
+        else:
+            final = self.coins
+
+        start, end = min(self.start), max(final.values())
         duration = end - start
-        txs = len(self.commits)
+        txs = len(final)
         tps = txs / duration
         return tps, duration
 
     def _end_to_end_latency(self):
+        if self.commits:
+            final = self.commits
+        else:
+            final = self.coins
+
         latency = []
         for id, start in self.sent_samples.items():
-            if id in self.commits:
-                end = self.commits[id]
+            if id in final:
+                end = final[id]
                 assert end >= start
                 latency += [end-start]
         return mean(latency) if latency else 0

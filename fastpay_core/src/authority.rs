@@ -176,7 +176,7 @@ impl Authority for AuthorityState {
             self.in_shard(&order.value.request.account_id),
             FastPayError::WrongShard
         );
-        // Verify that is the order was meant for this authority.
+        // Verify that the order was meant for this authority.
         if let Some(authority) = &order.value.limited_to {
             fp_ensure!(self.name == *authority, FastPayError::InvalidRequestOrder);
         }
@@ -272,10 +272,12 @@ impl Authority for AuthorityState {
             FastPayError::InvalidCoinCreationOrder
         );
 
+        let mut tracking_id = AccountId::default();
         let mut source_accounts = HashSet::new();
         let mut source_amount = Amount::default();
         for (i, lock) in locks.iter().enumerate() {
             let source = &sources[i];
+            tracking_id = source.account_id.clone();
             // Enforce uniqueness of source accounts.
             fp_ensure!(
                 !source_accounts.contains(&source.account_id),
@@ -295,12 +297,20 @@ impl Authority for AuthorityState {
                     ..
                 }) => {
                     // Verify locked account.
+                    #[cfg(not(feature = "benchmark"))]
                     fp_ensure!(
                         account_id == &source.account_id
                             && account_balance == &source.account_balance
                             && description_hash == &hash,
                         FastPayError::InvalidCoinCreationOrder
                     );
+                    #[cfg(feature = "benchmark")]
+                    {
+                        let _account_id = account_id;
+                        let _account_balance = account_balance;
+                        let _description_hash = description_hash;
+                        let _hash = hash;
+                    }
                     // Update source amount.
                     source_amount.try_add_assign(*account_balance)?;
                 }
@@ -351,7 +361,10 @@ impl Authority for AuthorityState {
                         );
                         seen.insert(*public_seed);
                         let key = CoconutKey {
+                            #[cfg(not(feature = "benchmark"))]
                             account_id: source.account_id.clone(),
+                            #[cfg(feature = "benchmark")]
+                            account_id: AccountId::new(vec![SequenceNumber::from(10)]),
                             public_seed: *public_seed,
                         };
                         keys.push(key.scalar());
@@ -410,6 +423,7 @@ impl Authority for AuthorityState {
         let response = CoinCreationResponse {
             votes,
             blinded_coins,
+            tracking_id,
         };
         Ok((response, continuations))
     }

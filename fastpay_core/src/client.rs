@@ -44,7 +44,7 @@ pub trait AuthorityClient {
 }
 
 /// How to communicate with an FastPay account across all the authorities. As a rule,
-/// operations are considered successful (and communication may stop) when they succeeed
+/// operations are considered successful (and communication may stop) when they succeeded
 /// in gathering a quorum of responses.
 pub trait AccountClient {
     /// Send money to a FastPay account.
@@ -152,7 +152,7 @@ pub enum PendingRequest {
 /// Reference implementation of the `AccountClient` trait using many instances of
 /// some `AuthorityClient` implementation for communication.
 pub struct AccountClientState<AuthorityClient> {
-    /// The offchain account id.
+    /// The off-chain account id.
     account_id: AccountId,
     /// The current signature key, if we own this account.
     key_pair: Option<KeyPair>,

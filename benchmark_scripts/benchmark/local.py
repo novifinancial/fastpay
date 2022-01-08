@@ -61,7 +61,9 @@ class LocalBench:
             # Generate configuration files.
             key_files = [PathMaker.key_file(i) for i in range(nodes)]
             cmd = CommandMaker.generate_all(
-                key_files, PathMaker.parameters_file()
+                key_files,
+                PathMaker.parameters_file(),
+                PathMaker.master_secret_file()
             )
             subprocess.run(cmd.split(), check=True)
 
@@ -69,6 +71,14 @@ class LocalBench:
             names = [Key.from_file(x).name for x in key_files]
             committee = LocalCommittee(names, self.BASE_PORT, self.shards)
             committee.print(PathMaker.committee_file())
+
+            # Check whether to run coconut or not.
+            if self.coconut:
+                parameters = PathMaker.parameters_file()
+                master_secret = PathMaker.master_secret_file()
+            else:
+                parameters = None
+                master_secret = None
 
             # Run the clients (they will wait for the nodes to be ready).
             nodes_addresses = committee.addresses(self.faults)
@@ -79,17 +89,14 @@ class LocalBench:
                         [x[j][1] for x in nodes_addresses],
                         rate_share,
                         [x for y in nodes_addresses for _, x in y],
-                        PathMaker.committee_file()
+                        PathMaker.committee_file(),
+                        parameters,
+                        master_secret
                     )
                     log_file = PathMaker.client_log_file(i, j)
                     self._background_run(cmd, log_file)
 
             # Run the shards (except the faulty ones).
-            if self.coconut:
-                parameters = PathMaker.parameters_file()
-            else:
-                parameters = None
-
             for i, shards in enumerate(nodes_addresses):
                 for j, _ in shards:
                     cmd = CommandMaker.run_shard(
