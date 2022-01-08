@@ -17,9 +17,6 @@ class AWSError(Exception):
 
 
 class InstanceManager:
-    INSTANCE_NAME = 'fastpay'
-    SECURITY_GROUP_NAME = 'fastpay'
-
     def __init__(self, settings):
         assert isinstance(settings, Settings)
         self.settings = settings
@@ -43,7 +40,7 @@ class InstanceManager:
                 Filters=[
                     {
                         'Name': 'tag:Name',
-                        'Values': [self.INSTANCE_NAME]
+                        'Values': [self.settings.testbed, ]
                     },
                     {
                         'Name': 'instance-state-name',
@@ -70,11 +67,11 @@ class InstanceManager:
     def _create_security_group(self, client):
         client.create_security_group(
             Description='HotStuff node',
-            GroupName=self.SECURITY_GROUP_NAME,
+            GroupName=self.settings.testbed,
         )
 
         client.authorize_security_group_ingress(
-            GroupName=self.SECURITY_GROUP_NAME,
+            GroupName=self.settings.testbed,
             IpPermissions=[
                 {
                     'IpProtocol': 'tcp',
@@ -140,12 +137,12 @@ class InstanceManager:
                     KeyName=self.settings.key_name,
                     MaxCount=instances,
                     MinCount=instances,
-                    SecurityGroups=[self.SECURITY_GROUP_NAME],
+                    SecurityGroups=[self.settings.testbed],
                     TagSpecifications=[{
                         'ResourceType': 'instance',
                         'Tags': [{
                             'Key': 'Name',
-                            'Value': self.INSTANCE_NAME
+                            'Value': self.settings.testbed,
                         }]
                     }],
                     EbsOptimized=True,
@@ -184,7 +181,7 @@ class InstanceManager:
             self._wait(['shutting-down'])
             for client in self.clients.values():
                 client.delete_security_group(
-                    GroupName=self.SECURITY_GROUP_NAME
+                    GroupName=self.settings.testbed,
                 )
 
             Print.heading(f'Testbed of {size} instances destroyed')

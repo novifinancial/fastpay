@@ -1,4 +1,5 @@
 {
+    "testbed": "fastcoco",
     "key": {
         "name": "aws",
         "path": "/Users/asonnino/.ssh/aws"
