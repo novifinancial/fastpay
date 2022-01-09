@@ -25,7 +25,8 @@ def default_major_formatter(x, pos):
 def sec_major_formatter(x, pos):
     if pos is None:
         return
-    return f'{float(x)/1000:.1f}'
+    # return f'{float(x)/1000:.1f}'
+    return f'{x:,.0f}'
 
 
 @tick.FuncFormatter
@@ -86,7 +87,7 @@ class Ploter:
 
         plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=3)
         plt.xlim(xmin=0)
-        plt.ylim(bottom=0)
+        plt.ylim(bottom=0, top=1_000)
         plt.xlabel(x_label, fontweight='bold')
         plt.ylabel(y_label[0], fontweight='bold')
         plt.xticks(weight='bold')
@@ -127,7 +128,7 @@ class Ploter:
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.shards if scalability else cls.nodes
         x_label = 'Throughput (tx/s)'
-        y_label = ['Latency (s)']
+        y_label = ['Latency (ms)']
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._latency, z_axis, 'latency')
 
