@@ -105,7 +105,12 @@ class Bench:
                 return 1
         else:
             if node_idx == 0:
-                return ceil(rate / shards)
+                r = rate % shards
+                share = rate / shards
+                if shard_idx < r:
+                    return share + r
+                else:
+                    return share
 
         return 0
 
