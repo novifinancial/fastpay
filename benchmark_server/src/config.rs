@@ -7,11 +7,11 @@ use fastpay_core::{
 };
 use log::info;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::net::SocketAddr;
 use std::{
     collections::{BTreeMap, HashMap},
     fs::{self, OpenOptions},
     io::{BufWriter, Write},
+    net::SocketAddr,
 };
 
 pub trait Import: DeserializeOwned {

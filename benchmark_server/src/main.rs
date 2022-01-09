@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
-use benchmark_server::config::{CommitteeConfig, KeyConfig, Parameters};
-use benchmark_server::config::{Export, Import};
-use benchmark_server::core::Core;
-use benchmark_server::receiver::NetworkReceiver;
+use benchmark_server::{
+    config::{CommitteeConfig, Export, Import, KeyConfig, Parameters},
+    core::Core,
+    receiver::NetworkReceiver,
+};
 use clap::{crate_name, crate_version, App, AppSettings, ArgMatches, SubCommand};
 use env_logger::Env;
-use fastpay_core::authority::AuthorityState;
-use fastpay_core::base_types::ShardId;
+use fastpay_core::{authority::AuthorityState, base_types::ShardId};
 use log::info;
 
 #[tokio::main]

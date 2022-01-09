@@ -7,8 +7,7 @@ mod connection;
 mod error;
 mod transaction_maker;
 
-use crate::client::BenchmarkClient;
-use crate::coco_client::CocoBenchmarkClient;
+use crate::{client::BenchmarkClient, coco_client::CocoBenchmarkClient};
 use anyhow::{Context, Result};
 use benchmark_server::config::{CommitteeConfig, Import, MasterSecret, Parameters};
 use clap::{crate_name, crate_version, App, AppSettings};

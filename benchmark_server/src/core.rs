@@ -1,14 +1,14 @@
-use crate::config::CommitteeConfig;
-use crate::receiver::MessageHandler;
-use crate::reliable_sender::ReliableSender;
+use crate::{config::CommitteeConfig, receiver::MessageHandler, reliable_sender::ReliableSender};
 use async_trait::async_trait;
 use bytes::Bytes;
-use fastpay_core::authority::{Authority, AuthorityState, CrossShardContinuation};
-use fastpay_core::base_types::AuthorityName;
-use fastpay_core::error::FastPayError;
-use fastpay_core::serialize::{
-    serialize_coin_creation_response, serialize_cross_shard_request, serialize_error,
-    serialize_info_response, SerializedMessage,
+use fastpay_core::{
+    authority::{Authority, AuthorityState, CrossShardContinuation},
+    base_types::AuthorityName,
+    error::FastPayError,
+    serialize::{
+        serialize_coin_creation_response, serialize_cross_shard_request, serialize_error,
+        serialize_info_response, SerializedMessage,
+    },
 };
 use log::{debug, warn};
 
