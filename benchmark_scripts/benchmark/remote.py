@@ -250,7 +250,7 @@ class Bench:
                 host = Committee.ip(address)
                 rate_share = self._rate_share(
                     committee,
-                    bench_parameters.nodes,
+                    committee.size(),
                     bench_parameters.shards,
                     rate,
                     i,
