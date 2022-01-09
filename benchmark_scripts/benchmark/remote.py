@@ -106,7 +106,7 @@ class Bench:
         else:
             if node_idx == 0:
                 r = rate % shards
-                share = rate / shards
+                share = int(rate / shards)
                 if shard_idx < r:
                     return share + r
                 else:
