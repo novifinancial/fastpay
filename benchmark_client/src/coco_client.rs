@@ -116,17 +116,17 @@ impl CocoBenchmarkClient {
 
         // Submit requests.
         tokio::spawn(async move {
-            if burst == 0 {
-                info!("No transactions to submit (burst={})", burst);
-                return;
-            }
-
             // Submit all transactions.
             let interval = interval(Duration::from_millis(BURST_DURATION));
             tokio::pin!(interval);
 
             // NOTE: This log entry is used to compute performance.
             info!("Start sending transactions");
+
+            if burst == 0 {
+                info!("No transactions to submit (burst={})", burst);
+                return;
+            }
 
             'main: loop {
                 interval.tick().await;
