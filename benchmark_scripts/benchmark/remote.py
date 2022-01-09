@@ -94,6 +94,21 @@ class Bench:
         except GroupException as e:
             raise BenchError('Failed to kill nodes', FabricError(e))
 
+    def _rate_share(self, committee, nodes, shards, rate, node_idx, shard_idx):
+        # Handle the common case.
+        if rate >= nodes * shards:
+            return ceil(rate / committee.total_shards())
+
+        # Handle small transaction rates.
+        if rate <= shards:
+            if node_idx == 0 and shard_idx < rate:
+                return 1
+        else:
+            if node_idx == 0:
+                return ceil(rate / shards)
+
+        return 0
+
     def _select_hosts(self, bench_parameters):
         # Collocate all shards on the same machine.
         if bench_parameters.collocate:
@@ -230,10 +245,17 @@ class Bench:
         # for the faulty nodes to be online).
         Print.info('Booting clients...')
         nodes_addresses = committee.addresses(faults)
-        rate_share = ceil(rate / committee.total_shards())
         for i, shards in enumerate(nodes_addresses):
             for j, address in shards:
                 host = Committee.ip(address)
+                rate_share = self._rate_share(
+                    committee,
+                    bench_parameters.nodes,
+                    bench_parameters.shards,
+                    rate,
+                    i,
+                    j
+                )
                 cmd = CommandMaker.run_client(
                     [x[j][1] for x in nodes_addresses],
                     rate_share,

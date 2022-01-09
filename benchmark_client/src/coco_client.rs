@@ -116,6 +116,11 @@ impl CocoBenchmarkClient {
 
         // Submit requests.
         tokio::spawn(async move {
+            if self.rate == 0 {
+                info!("No transactions to submit (rate={})", self.rate);
+                return;
+            }
+
             // Submit all transactions.
             let interval = interval(Duration::from_millis(BURST_DURATION));
             tokio::pin!(interval);
