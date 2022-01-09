@@ -116,8 +116,8 @@ impl CocoBenchmarkClient {
 
         // Submit requests.
         tokio::spawn(async move {
-            if self.rate == 0 {
-                info!("No transactions to submit (rate={})", self.rate);
+            if burst == 0 {
+                info!("No transactions to submit (burst={})", burst);
                 return;
             }
 
