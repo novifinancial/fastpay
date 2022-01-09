@@ -108,7 +108,7 @@ class Bench:
                 r = rate % shards
                 share = int(rate / shards)
                 if shard_idx < r:
-                    return share + r
+                    return share + 1
                 else:
                     return share
 
