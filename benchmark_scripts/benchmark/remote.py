@@ -103,6 +103,8 @@ class Bench:
                     return share + 1
                 else:
                     return share
+            else:
+                return 0
 
         # Handle the common case.
         if rate >= nodes * shards:
@@ -121,6 +123,7 @@ class Bench:
                 else:
                     return share
 
+        print("it is a zero")
         return 0
 
     def _select_hosts(self, bench_parameters):
