@@ -24,7 +24,11 @@ optional = true
 default-features = true
 features = ["derive"]
 
+[dev-dependencies]
+statistical = "1.0.0"
+
 [features]
 with_serde = ["serde", "bls12_381/serde", "bulletproofs/with_serde"]
 with_equality = ["bulletproofs/with_equality"]
 benchmark = []
+micro_bench = []
