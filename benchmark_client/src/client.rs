@@ -88,7 +88,7 @@ impl BenchmarkClient {
     }
 
     fn send_requests(&self, tx_certificate: Sender<Bytes>) -> JoinHandle<()> {
-        const PRECISION: u64 = 20; // Timing burst precision.
+        const PRECISION: u64 = 1; // Timing burst precision.
         const BURST_DURATION: u64 = 1000 / PRECISION;
         let burst = self.rate / PRECISION;
         let mut counter = 0; // Identifies sample transactions.

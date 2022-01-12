@@ -70,7 +70,7 @@ class Ploter:
     def _variable(self, data):
         return [int(x) for x in findall(r'Variable value: X=(\d+)', data)]
 
-    def _plot(self, x_label, y_label, y_axis, z_axis, type):
+    def _plot(self, x_label, y_label, y_axis, z_axis, type, y_max=None):
         plt.figure()
         markers = cycle(['o', 'v', 's', 'p', 'D', 'P'])
         self.results.sort(key=self._natural_keys, reverse=(type == 'tps'))
@@ -87,7 +87,7 @@ class Ploter:
 
         plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=3)
         plt.xlim(xmin=0)
-        plt.ylim(bottom=0, top=1_000)
+        plt.ylim(bottom=0, top=y_max)
         plt.xlabel(x_label, fontweight='bold')
         plt.ylabel(y_label[0], fontweight='bold')
         plt.xticks(weight='bold')
@@ -120,27 +120,30 @@ class Ploter:
         x = search(r'Max latency: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
-        return f'Max latency: {float(x) / 1000:,.1f} s {faults}'
+        # return f'Max latency: {float(x) / 1000:,.1f} s {faults}'
+        return f'Latency cap: {int(x):,} ms {faults}'
 
     @classmethod
-    def plot_latency(cls, files, scalability):
+    def plot_latency(cls, files, scalability, y_max=None):
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.shards if scalability else cls.nodes
         x_label = 'Throughput (tx/s)'
         y_label = ['Latency (ms)']
         ploter = cls(files)
-        ploter._plot(x_label, y_label, ploter._latency, z_axis, 'latency')
+        ploter._plot(
+            x_label, y_label, ploter._latency, z_axis, 'latency', y_max
+        )
 
     @classmethod
     def plot_tps(cls, files, scalability):
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.max_latency
-        x_label = 'Shards per node' if scalability else 'Committee size'
+        x_label = 'Shards per authority' if scalability else 'Committee size'
         y_label = ['Throughput (tx/s)']
         ploter = cls(files)
-        ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
+        ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps', y_max=None)
 
     @classmethod
     def plot(cls, params_dict):
@@ -153,7 +156,7 @@ class Ploter:
         LogAggregator(params.max_latency).print()
 
         # Make the latency, tps, and robustness graphs.
-        iterator = params.workers if params.scalability() else params.nodes
+        iterator = params.shards if params.scalability() else params.nodes
         latency_files, tps_files = [], []
         for f in params.faults:
             for x in iterator:
@@ -183,5 +186,6 @@ class Ploter:
                     )
                 )
 
-        cls.plot_latency(latency_files, params.scalability())
+        y_max = 3_000 if params.coconut else 1_000
+        cls.plot_latency(latency_files, params.scalability(), y_max)
         cls.plot_tps(tps_files, params.scalability())
