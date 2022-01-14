@@ -122,7 +122,7 @@ fn aggregate_coin_fail() {
 #[cfg(feature = "micro_bench")]
 #[test]
 fn bench_issue() {
-    use statistical::{standard_deviation, mean};
+    use statistical::{mean, standard_deviation};
     use std::time::Instant;
 
     const RUNS: usize = 100;
@@ -137,17 +137,16 @@ fn bench_issue() {
     for _ in 0..RUNS {
         let now = Instant::now();
         for _ in 0..PRECISION {
-            let _result = BlindedCoins::new(
-                &parameters,
-                &secret_key,
-                &request.cms,
-                &request.cs,
-            );
+            let _result = BlindedCoins::new(&parameters, &secret_key, &request.cms, &request.cs);
         }
         let elapsed = now.elapsed().as_millis() as f64;
-        data.push(elapsed / PRECISION as f64); 
-    }  
-    println!("Result: {:.2} +/- {:.2} ms", mean(&data), standard_deviation(&data, None));
+        data.push(elapsed / PRECISION as f64);
+    }
+    println!(
+        "Result: {:.2} +/- {:.2} ms",
+        mean(&data),
+        standard_deviation(&data, None)
+    );
 }
 
 // Run with:
@@ -155,7 +154,7 @@ fn bench_issue() {
 #[cfg(feature = "micro_bench")]
 #[test]
 fn bench_aggregate() {
-    use statistical::{standard_deviation, mean};
+    use statistical::{mean, standard_deviation};
     use std::time::Instant;
 
     const RUNS: usize = 100;
@@ -174,7 +173,7 @@ fn bench_aggregate() {
             );
             (coin, key.index)
         })
-        .collect();    
+        .collect();
 
     let mut data = Vec::new();
     println!("benchmarking 'aggregate'...");
@@ -184,9 +183,13 @@ fn bench_aggregate() {
             let _result = Coin::aggregate(&shares);
         }
         let elapsed = now.elapsed().as_millis() as f64;
-        data.push(elapsed / PRECISION as f64); 
-    }  
-    println!("Result: {:.2} +/- {:.2} ms", mean(&data), standard_deviation(&data, None));
+        data.push(elapsed / PRECISION as f64);
+    }
+    println!(
+        "Result: {:.2} +/- {:.2} ms",
+        mean(&data),
+        standard_deviation(&data, None)
+    );
 }
 
 // Run with:
@@ -194,15 +197,15 @@ fn bench_aggregate() {
 #[cfg(feature = "micro_bench")]
 #[test]
 fn bench_plain_verify() {
-    use statistical::{standard_deviation, mean};
+    use statistical::{mean, standard_deviation};
     use std::time::Instant;
 
     const RUNS: usize = 100;
     const PRECISION: usize = 10;
 
-    let coin = coin1(); 
+    let coin = coin1();
     let parameters = parameters();
-    let public_key = keypair().public; 
+    let public_key = keypair().public;
     let coin_attributes = input_attribute1();
 
     let mut data = Vec::new();
@@ -219,9 +222,13 @@ fn bench_plain_verify() {
             );
         }
         let elapsed = now.elapsed().as_millis() as f64;
-        data.push(elapsed / PRECISION as f64); 
-    }  
-    println!("Result: {:.2} +/- {:.2} ms", mean(&data), standard_deviation(&data, None));
+        data.push(elapsed / PRECISION as f64);
+    }
+    println!(
+        "Result: {:.2} +/- {:.2} ms",
+        mean(&data),
+        standard_deviation(&data, None)
+    );
 }
 
 // Run with:
@@ -229,13 +236,13 @@ fn bench_plain_verify() {
 #[cfg(feature = "micro_bench")]
 #[test]
 fn bench_unblind() {
-    use statistical::{standard_deviation, mean};
+    use statistical::{mean, standard_deviation};
     use std::time::Instant;
 
     const RUNS: usize = 100;
     const PRECISION: usize = 10;
 
-    let public_key = keypair().public; 
+    let public_key = keypair().public;
     let output_attributes = output_attributes();
     let blinded_coins = BlindedCoins::new(
         &parameters(),
@@ -252,7 +259,11 @@ fn bench_unblind() {
             let _result = blinded_coins.unblind(&public_key, &output_attributes);
         }
         let elapsed = now.elapsed().as_millis() as f64;
-        data.push(elapsed / PRECISION as f64); 
-    }  
-    println!("Result: {:.2} +/- {:.2} ms", mean(&data), standard_deviation(&data, None));
+        data.push(elapsed / PRECISION as f64);
+    }
+    println!(
+        "Result: {:.2} +/- {:.2} ms",
+        mean(&data),
+        standard_deviation(&data, None)
+    );
 }

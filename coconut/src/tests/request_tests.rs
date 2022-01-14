@@ -16,11 +16,11 @@ fn verify_request() {
 #[cfg(feature = "micro_bench")]
 #[test]
 fn bench_request() {
+    use super::*;
     use crate::fixtures::{coin1, coin2, output_attributes};
     use rand::SeedableRng;
-    use statistical::{standard_deviation, mean};
+    use statistical::{mean, standard_deviation};
     use std::time::Instant;
-    use super::*;
 
     const RUNS: usize = 100;
     const PRECISION: usize = 10;
@@ -46,9 +46,13 @@ fn bench_request() {
             );
         }
         let elapsed = now.elapsed().as_millis() as f64;
-        data.push(elapsed / PRECISION as f64); 
-    }  
-    println!("Result: {:.2} +/- {:.2} ms", mean(&data), standard_deviation(&data, None));
+        data.push(elapsed / PRECISION as f64);
+    }
+    println!(
+        "Result: {:.2} +/- {:.2} ms",
+        mean(&data),
+        standard_deviation(&data, None)
+    );
 }
 
 // Run with:
@@ -56,7 +60,7 @@ fn bench_request() {
 #[cfg(feature = "micro_bench")]
 #[test]
 fn bench_verify_request() {
-    use statistical::{standard_deviation, mean};
+    use statistical::{mean, standard_deviation};
     use std::time::Instant;
 
     const RUNS: usize = 100;
@@ -76,7 +80,11 @@ fn bench_verify_request() {
             let _result = request.verify(&parameters, &public_key, &input_keys, &offset);
         }
         let elapsed = now.elapsed().as_millis() as f64;
-        data.push(elapsed / PRECISION as f64); 
-    }  
-    println!("Result: {:.2} +/- {:.2} ms", mean(&data), standard_deviation(&data, None));
+        data.push(elapsed / PRECISION as f64);
+    }
+    println!(
+        "Result: {:.2} +/- {:.2} ms",
+        mean(&data),
+        standard_deviation(&data, None)
+    );
 }
