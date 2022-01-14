@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use async_trait::async_trait;
 use bytes::Bytes;
 use fastpay_core::serialize::{deserialize_message, SerializedMessage};

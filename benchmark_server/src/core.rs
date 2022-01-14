@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::{config::CommitteeConfig, receiver::MessageHandler, reliable_sender::ReliableSender};
 use async_trait::async_trait;
 use bytes::Bytes;

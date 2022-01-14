@@ -1,3 +1,6 @@
+// Copyright (c) Facebook, Inc. and its affiliates.
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::{Context, Result};
 use benchmark_server::{
     config::{CommitteeConfig, Export, Import, KeyConfig, Parameters},
