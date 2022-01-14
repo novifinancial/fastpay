@@ -8,14 +8,31 @@ use fastpay_core::{
     committee::{CoconutSetup, Committee},
     messages::{Address, Asset, Certificate, Operation, Value},
 };
-
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Write},
     path::Path,
 };
+
+pub trait Import: DeserializeOwned {
+    fn read(path: &Path) -> Result<Self, std::io::Error> {
+        let data = fs::read(path)?;
+        Ok(serde_json::from_slice(data.as_slice())?)
+    }
+}
+
+pub trait Export: Serialize {
+    fn write(&self, path: &Path) -> Result<(), std::io::Error> {
+        let file = OpenOptions::new().create(true).write(true).open(path)?;
+        let mut writer = BufWriter::new(file);
+        let data = serde_json::to_string_pretty(self).unwrap();
+        writer.write_all(data.as_ref())?;
+        writer.write_all(b"\n")?;
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthorityConfig {
@@ -40,57 +57,21 @@ pub struct AuthorityServerConfig {
     pub coconut_key: Option<coconut::KeyPair>,
 }
 
-impl AuthorityServerConfig {
-    pub fn read(path: &Path) -> Result<Self, std::io::Error> {
-        let data = fs::read(path)?;
-        Ok(serde_json::from_slice(data.as_slice())?)
-    }
+impl Import for AuthorityServerConfig {}
+impl Export for AuthorityServerConfig {}
 
-    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
-        let file = OpenOptions::new().create(true).write(true).open(path)?;
-        let mut writer = BufWriter::new(file);
-        let data = serde_json::to_string_pretty(self).unwrap();
-        writer.write_all(data.as_ref())?;
-        writer.write_all(b"\n")?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommitteeConfig {
     pub coconut_setup: Option<CoconutSetup>,
     pub authorities: Vec<AuthorityConfig>,
 }
 
+impl Import for CommitteeConfig {}
+impl Export for CommitteeConfig {}
+
 impl CommitteeConfig {
     pub fn into_committee(self) -> Committee {
         Committee::new(self.voting_rights(), self.coconut_setup)
-    }
-
-    pub fn read(path: &Path) -> Result<Self, std::io::Error> {
-        let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
-        let coconut_setup = serde_json::Deserializer::from_reader(&mut reader)
-            .into_iter()
-            .next()
-            .unwrap()
-            .ok();
-        let stream = serde_json::Deserializer::from_reader(&mut reader).into_iter();
-        Ok(Self {
-            authorities: stream.filter_map(Result::ok).collect(),
-            coconut_setup,
-        })
-    }
-
-    pub fn write(&self, path: &Path) -> Result<(), std::io::Error> {
-        let file = OpenOptions::new().create(true).write(true).open(path)?;
-        let mut writer = BufWriter::new(file);
-        serde_json::to_writer(&mut writer, &self.coconut_setup)?;
-        for config in &self.authorities {
-            serde_json::to_writer(&mut writer, config)?;
-            writer.write_all(b"\n")?;
-        }
-        Ok(())
     }
 
     fn voting_rights(&self) -> BTreeMap<AuthorityName, usize> {

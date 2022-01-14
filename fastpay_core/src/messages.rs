@@ -43,7 +43,7 @@ pub enum Operation {
     CloseAccount,
     /// Change the authentication key of the account.
     ChangeOwner { new_owner: AccountOwner },
-    /// Lock the account so that the balance and linked coins may be eventually transfered
+    /// Lock the account so that the balance and linked coins may be eventually transferred
     /// to new coins (according to the "coin creation description" behind `description_hash`).
     Spend {
         account_balance: Amount,
@@ -172,6 +172,8 @@ pub struct CoinCreationResponse {
     pub votes: Vec<Vote>,
     /// Blinded shares to create opaque coins.
     pub blinded_coins: Option<coconut::BlindedCoins>,
+    /// Id used to track the response during benchmarks.
+    pub tracking_id: AccountId,
 }
 
 /// A vote on a statement from an authority.
@@ -431,10 +433,17 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn lock_account_id(&self) -> Option<&AccountId> {
+        match self {
+            Value::Lock(r) => Some(&r.account_id),
+            _ => None,
+        }
+    }
 }
 
 /// Non-testing code should make the pattern matching explicit so that
-/// we kwow where to add protocols in the future.
+/// we know where to add protocols in the future.
 #[cfg(test)]
 impl Request {
     pub(crate) fn amount(&self) -> Option<Amount> {
@@ -545,6 +554,7 @@ impl<'a> SignatureAggregator<'a> {
         self.partial.signatures.push((authority, signature));
 
         if self.weight >= self.committee.quorum_threshold() {
+            self.weight = 0; // Prevent from creating the certificate twice.
             Ok(Some(self.partial.clone()))
         } else {
             Ok(None)

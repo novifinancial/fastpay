@@ -55,6 +55,30 @@ impl Coin {
         let s = Polynomial::lagrange_interpolate(&shares);
         Self(coin.0, s)
     }
+
+    #[cfg(any(feature = "benchmark", test))]
+    pub fn default(
+        parameters: &Parameters,
+        secret: &SecretKey,
+        value: &Scalar,
+        seed: &Scalar,
+        key: &Scalar,
+    ) -> Self {
+        let h0 = parameters.hs[0];
+        let h1 = parameters.hs[1];
+        let h2 = parameters.hs[2];
+        let o = Scalar::one();
+        let cm = h0 * value + h1 * seed + h2 * key + parameters.g1 * o;
+
+        let h = Parameters::hash_to_g1(cm.to_bytes());
+
+        let y0 = &secret.ys[0];
+        let y1 = &secret.ys[1];
+        let y2 = &secret.ys[2];
+
+        let s = h * (value * y0 + seed * y1 + key * y2 + secret.x);
+        Self(h, s)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

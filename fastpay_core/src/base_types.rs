@@ -1,17 +1,15 @@
 // Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::error::FastPayError;
 use ed25519_dalek as dalek;
-use ed25519_dalek::{Signer, Verifier};
-
+use ed25519_dalek::{ed25519::signature::Signature as _, Signer, Verifier};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
     str::FromStr,
 };
-
-use crate::error::FastPayError;
 
 #[cfg(test)]
 #[path = "unit_tests/base_types_tests.rs"]
@@ -33,7 +31,7 @@ pub struct Balance(i128);
 #[derive(
     Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Default, Debug, Serialize, Deserialize,
 )]
-pub struct SequenceNumber(u64);
+pub struct SequenceNumber(pub u64);
 
 /// Optional user message attached to a transfer.
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Default, Debug, Serialize, Deserialize)]
@@ -47,8 +45,8 @@ pub struct KeyPair(dalek::Keypair);
 pub struct PublicKeyBytes(pub [u8; dalek::PUBLIC_KEY_LENGTH]);
 
 /// The unique identifier (UID) of an account.
-#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Serialize, Deserialize)]
-pub struct AccountId(Vec<SequenceNumber>);
+#[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Serialize, Deserialize, Default)]
+pub struct AccountId(pub Vec<SequenceNumber>);
 
 /// A Sha512 value.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Hash, Serialize, Deserialize)]
@@ -182,8 +180,6 @@ impl<'de> Deserialize<'de> for Signature {
         D: serde::de::Deserializer<'de>,
     {
         if deserializer.is_human_readable() {
-            use ed25519_dalek::ed25519::signature::Signature;
-
             let s = String::deserialize(deserializer)?;
             let value = hex::decode(&s).map_err(|err| serde::de::Error::custom(err.to_string()))?;
             let sig = dalek::Signature::from_bytes(&value)

@@ -22,7 +22,8 @@ impl KeyPair {
             .collect();
 
         // Compute the key of each authority
-        KeyPair::derive_keys(parameters, committee, v, ws)
+        let (aggregated, authorities, _) = KeyPair::derive_keys(parameters, committee, v, ws);
+        (aggregated, authorities)
     }
 }
 

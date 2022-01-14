@@ -1,0 +1,22 @@
+{
+    "testbed": "fastcoco-scale",
+    "key": {
+        "name": "aws",
+        "path": "/Users/asonnino/.ssh/aws"
+    },
+    "port": 5000,
+    "repo": {
+        "name": "fastpay",
+        "url": "https://github.com/asonnino/fastpay",
+        "branch": "bench-net"
+    },
+    "instances": {
+        "type": "m5d.8xlarge",
+        "regions": [
+            "us-east-1",
+            "eu-central-1",
+            "ap-southeast-2",
+            "ap-northeast-1"
+        ]
+    }
+}
