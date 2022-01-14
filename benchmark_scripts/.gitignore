@@ -1,4 +1,4 @@
-server
+benchmark_server
 benchmark_client
 results
 plots
