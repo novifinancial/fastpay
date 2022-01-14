@@ -71,7 +71,7 @@ class Ploter:
         return [int(x) for x in findall(r'Variable value: X=(\d+)', data)]
 
     def _plot(self, x_label, y_label, y_axis, z_axis, type, y_max=None):
-        plt.figure()
+        plt.figure(figsize=(6.4, 2.4))
         markers = cycle(['o', 'v', 's', 'p', 'D', 'P'])
         self.results.sort(key=self._natural_keys, reverse=(type == 'tps'))
         for result in self.results:
@@ -85,7 +85,7 @@ class Ploter:
                 linestyle='dotted', marker=next(markers), capsize=3
             )
 
-        plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1), ncol=3)
+        plt.legend(loc='upper center', bbox_to_anchor=(0.5, 1), ncol=2)
         plt.xlim(xmin=0)
         plt.ylim(bottom=0, top=y_max)
         plt.xlabel(x_label, fontweight='bold')
@@ -103,10 +103,11 @@ class Ploter:
 
     @staticmethod
     def nodes(data):
+        shards = search(r'Shards per node: (\d+)', data).group(1)
         x = search(r'Committee size: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
-        faults = f'({f} faulty)' if f != '0' else ''
-        return f'{x} nodes {faults}'
+        faults = f' - {f} faulty' if f != '0' else ''
+        return f'{x} nodes ({shards} shards){faults}'
 
     @staticmethod
     def shards(data):

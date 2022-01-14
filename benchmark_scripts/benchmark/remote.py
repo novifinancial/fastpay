@@ -95,7 +95,7 @@ class Bench:
             raise BenchError('Failed to kill nodes', FabricError(e))
 
     def _rate_share(self, committee, nodes, shards, rate, node_idx, shard_idx):
-        if rate < 50:
+        if rate < 80:
             if node_idx == 0:
                 r = rate % shards
                 share = int(rate / shards)

@@ -1,5 +1,5 @@
 {
-    "testbed": "fastcoco",
+    "testbed": "fastcoco-scale",
     "key": {
         "name": "aws",
         "path": "/Users/asonnino/.ssh/aws"
@@ -16,7 +16,6 @@
             "us-east-1",
             "eu-central-1",
             "ap-southeast-2",
-            "us-west-1",
             "ap-northeast-1"
         ]
     }
