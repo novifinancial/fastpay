@@ -150,6 +150,24 @@ impl KeyPair {
             .map(|_| Polynomial::random(&mut rng, threshold - 1))
             .collect();
 
+        let (master_public, authorities, _) = Self::derive_keys(parameters, committee, v, ws);
+        (master_public, authorities)
+    }
+
+    #[cfg(feature = "benchmark")]
+    pub fn ttp_and_master_key(
+        mut rng: impl rand::RngCore,
+        parameters: &Parameters,
+        threshold: usize,
+        committee: usize,
+    ) -> (PublicKey, Vec<KeyPair>, SecretKey) {
+        assert!(threshold <= committee && threshold > 0);
+
+        let v = Polynomial::random(&mut rng, threshold - 1);
+        let ws: Vec<_> = (0..parameters.max_attributes())
+            .map(|_| Polynomial::random(&mut rng, threshold - 1))
+            .collect();
+
         Self::derive_keys(parameters, committee, v, ws)
     }
 
@@ -160,7 +178,7 @@ impl KeyPair {
         committee: usize,
         v: Polynomial,
         ws: Vec<Polynomial>,
-    ) -> (PublicKey, Vec<KeyPair>) {
+    ) -> (PublicKey, Vec<KeyPair>, SecretKey) {
         // Compute the key of each authority
         let keys = (1..=committee)
             .map(|i| {
@@ -186,6 +204,6 @@ impl KeyPair {
             ys: ws.iter().map(|w| w.evaluate(&Scalar::zero())).collect(),
         };
         let master_public = PublicKey::new(parameters, &master_secret);
-        (master_public, keys)
+        (master_public, keys, master_secret)
     }
 }

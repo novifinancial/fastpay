@@ -4,6 +4,8 @@
 use crate::transport::*;
 use fastpay_core::{authority::*, base_types::*, client::*, error::*, messages::*, serialize::*};
 
+#[cfg(feature = "benchmark")]
+use crate::network_server::BenchmarkServer;
 use bytes::Bytes;
 use futures::{channel::mpsc, future::FutureExt, sink::SinkExt, stream::StreamExt};
 use log::*;
@@ -112,7 +114,7 @@ impl Server {
                 }
             }
             if queries_sent % 2000 == 0 {
-                info!(
+                debug!(
                     "{}:{} (shard {}) has sent {} cross-shard queries",
                     base_address,
                     base_port + this_shard,
@@ -155,7 +157,17 @@ impl Server {
             cross_shard_sender,
         };
         // Launch server for the appropriate protocol.
-        protocol.spawn_server(&address, state, buffer_size).await
+        #[cfg(feature = "benchmark")]
+        {
+            let _buffer_size = buffer_size;
+            let _protocol = protocol;
+            BenchmarkServer::spawn(address, state)
+        }
+
+        #[cfg(not(feature = "benchmark"))]
+        {
+            protocol.spawn_server(&address, state, buffer_size).await
+        }
     }
 }
 
@@ -231,7 +243,7 @@ impl MessageHandler for RunningServerState {
 
             self.server.packets_processed += 1;
             if self.server.packets_processed % 5000 == 0 {
-                info!(
+                debug!(
                     "{}:{} (shard {}) has processed {} packets",
                     self.server.base_address,
                     self.server.base_port + self.server.state.shard_id,

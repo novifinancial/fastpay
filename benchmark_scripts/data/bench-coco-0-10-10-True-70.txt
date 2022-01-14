@@ -1,0 +1,38 @@
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 node(s)
+ Committee size: 10 node(s)
+ Shard(s) per node: 10 shard(s)
+ Collocate shards: True
+ Coconut: True
+ Input rate: 70 tx/s
+ Execution time: 300 s
+
+ + RESULTS:
+ Client TPS: 69 tx/s
+ Client latency: 3,904 ms
+ End-to-end TPS: 67 tx/s
+ End-to-end latency: 7,740 ms
+-----------------------------------------
+
+-----------------------------------------
+ SUMMARY:
+-----------------------------------------
+ + CONFIG:
+ Faults: 0 node(s)
+ Committee size: 10 node(s)
+ Shard(s) per node: 10 shard(s)
+ Collocate shards: True
+ Coconut: True
+ Input rate: 70 tx/s
+ Execution time: 300 s
+
+ + RESULTS:
+ Client TPS: 69 tx/s
+ Client latency: 3,982 ms
+ End-to-end TPS: 67 tx/s
+ End-to-end latency: 7,888 ms
+-----------------------------------------
