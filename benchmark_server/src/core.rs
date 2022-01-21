@@ -9,8 +9,8 @@ use fastpay_core::{
     base_types::AuthorityName,
     error::FastPayError,
     serialize::{
-        serialize_coin_creation_response, serialize_cross_shard_request, serialize_error,
-        serialize_account_info_response, SerializedMessage,
+        serialize_account_info_response, serialize_coin_creation_response,
+        serialize_cross_shard_request, serialize_error, SerializedMessage,
     },
 };
 use log::{debug, warn};
