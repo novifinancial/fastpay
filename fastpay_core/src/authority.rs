@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    account::AccountState, base_types::*, committee::Committee, error::FastPayError, messages::*,
+    account::AccountState, base_types::*, committee::Committee, consensus::ConsensusState,
+    error::FastPayError, messages::*,
 };
 use bls12_381::Scalar;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -23,6 +24,8 @@ pub struct AuthorityState {
     pub coconut_key_pair: Option<coconut::KeyPair>,
     /// States of FastPay accounts.
     pub accounts: BTreeMap<AccountId, AccountState>,
+    /// States of consensus instances.
+    pub instances: BTreeMap<AccountId, ConsensusState>,
     /// The latest transaction index of the blockchain that the authority has seen.
     pub last_transaction_index: SequenceNumber,
     /// The sharding ID of this authority shard. 0 if one shard.
@@ -38,6 +41,13 @@ pub enum CrossShardContinuation {
         shard_id: ShardId,
         request: Box<CrossShardRequest>,
     },
+}
+
+/// The response to a consensus order.
+pub enum ConsensusResponse {
+    Info(ConsensusInfoResponse),
+    Vote(Vote),
+    Continuations(Vec<CrossShardContinuation>),
 }
 
 /// Interface provided by each (shard of an) authority.
@@ -62,6 +72,12 @@ pub trait Authority {
         &mut self,
         order: CoinCreationOrder,
     ) -> Result<(CoinCreationResponse, Vec<CrossShardContinuation>), FastPayError>;
+
+    /// Process a message meant for a consensus instance.
+    fn handle_consensus_order(
+        &mut self,
+        order: ConsensusOrder,
+    ) -> Result<ConsensusResponse, FastPayError>;
 
     /// Force synchronization to finalize requests from Primary to FastPay.
     fn handle_primary_synchronization_order(
@@ -152,14 +168,22 @@ impl AuthorityState {
         operation: Operation,
         certificate: Certificate,
     ) -> Result<(), FastPayError> {
-        let recipient = operation
-            .recipient()
-            .ok_or(FastPayError::InvalidCrossShardRequest)?;
-        // Verify sharding.
-        fp_ensure!(self.in_shard(recipient), FastPayError::WrongShard);
-        // Execute the recipient's side of the operation.
-        let account = self.accounts.entry(recipient.clone()).or_default();
-        account.apply_operation_as_recipient(&operation, certificate)?;
+        if let Some(recipient) = operation.recipient() {
+            fp_ensure!(self.in_shard(recipient), FastPayError::WrongShard);
+            // Execute the recipient's side of the operation.
+            let account = self.accounts.entry(recipient.clone()).or_default();
+            account.apply_operation_as_recipient(&operation, certificate)?;
+        } else if let Operation::StartConsensusInstance {
+            new_id,
+            accounts,
+            functionality,
+        } = &operation
+        {
+            fp_ensure!(self.in_shard(new_id), FastPayError::WrongShard);
+            assert!(!self.instances.contains_key(new_id)); // guaranteed under BFT assumptions.
+            let instance = ConsensusState::new(*functionality, accounts.clone(), certificate);
+            self.instances.insert(new_id.clone(), instance);
+        }
         // This concludes the confirmation of `certificate`.
         Ok(())
     }
@@ -428,6 +452,188 @@ impl Authority for AuthorityState {
         Ok((response, continuations))
     }
 
+    /// Process a message meant for a consensus instance.
+    fn handle_consensus_order(
+        &mut self,
+        order: ConsensusOrder,
+    ) -> Result<ConsensusResponse, FastPayError> {
+        match order {
+            ConsensusOrder::GetStatus { instance_id } => {
+                let instance = self
+                    .instances
+                    .get_mut(&instance_id)
+                    .ok_or(FastPayError::UnknownConsensusInstance(instance_id))?;
+                let info = ConsensusInfoResponse {
+                    locked_accounts: instance.locked_accounts.clone(),
+                    proposed: instance.proposed.clone(),
+                    locked: instance.locked.clone(),
+                    received: instance.received.clone(),
+                };
+                Ok(ConsensusResponse::Info(info))
+            }
+            ConsensusOrder::Propose {
+                proposal,
+                owner,
+                signature,
+                locks,
+            } => {
+                let instance = self
+                    .instances
+                    .get_mut(&proposal.instance_id)
+                    .ok_or_else(|| {
+                        FastPayError::UnknownConsensusInstance(proposal.instance_id.clone())
+                    })?;
+                // Process lock certificates.
+                for lock in locks {
+                    lock.check(&self.committee)?;
+                    match lock.value {
+                        Value::Lock(Request {
+                            account_id,
+                            operation: Operation::LockInto { instance_id, owner },
+                            sequence_number,
+                        }) if instance_id == proposal.instance_id
+                            && Some(&sequence_number)
+                                == instance.sequence_numbers.get(&account_id) =>
+                        {
+                            // Update locking status for `account_id`.
+                            instance.locked_accounts.insert(account_id, owner);
+                            instance.participants.insert(owner);
+                        }
+                        _ => fp_bail!(FastPayError::InvalidConsensusOrder),
+                    }
+                }
+                // Verify the signature and that the author of the signature is authorized.
+                fp_ensure!(
+                    instance.participants.contains(&owner),
+                    FastPayError::InvalidConsensusOrder
+                );
+                signature.check(&proposal, owner)?;
+                // Check validity of the proposal and obtain the corresponding requests.
+                let requests = instance.make_requests(proposal.decision)?;
+                // TODO: verify that `proposal.round` is "available".
+                // Verify safety.
+                if let Some(proposed) = &instance.proposed {
+                    fp_ensure!(
+                        (proposed.round == proposal.round
+                            && proposed.decision == proposal.decision)
+                            || proposed.round < proposal.round,
+                        FastPayError::UnsafeConsensusProposal
+                    );
+                }
+                if let Some(locked) = instance
+                    .locked
+                    .as_ref()
+                    .and_then(|cert| cert.value.pre_commit_proposal())
+                {
+                    fp_ensure!(
+                        locked.round < proposal.round && locked.decision == proposal.decision,
+                        FastPayError::UnsafeConsensusProposal
+                    );
+                }
+                // Update proposed decision.
+                instance.proposed = Some(proposal.clone());
+                // Vote in favor of pre-commit (aka lock).
+                let value = Value::PreCommit { proposal, requests };
+                let vote = Vote::new(value, &self.key_pair);
+                Ok(ConsensusResponse::Vote(vote))
+            }
+            ConsensusOrder::HandlePreCommit { certificate } => {
+                certificate.check(&self.committee)?;
+                let (proposal, requests) = match certificate.value.clone() {
+                    Value::PreCommit { proposal, requests } => (proposal, requests),
+                    _ => fp_bail!(FastPayError::InvalidConsensusOrder),
+                };
+                let instance = self
+                    .instances
+                    .get_mut(&proposal.instance_id)
+                    .ok_or_else(|| {
+                        FastPayError::UnknownConsensusInstance(proposal.instance_id.clone())
+                    })?;
+                // Verify safety.
+                if let Some(proposed) = &instance.proposed {
+                    fp_ensure!(
+                        proposed.round <= proposal.round,
+                        FastPayError::UnsafeConsensusPreCommit
+                    );
+                }
+                if let Some(locked) = instance
+                    .locked
+                    .as_ref()
+                    .and_then(|cert| cert.value.pre_commit_proposal())
+                {
+                    fp_ensure!(
+                        locked.round <= proposal.round,
+                        FastPayError::UnsafeConsensusPreCommit
+                    );
+                }
+                // Update locked decision.
+                instance.locked = Some(certificate);
+                // Vote in favor of commit.
+                let value = Value::Commit { proposal, requests };
+                let vote = Vote::new(value, &self.key_pair);
+                Ok(ConsensusResponse::Vote(vote))
+            }
+            ConsensusOrder::HandleCommit { certificate, locks } => {
+                certificate.check(&self.committee)?;
+                let (proposal, requests) = match &certificate.value {
+                    Value::Commit { proposal, requests } => (proposal, requests),
+                    _ => fp_bail!(FastPayError::InvalidConsensusOrder),
+                };
+                // Success.
+                // Only execute the requests in the commit once.
+                let mut requests = {
+                    if self.instances.contains_key(&proposal.instance_id) {
+                        requests.clone()
+                    } else {
+                        Vec::new()
+                    }
+                };
+                // Process lock certificates to add skip requests if needed.
+                if let ConsensusDecision::Abort = &proposal.decision {
+                    for lock in locks {
+                        lock.check(&self.committee)?;
+                        match lock.value {
+                            Value::Lock(Request {
+                                account_id,
+                                operation:
+                                    Operation::LockInto {
+                                        instance_id,
+                                        owner: _,
+                                    },
+                                sequence_number,
+                            }) if instance_id == proposal.instance_id => {
+                                requests.push(Request {
+                                    account_id: account_id.clone(),
+                                    operation: Operation::Skip,
+                                    sequence_number,
+                                });
+                            }
+                            _ => fp_bail!(FastPayError::InvalidConsensusOrder),
+                        }
+                    }
+                }
+                // Remove the consensus instance if needed.
+                self.instances.remove(&proposal.instance_id);
+                // Prepare cross-shard requests.
+                let continuations = requests
+                    .iter()
+                    .map(|request| {
+                        let shard_id = self.which_shard(&request.account_id);
+                        CrossShardContinuation::Request {
+                            shard_id,
+                            request: Box::new(CrossShardRequest::ProcessConfirmedRequest {
+                                request: request.clone(),
+                                certificate: certificate.clone(),
+                            }),
+                        }
+                    })
+                    .collect();
+                Ok(ConsensusResponse::Continuations(continuations))
+            }
+        }
+    }
+
+    /// Finalize a request from Primary.
     fn handle_primary_synchronization_order(
         &mut self,
         order: PrimarySynchronizationOrder,
@@ -470,6 +676,13 @@ impl Authority for AuthorityState {
                 self.accounts.remove(&account_id);
                 Ok(())
             }
+            CrossShardRequest::ProcessConfirmedRequest {
+                request,
+                certificate,
+            } => {
+                self.process_confirmed_request(request, certificate)?; // TODO: process continuations
+                Ok(())
+            }
         }
     }
 
@@ -507,6 +720,7 @@ impl AuthorityState {
             key_pair,
             coconut_key_pair,
             accounts: BTreeMap::new(),
+            instances: BTreeMap::new(),
             last_transaction_index: SequenceNumber::new(),
             shard_id: 0,
             number_of_shards: 1,
@@ -526,6 +740,7 @@ impl AuthorityState {
             key_pair,
             coconut_key_pair,
             accounts: BTreeMap::new(),
+            instances: BTreeMap::new(),
             last_transaction_index: SequenceNumber::new(),
             shard_id,
             number_of_shards,

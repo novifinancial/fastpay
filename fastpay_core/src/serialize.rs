@@ -17,11 +17,13 @@ pub enum SerializedMessage {
     RequestOrder(Box<RequestOrder>),
     ConfirmationOrder(Box<ConfirmationOrder>),
     CoinCreationOrder(Box<CoinCreationOrder>),
-    InfoQuery(Box<AccountInfoQuery>),
+    ConsensusOrder(Box<ConsensusOrder>),
+    AccountInfoQuery(Box<AccountInfoQuery>),
     // Outbound
     Vote(Box<Vote>),
-    InfoResponse(Box<AccountInfoResponse>),
+    AccountInfoResponse(Box<AccountInfoResponse>),
     CoinCreationResponse(Box<CoinCreationResponse>),
+    ConsensusInfoResponse(Box<ConsensusInfoResponse>),
     Error(Box<FastPayError>),
     // Internal to an authority
     CrossShardRequest(Box<CrossShardRequest>),
@@ -36,11 +38,13 @@ enum ShallowSerializedMessage<'a> {
     RequestOrder(&'a RequestOrder),
     ConfirmationOrder(&'a ConfirmationOrder),
     CoinCreationOrder(&'a CoinCreationOrder),
-    InfoQuery(&'a AccountInfoQuery),
+    ConsensusOrder(&'a ConsensusOrder),
+    AccountInfoQuery(&'a AccountInfoQuery),
     // Outbound
     Vote(&'a Vote),
-    InfoResponse(&'a AccountInfoResponse),
+    AccountInfoResponse(&'a AccountInfoResponse),
     CoinCreationResponse(&'a CoinCreationResponse),
+    ConsensusInfoResponse(&'a ConsensusInfoResponse),
     Error(&'a FastPayError),
     // Internal to an authority
     CrossShardRequest(&'a CrossShardRequest),
@@ -100,12 +104,16 @@ where
     serialize_into(writer, &ShallowSerializedMessage::ConfirmationOrder(value))
 }
 
-pub fn serialize_info_query(value: &AccountInfoQuery) -> Vec<u8> {
-    serialize(&ShallowSerializedMessage::InfoQuery(value))
+pub fn serialize_account_info_query(value: &AccountInfoQuery) -> Vec<u8> {
+    serialize(&ShallowSerializedMessage::AccountInfoQuery(value))
 }
 
-pub fn serialize_info_response(value: &AccountInfoResponse) -> Vec<u8> {
-    serialize(&ShallowSerializedMessage::InfoResponse(value))
+pub fn serialize_account_info_response(value: &AccountInfoResponse) -> Vec<u8> {
+    serialize(&ShallowSerializedMessage::AccountInfoResponse(value))
+}
+
+pub fn serialize_consensus_info_response(value: &ConsensusInfoResponse) -> Vec<u8> {
+    serialize(&ShallowSerializedMessage::ConsensusInfoResponse(value))
 }
 
 pub fn serialize_cross_shard_request(value: &CrossShardRequest) -> Vec<u8> {
@@ -118,6 +126,10 @@ pub fn serialize_coin_creation_order(value: &CoinCreationOrder) -> Vec<u8> {
 
 pub fn serialize_coin_creation_response(value: &CoinCreationResponse) -> Vec<u8> {
     serialize(&ShallowSerializedMessage::CoinCreationResponse(value))
+}
+
+pub fn serialize_consensus_order(value: &ConsensusOrder) -> Vec<u8> {
+    serialize(&ShallowSerializedMessage::ConsensusOrder(value))
 }
 
 pub fn serialize_vote(value: &Vote) -> Vec<u8> {

@@ -341,7 +341,7 @@ impl ClientContext {
 
 fn deserialize_response(response: &[u8]) -> Option<AccountInfoResponse> {
     match deserialize_message(response) {
-        Ok(SerializedMessage::InfoResponse(info)) => Some(*info),
+        Ok(SerializedMessage::AccountInfoResponse(info)) => Some(*info),
         Ok(SerializedMessage::Error(error)) => {
             error!("Received error value: {}", error);
             None

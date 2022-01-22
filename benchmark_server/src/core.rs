@@ -9,8 +9,8 @@ use fastpay_core::{
     base_types::AuthorityName,
     error::FastPayError,
     serialize::{
-        serialize_coin_creation_response, serialize_cross_shard_request, serialize_error,
-        serialize_info_response, SerializedMessage,
+        serialize_account_info_response, serialize_coin_creation_response,
+        serialize_cross_shard_request, serialize_error, SerializedMessage,
     },
 };
 use log::{debug, warn};
@@ -58,14 +58,14 @@ impl MessageHandler for Core {
             SerializedMessage::RequestOrder(message) => self
                 .state
                 .handle_request_order(*message)
-                .map(|info| Some(serialize_info_response(&info))),
+                .map(|info| Some(serialize_account_info_response(&info))),
             SerializedMessage::ConfirmationOrder(message) => {
                 match self.state.handle_confirmation_order(*message) {
                     Ok((info, continuation)) => {
                         // Cross-shard request
                         self.handle_continuation(continuation).await;
                         // Response
-                        Ok(Some(serialize_info_response(&info)))
+                        Ok(Some(serialize_account_info_response(&info)))
                     }
                     Err(error) => Err(error),
                 }

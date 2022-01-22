@@ -723,7 +723,10 @@ where
             | Operation::SpendAndTransfer { .. } => {
                 self.key_pair = None;
             }
-            Operation::OpenAccount { .. } => (),
+            Operation::OpenAccount { .. }
+            | Operation::Skip
+            | Operation::LockInto { .. }
+            | Operation::StartConsensusInstance { .. } => (),
         }
         // Record certificate.
         self.sent_certificates.push(certificate);

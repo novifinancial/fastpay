@@ -186,7 +186,7 @@ impl CocoBenchmarkClient {
                 tokio::select! {
                     Some(bytes) = rx_certificate.recv() => {
                         match deserialize_message(&*bytes).unwrap() {
-                            SerializedMessage::InfoResponse(response) => {
+                            SerializedMessage::AccountInfoResponse(response) => {
                                 let id = response
                                     .account_id
                                     .sequence_number()

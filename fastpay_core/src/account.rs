@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{base_types::*, error::FastPayError, messages::*};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// State of a FastPay account.
 #[derive(Debug, Default)]
@@ -152,9 +152,33 @@ impl AccountState {
                 );
                 Value::Confirm(request)
             }
-            Operation::CloseAccount | Operation::ChangeOwner { .. } => {
+            Operation::StartConsensusInstance {
+                new_id, accounts, ..
+            } => {
+                // Verify the new UID.
+                let expected_id = request.account_id.make_child(request.sequence_number);
+                fp_ensure!(
+                    new_id == &expected_id,
+                    FastPayError::InvalidNewAccountId(new_id.clone())
+                );
+                // Make sure accounts are unique.
+                let numbers = accounts
+                    .clone()
+                    .into_iter()
+                    .collect::<BTreeMap<AccountId, _>>();
+                fp_ensure!(
+                    numbers.len() == accounts.len(),
+                    FastPayError::InvalidRequestOrder
+                );
+                Value::Confirm(request)
+            }
+            Operation::Skip | Operation::CloseAccount | Operation::ChangeOwner { .. } => {
                 // Nothing to check.
                 Value::Confirm(request)
+            }
+            Operation::LockInto { .. } => {
+                // Nothing to check.
+                Value::Lock(request)
             }
         };
         Ok(value)
@@ -171,7 +195,9 @@ impl AccountState {
             operation
         );
         match operation {
-            Operation::OpenAccount { .. } => (),
+            Operation::OpenAccount { .. }
+            | Operation::StartConsensusInstance { .. }
+            | Operation::Skip => (),
             Operation::ChangeOwner { new_owner } => {
                 self.owner = Some(*new_owner);
             }
@@ -181,9 +207,9 @@ impl AccountState {
             Operation::Transfer { amount, .. } => {
                 self.balance.try_sub_assign((*amount).into())?;
             }
-            Operation::Spend { .. } => {
+            Operation::Spend { .. } | Operation::LockInto { .. } => {
                 // impossible under BFT assumptions.
-                unreachable!("Spend operation are never confirmed");
+                unreachable!("Spend and lock operation are never confirmed");
             }
         };
         self.confirmed_log.push(certificate);

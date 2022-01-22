@@ -32,20 +32,20 @@ fn test_info_query() {
         query_received_certificates_excluding_first_nth: None,
     };
 
-    let buf1 = serialize_info_query(&query1);
-    let buf2 = serialize_info_query(&query2);
+    let buf1 = serialize_account_info_query(&query1);
+    let buf2 = serialize_account_info_query(&query2);
 
     let result1 = deserialize_message(buf1.as_slice());
     let result2 = deserialize_message(buf2.as_slice());
     assert!(result1.is_ok());
     assert!(result2.is_ok());
 
-    if let SerializedMessage::InfoQuery(o) = result1.unwrap() {
+    if let SerializedMessage::AccountInfoQuery(o) = result1.unwrap() {
         assert!(*o == query1);
     } else {
         panic!()
     }
-    if let SerializedMessage::InfoQuery(o) = result2.unwrap() {
+    if let SerializedMessage::AccountInfoQuery(o) = result2.unwrap() {
         assert!(*o == query2);
     } else {
         panic!()
@@ -226,10 +226,10 @@ fn test_info_response() {
     };
 
     for resp in [resp1, resp2, resp3, resp4].iter() {
-        let buf = serialize_info_response(resp);
+        let buf = serialize_account_info_response(resp);
         let result = deserialize_message(buf.as_slice());
         assert!(result.is_ok());
-        if let SerializedMessage::InfoResponse(o) = result.unwrap() {
+        if let SerializedMessage::AccountInfoResponse(o) = result.unwrap() {
             assert!(*o == *resp);
         } else {
             panic!()
