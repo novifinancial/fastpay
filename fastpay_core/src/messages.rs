@@ -153,7 +153,6 @@ pub struct ConsensusProposal {
 }
 
 /// A statement to be certified by the authorities.
-// TODO: decide if we split Vote & Certificate in one type per kind of value.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum Value {
     // -- Account management --
@@ -161,8 +160,10 @@ pub enum Value {
     Lock(Request),
     /// The request is ready to be confirmed (i.e. executed).
     Confirm(Request),
-    /// This coin is ready to be spent.
+    // -- Assets --
+    /// This transparent coin is ready to be spent.
     Coin(TransparentCoin),
+    // -- Consensus --
     /// The proposal was validated but confirmation will require additional steps.
     PreCommit {
         proposal: ConsensusProposal,
