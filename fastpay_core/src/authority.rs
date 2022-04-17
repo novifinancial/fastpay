@@ -180,12 +180,8 @@ impl Authority for AuthorityState {
         if let Some(authority) = &order.value.limited_to {
             fp_ensure!(self.name == *authority, FastPayError::InvalidRequestOrder);
         }
-        // Verify assets in the order.
-        for asset in &order.assets {
-            asset.check(&self.committee)?;
-        }
-        // Obtain the sender's account. If we are running a benchmark, the sender account is random and does not exist,
-        // so we create it here on the spot.
+        // Obtain the sender's account. If we are running a benchmark, the sender account
+        // is random and does not exist, so we create it here on the spot.
         let sender = order.value.request.account_id.clone();
 
         #[cfg(feature = "benchmark")]
@@ -216,17 +212,15 @@ impl Authority for AuthorityState {
         );
         if let Some(pending) = &account.pending {
             fp_ensure!(
-                matches!(&pending.value, Value::Confirm(r) | Value::Lock(r) if r == &request),
-                FastPayError::PreviousRequestMustBeConfirmedFirst {
-                    pending: pending.value.clone()
-                }
+                matches!(&pending.value, Value::Confirm(r) if r == &request),
+                FastPayError::PreviousRequestMustBeConfirmedFirst
             );
             // This exact request was already signed. Return the previous vote.
             return Ok(account.make_account_info(sender));
         }
         // Verify that the request is safe, and return the value of the vote.
-        let value = account.validate_operation(request, &order.assets)?;
-        let vote = Vote::new(value, &self.key_pair);
+        account.validate_operation(&request, &self.committee)?;
+        let vote = Vote::new(Value::Confirm(request), &self.key_pair);
         account.pending = Some(vote);
         Ok(account.make_account_info(sender))
     }
@@ -286,12 +280,13 @@ impl Authority for AuthorityState {
             source_accounts.insert(source.account_id.clone());
             // Verify locking certificate.
             lock.check(&self.committee)?;
-            match &lock.value {
-                Value::Lock(Request {
+            let allowed_seeds = match &lock.value {
+                Value::Confirm(Request {
                     account_id,
                     operation:
                         Operation::Spend {
-                            account_balance,
+                            coin_seeds,
+                            public_amount,
                             description_hash,
                         },
                     ..
@@ -300,32 +295,53 @@ impl Authority for AuthorityState {
                     #[cfg(not(feature = "benchmark"))]
                     fp_ensure!(
                         account_id == &source.account_id
-                            && account_balance == &source.account_balance
-                            && description_hash == &hash,
+                            && public_amount == &source.public_amount
+                            && description_hash == &hash
+                            // Set equality of seeds is completed below.
+                            && coin_seeds.len()
+                                == source.transparent_coins.len() + source.opaque_coin_public_seeds.len(),
                         FastPayError::InvalidCoinCreationOrder
                     );
                     #[cfg(feature = "benchmark")]
                     {
-                        let _account_id = account_id;
-                        let _account_balance = account_balance;
                         let _description_hash = description_hash;
                         let _hash = hash;
+                        let _account_id = account_id;
                     }
                     // Update source amount.
-                    source_amount.try_add_assign(*account_balance)?;
+                    source_amount.try_add_assign(*public_amount)?;
+                    coin_seeds.iter().cloned().collect::<BTreeSet<u128>>()
                 }
                 _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
+            };
+            // Verify seeds for opaque coins.
+            for seed in &source.opaque_coin_public_seeds {
+                // Seeds must be distinct within the same source.
+                fp_ensure!(
+                    allowed_seeds.contains(seed),
+                    FastPayError::InvalidCoinCreationOrder
+                );
             }
-            // Verify transparent source coins.
-            let mut assets = Vec::new();
-            for coin in &source.transparent_coins {
-                coin.check(&self.committee)?;
-                assets.push(Asset::TransparentCoin {
-                    certificate: coin.clone(),
-                });
+
+            // Verify transparent source coins and their seeds.
+            for cert in &source.transparent_coins {
+                cert.check(&self.committee)?;
+                fp_ensure!(
+                    allowed_seeds.contains(
+                        &cert
+                            .value
+                            .coin_seed()
+                            .ok_or(FastPayError::InvalidCoinCreationOrder)?
+                    ),
+                    FastPayError::InvalidCoinCreationOrder
+                );
+                source_amount.try_add_assign(
+                    cert.value
+                        .coin_value()
+                        .ok_or(FastPayError::InvalidCoinCreationOrder)?,
+                )?;
             }
-            let coin_amount = AccountState::verify_linked_assets(&source.account_id, &assets)?;
-            source_amount.try_add_assign(coin_amount)?;
+            // At this the set of seeds are matching and seeds are not repeated.
         }
         // Verify target amount and/or coconut proof.
         let mut target_amount = Amount::zero();
@@ -352,14 +368,7 @@ impl Authority for AuthorityState {
                 // in the request.
                 let mut keys = Vec::new();
                 for source in &sources {
-                    let mut seen = BTreeSet::new();
                     for public_seed in &source.opaque_coin_public_seeds {
-                        // Seeds must be distinct within the same source.
-                        fp_ensure!(
-                            !seen.contains(public_seed),
-                            FastPayError::InvalidCoinCreationOrder
-                        );
-                        seen.insert(*public_seed);
                         let key = CoconutKey {
                             #[cfg(not(feature = "benchmark"))]
                             account_id: source.account_id.clone(),

@@ -160,7 +160,7 @@ impl AccountsConfig {
         account.key_pair = state.key_pair().map(|k| k.copy());
         account.next_sequence_number = state.next_sequence_number();
         account.balance = state.balance();
-        account.coins = state.coins().clone();
+        account.coins = state.coins().values().cloned().collect();
         account.sent_certificates = state.sent_certificates().clone();
         account.received_certificates = state.received_certificates().cloned().collect();
     }

@@ -99,7 +99,11 @@ impl ClientContext {
             committee,
             authority_clients,
             account.next_sequence_number,
-            account.coins.clone(),
+            account
+                .coins
+                .iter()
+                .map(|coin| (coin.public_seed().unwrap(), coin.clone()))
+                .collect(),
             account.sent_certificates.clone(),
             account.received_certificates.clone(),
             account.balance,
@@ -124,7 +128,11 @@ impl ClientContext {
             committee,
             authority_clients,
             account.next_sequence_number,
-            account.coins.clone(),
+            account
+                .coins
+                .iter()
+                .map(|coin| (coin.public_seed().unwrap(), coin.clone()))
+                .collect(),
             account.sent_certificates.clone(),
             account.received_certificates.clone(),
             account.balance,
@@ -149,7 +157,11 @@ impl ClientContext {
             committee,
             authority_clients,
             account.next_sequence_number,
-            account.coins.clone(),
+            account
+                .coins
+                .iter()
+                .map(|coin| (coin.public_seed().unwrap(), coin.clone()))
+                .collect(),
             account.sent_certificates.clone(),
             account.received_certificates.clone(),
             account.balance,
@@ -188,7 +200,7 @@ impl ClientContext {
             };
             debug!("Preparing request order: {:?}", request);
             account.next_sequence_number.try_add_assign_one().unwrap();
-            let order = RequestOrder::new(request.clone().into(), key_pair, Vec::new());
+            let order = RequestOrder::new(request.clone().into(), key_pair);
             orders.push(order.clone());
             let serialized_order = serialize_request_order(&order);
             serialized_orders.push((account.account_id.clone(), serialized_order.into()));
@@ -497,6 +509,10 @@ enum ClientCommands {
         #[structopt(long = "from")]
         sender: AccountId,
 
+        /// Seeds of the coins to spend.
+        #[structopt(long)]
+        seeds: Vec<u128>,
+
         /// Recipient account id
         #[structopt(long = "to")]
         recipient: AccountId,
@@ -510,10 +526,25 @@ enum ClientCommands {
         #[structopt(long = "from")]
         sender: AccountId,
 
+        /// Public amount to withdraw.
+        #[structopt(long)]
+        amount: Amount,
+
+        /// Seeds of the coin to spend.
+        #[structopt(long)]
+        seeds: Vec<u128>,
+
         /// Descriptions of the coins to be created: `ID:VALUE` for transparent coins or
         /// `(ID:VALUE)` for opaque coins.
         #[structopt(long = "to-coins")]
         coins: Vec<NewCoin>,
+    },
+
+    /// Print the seeds and amounts of the coins in the given account.
+    #[structopt(name = "list_coins")]
+    ListCoins {
+        /// Account id (must be one of our accounts)
+        account_id: AccountId,
     },
 
     /// Obtain the balance of the account directly from a quorum of authorities.
@@ -643,30 +674,50 @@ fn main() {
             });
         }
 
-        ClientCommands::SpendAndTransfer { sender, recipient } => {
+        ClientCommands::SpendAndTransfer {
+            sender,
+            seeds,
+            recipient,
+        } => {
             rt.block_on(async move {
                 let mut client_state = context.make_account_client(sender);
-                info!("Starting operation to spend and transfer the account");
+                info!("Starting operation to spend coins and transfer values from the account");
                 let time_start = Instant::now();
-                let certificate = client_state
-                    .spend_and_transfer(Address::FastPay(recipient.clone()), UserData::default())
-                    .await
-                    .unwrap();
+                let mut certificates = Vec::new();
+                for seed in seeds {
+                    certificates.push(
+                        client_state
+                            .spend_and_transfer(
+                                seed,
+                                Address::FastPay(recipient.clone()),
+                                UserData::default(),
+                            )
+                            .await
+                            .unwrap(),
+                    );
+                }
                 let time_total = time_start.elapsed().as_micros();
-                info!("Operation confirmed after {} us", time_total);
-                info!("{:?}", certificate);
+                info!("Operation(s) confirmed after {} us", time_total);
+                info!("{:?}", certificates);
                 context.update_account_from_state(&client_state);
 
                 info!("Updating recipient's local account");
-                context
-                    .update_recipient_account(certificate, None)
-                    .await
-                    .unwrap();
+                for certificate in certificates {
+                    context
+                        .update_recipient_account(certificate, None)
+                        .await
+                        .unwrap();
+                }
                 context.save_accounts();
             });
         }
 
-        ClientCommands::SpendAndCreateCoins { sender, coins } => {
+        ClientCommands::SpendAndCreateCoins {
+            sender,
+            amount,
+            seeds,
+            coins,
+        } => {
             rt.block_on(async move {
                 let mut client_state = context.make_account_client(sender);
                 let transparent_coins =
@@ -675,7 +726,7 @@ fn main() {
                 info!("Starting operation to spend the account and create coins");
                 let time_start = Instant::now();
                 let assets = client_state
-                    .spend_and_create_coins(transparent_coins, opaque_coins)
+                    .spend_and_create_coins(amount, seeds, transparent_coins, opaque_coins)
                     .await
                     .unwrap();
                 let time_total = time_start.elapsed().as_micros();
@@ -691,6 +742,16 @@ fn main() {
                         .unwrap();
                 }
                 context.save_accounts();
+            });
+        }
+
+        ClientCommands::ListCoins { account_id } => {
+            rt.block_on(async move {
+                info!("Listing coins for {}", account_id);
+                let client_state = context.make_account_client(account_id);
+                for (seed, coin) in client_state.coins().iter() {
+                    println!("{}:{}", seed, coin.value().unwrap());
+                }
             });
         }
 

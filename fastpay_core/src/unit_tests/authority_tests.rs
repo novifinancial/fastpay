@@ -61,8 +61,7 @@ fn test_handle_request_order_unknown_sender() {
         make_transfer_request_order(dbg_account(1), &sender_key_pair, recipient, Amount::from(5));
     let unknown_key = KeyPair::generate();
 
-    let unknown_sender_request_order =
-        RequestOrder::new(request_order.value, &unknown_key, Vec::new());
+    let unknown_sender_request_order = RequestOrder::new(request_order.value, &unknown_key);
     assert!(state
         .handle_request_order(unknown_sender_request_order)
         .is_err());
@@ -491,7 +490,7 @@ fn test_handle_coin_creation_order_ok() {
     ];
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
-        account_balance: Amount::from(5),
+        public_amount: Amount::from(5),
         transparent_coins,
         opaque_coin_public_seeds: Vec::new(),
     }];
@@ -515,13 +514,14 @@ fn test_handle_coin_creation_order_ok() {
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
-        Value::Lock(Request {
+        Value::Confirm(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
-                account_balance: Amount::from(5),
+                coin_seeds: vec![1, 2],
+                public_amount: Amount::from(5),
                 description_hash,
             },
-            sequence_number: SequenceNumber::default(),
+            sequence_number: SequenceNumber::from(0),
         }),
     )];
 
@@ -550,7 +550,7 @@ fn test_handle_coin_creation_order_no_source_coin_ok() {
     let mut state = init_state_with_accounts(Vec::new());
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
-        account_balance: Amount::from(15),
+        public_amount: Amount::from(15),
         transparent_coins: Vec::new(),
         opaque_coin_public_seeds: Vec::new(),
     }];
@@ -574,10 +574,11 @@ fn test_handle_coin_creation_order_no_source_coin_ok() {
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
-        Value::Lock(Request {
+        Value::Confirm(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
-                account_balance: Amount::from(15),
+                coin_seeds: Vec::new(),
+                public_amount: Amount::from(15),
                 description_hash,
             },
             sequence_number: SequenceNumber::default(),
@@ -609,7 +610,7 @@ fn test_handle_coin_creation_order_empty_target_coin() {
     let mut state = init_state_with_accounts(Vec::new());
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
-        account_balance: Amount::from(15),
+        public_amount: Amount::from(15),
         transparent_coins: Vec::new(),
         opaque_coin_public_seeds: Vec::new(),
     }];
@@ -638,10 +639,11 @@ fn test_handle_coin_creation_order_empty_target_coin() {
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
-        Value::Lock(Request {
+        Value::Confirm(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
-                account_balance: Amount::from(15),
+                coin_seeds: Vec::new(),
+                public_amount: Amount::from(15),
                 description_hash,
             },
             sequence_number: SequenceNumber::default(),
@@ -676,7 +678,7 @@ fn test_handle_coin_creation_order_insufficient_funds() {
     ];
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
-        account_balance: Amount::from(5),
+        public_amount: Amount::from(5),
         transparent_coins,
         opaque_coin_public_seeds: Vec::new(),
     }];
@@ -700,10 +702,11 @@ fn test_handle_coin_creation_order_insufficient_funds() {
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
-        Value::Lock(Request {
+        Value::Confirm(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
-                account_balance: Amount::from(5),
+                coin_seeds: Vec::new(),
+                public_amount: Amount::from(5),
                 description_hash,
             },
             sequence_number: SequenceNumber::default(),
@@ -738,7 +741,7 @@ fn test_handle_coin_creation_order_replayed_seed() {
     ];
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
-        account_balance: Amount::from(5),
+        public_amount: Amount::from(5),
         transparent_coins,
         opaque_coin_public_seeds: Vec::new(),
     }];
@@ -762,10 +765,11 @@ fn test_handle_coin_creation_order_replayed_seed() {
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
-        Value::Lock(Request {
+        Value::Confirm(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
-                account_balance: Amount::from(5),
+                coin_seeds: Vec::new(),
+                public_amount: Amount::from(5),
                 description_hash,
             },
             sequence_number: SequenceNumber::default(),
@@ -800,7 +804,7 @@ fn test_handle_coin_creation_order_incorrect_source() {
     ];
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
-        account_balance: Amount::from(5),
+        public_amount: Amount::from(5),
         transparent_coins,
         opaque_coin_public_seeds: Vec::new(),
     }];
@@ -824,10 +828,11 @@ fn test_handle_coin_creation_order_incorrect_source() {
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
-        Value::Lock(Request {
+        Value::Confirm(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
-                account_balance: Amount::from(5),
+                coin_seeds: Vec::new(),
+                public_amount: Amount::from(5),
                 description_hash,
             },
             sequence_number: SequenceNumber::default(),
@@ -862,7 +867,7 @@ fn test_handle_coin_creation_order_repeated_source() {
     ];
     let source = CoinCreationSource {
         account_id: dbg_account(1),
-        account_balance: Amount::from(5),
+        public_amount: Amount::from(5),
         transparent_coins,
         opaque_coin_public_seeds: Vec::new(),
     };
@@ -887,10 +892,11 @@ fn test_handle_coin_creation_order_repeated_source() {
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
-        Value::Lock(Request {
+        Value::Confirm(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
-                account_balance: Amount::from(5),
+                coin_seeds: Vec::new(),
+                public_amount: Amount::from(5),
                 description_hash,
             },
             sequence_number: SequenceNumber::default(),
@@ -925,7 +931,7 @@ fn test_handle_coin_creation_order_invalid_balance() {
     ];
     let sources = vec![CoinCreationSource {
         account_id: dbg_account(1),
-        account_balance: Amount::from(6),
+        public_amount: Amount::from(6),
         transparent_coins,
         opaque_coin_public_seeds: Vec::new(),
     }];
@@ -949,10 +955,11 @@ fn test_handle_coin_creation_order_invalid_balance() {
     let description_hash = HashValue::new(&description);
     let locks = vec![make_certificate(
         &state,
-        Value::Lock(Request {
+        Value::Confirm(Request {
             account_id: dbg_account(1),
             operation: Operation::Spend {
-                account_balance: Amount::from(5),
+                coin_seeds: Vec::new(),
+                public_amount: Amount::from(5),
                 description_hash,
             },
             sequence_number: SequenceNumber::default(),
@@ -1083,7 +1090,7 @@ fn make_transfer_request_order(
         },
         sequence_number: SequenceNumber::new(),
     };
-    RequestOrder::new(request.into(), secret, Vec::new())
+    RequestOrder::new(request.into(), secret)
 }
 
 fn make_certificate(state: &AuthorityState, value: Value) -> Certificate {

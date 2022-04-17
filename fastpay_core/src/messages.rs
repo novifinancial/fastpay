@@ -26,7 +26,7 @@ pub enum Address {
 }
 
 /// An account operation in FastPay.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Operation {
     /// Transfer `amount` units of value to the recipient.
     Transfer {
@@ -43,23 +43,23 @@ pub enum Operation {
     CloseAccount,
     /// Change the authentication key of the account.
     ChangeOwner { new_owner: AccountOwner },
-    /// Lock the account so that the balance and linked coins may be eventually transferred
-    /// to new coins (according to the "coin creation description" behind `description_hash`).
+    /// Spend one coin (possibly opaque) and withdraw some public amount from the account.
     Spend {
-        account_balance: Amount,
+        coin_seeds: Vec<u128>,
+        public_amount: Amount,
         description_hash: HashValue,
     },
-    /// Close the account (and spend a number of linked coins) to transfer the given total
-    /// amount to the recipient.
+    /// Spend one coin from the account (revealing its content) and transfer its value to
+    /// the recipient.
     SpendAndTransfer {
+        asset: Box<Asset>,
         recipient: Address,
-        amount: Amount,
         user_data: UserData,
     },
 }
 
 /// A request containing an account operation.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Request {
     pub account_id: AccountId,
     pub operation: Operation,
@@ -67,15 +67,14 @@ pub struct Request {
 }
 
 /// The content of a request to be signed in a RequestOrder.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct RequestValue {
     pub request: Request,
     pub limited_to: Option<AuthorityName>,
 }
 
-/// A certified asset that we own.
+/// A certified coin that we own.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum Asset {
     TransparentCoin {
         certificate: Certificate,
@@ -84,6 +83,28 @@ pub enum Asset {
         value: OpaqueCoin,
         credential: coconut::Coin,
     },
+}
+
+impl PartialEq for Asset {
+    fn eq(&self, other: &Self) -> bool {
+        use Asset::*;
+        match (self, other) {
+            (TransparentCoin { .. }, TransparentCoin { .. })
+            | (OpaqueCoin { .. }, OpaqueCoin { .. }) => (),
+            _ => {
+                return false;
+            }
+        }
+        match (
+            self.account_id(),
+            self.public_seed(),
+            other.account_id(),
+            other.public_seed(),
+        ) {
+            (Ok(id1), Ok(seed1), Ok(id2), Ok(seed2)) => id1 == id2 && seed1 == seed2,
+            _ => false,
+        }
+    }
 }
 
 /// The description of an opaque coin as seen by its owner (or creator).
@@ -100,14 +121,13 @@ pub struct OpaqueCoin {
     pub amount: Amount,
 }
 
-/// An authenticated request plus additional certified assets.
+/// An authenticated request.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct RequestOrder {
     pub value: RequestValue,
     pub owner: AccountOwner,
     pub signature: Signature,
-    pub assets: Vec<Asset>,
 }
 
 /// The description of a transparent coin linked a given account.
@@ -119,22 +139,20 @@ pub struct TransparentCoin {
 }
 
 /// A statement to be certified by the authorities.
-// TODO: decide if we split Vote & Certificate in one type per kind of value.
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Value {
-    Lock(Request),
     Confirm(Request),
     Coin(TransparentCoin),
 }
 
 /// The balance of an account plus linked coins to be used in a coin creation description.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct CoinCreationSource {
     /// The account being spent
     pub account_id: AccountId,
-    /// The recorded balance
-    pub account_balance: Amount,
+    /// The public amount being added on top of source coins.
+    pub public_amount: Amount,
     /// Known transparent coins
     pub transparent_coins: Vec<Certificate>,
     /// Public seeds for the coins in the coconut creation request.
@@ -143,7 +161,7 @@ pub struct CoinCreationSource {
 
 /// Instructions to create a number of coins during a CoinCreationOrder.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct CoinCreationDescription {
     /// The sources to be used for coin creation.
     pub sources: Vec<CoinCreationSource>,
@@ -155,18 +173,18 @@ pub struct CoinCreationDescription {
 
 /// Same as RequestOrder but meant to create coins.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct CoinCreationOrder {
     /// Instructions to create the coins.
     pub description: CoinCreationDescription,
-    /// Proof that the source accounts have been locked with a suitable "Spend" operation
-    /// and the account balances are correct.
+    /// Proof that the source accounts have spent input coins and withdrawn the expected
+    /// public amounts.
     pub locks: Vec<Certificate>,
 }
 
 /// The response to a CoinCreationOrder
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct CoinCreationResponse {
     /// Votes to create transparent coins.
     pub votes: Vec<Vote>,
@@ -178,7 +196,7 @@ pub struct CoinCreationResponse {
 
 /// A vote on a statement from an authority.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Vote {
     pub value: Value,
     pub authority: AuthorityName,
@@ -188,7 +206,7 @@ pub struct Vote {
 /// A certified statement from the committee. Note: Opaque coins have no external
 /// signatures and are authenticated at a lower level.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Certificate {
     pub value: Value,
     pub signatures: Vec<(AuthorityName, Signature)>,
@@ -196,14 +214,14 @@ pub struct Certificate {
 
 /// Order to process a confirmed request.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct ConfirmationOrder {
     pub certificate: Certificate,
 }
 
 /// Message to obtain information on an account.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct AccountInfoQuery {
     pub account_id: AccountId,
     pub query_sequence_number: Option<SequenceNumber>,
@@ -212,7 +230,7 @@ pub struct AccountInfoQuery {
 
 /// The response to an `AccountInfoQuery`
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct AccountInfoResponse {
     pub account_id: AccountId,
     pub owner: Option<AccountOwner>,
@@ -226,7 +244,7 @@ pub struct AccountInfoResponse {
 
 /// A (trusted) cross-shard request with an authority.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum CrossShardRequest {
     UpdateRecipient { certificate: Certificate },
     DestroyAccount { account_id: AccountId },
@@ -295,24 +313,37 @@ impl OpaqueCoin {
 impl Asset {
     pub fn account_id(&self) -> Result<&AccountId, FastPayError> {
         match self {
-            Asset::TransparentCoin { certificate } => match &certificate.value {
+            Self::TransparentCoin { certificate } => match &certificate.value {
                 Value::Coin(coin) => Ok(&coin.account_id),
                 _ => Err(FastPayError::InvalidAsset),
             },
-            Asset::OpaqueCoin {
+            Self::OpaqueCoin {
                 value: OpaqueCoin { account_id, .. },
                 ..
             } => Ok(account_id),
         }
     }
 
+    pub fn public_seed(&self) -> Result<u128, FastPayError> {
+        match self {
+            Self::TransparentCoin { certificate } => match &certificate.value {
+                Value::Coin(coin) => Ok(coin.seed),
+                _ => Err(FastPayError::InvalidAsset),
+            },
+            Self::OpaqueCoin {
+                value: OpaqueCoin { public_seed, .. },
+                ..
+            } => Ok(*public_seed),
+        }
+    }
+
     pub fn value(&self) -> Result<Amount, FastPayError> {
         match self {
-            Asset::TransparentCoin { certificate } => match &certificate.value {
+            Self::TransparentCoin { certificate } => match &certificate.value {
                 Value::Coin(coin) => Ok(coin.amount),
                 _ => Err(FastPayError::InvalidAsset),
             },
-            Asset::OpaqueCoin {
+            Self::OpaqueCoin {
                 value: OpaqueCoin { amount, .. },
                 ..
             } => Ok(*amount),
@@ -321,14 +352,14 @@ impl Asset {
 
     pub fn check(&self, committee: &Committee) -> Result<(), FastPayError> {
         match self {
-            Asset::TransparentCoin { certificate } => {
+            Self::TransparentCoin { certificate } => {
                 let value = certificate.check(committee)?;
                 fp_ensure!(
                     matches!(value, Value::Coin { .. }),
                     FastPayError::InvalidAsset
                 );
             }
-            Asset::OpaqueCoin { value, credential } => {
+            Self::OpaqueCoin { value, credential } => {
                 let setup = match &committee.coconut_setup {
                     Some(setup) => setup,
                     None => {
@@ -377,14 +408,15 @@ impl Operation {
     pub fn received_amount(&self) -> Option<Amount> {
         use Operation::*;
         match self {
-            Transfer { amount, .. } | Operation::SpendAndTransfer { amount, .. } => Some(*amount),
+            Transfer { amount, .. } => Some(*amount),
+            SpendAndTransfer { asset, .. } => Some(asset.value().ok()?),
             _ => None,
         }
     }
 }
 
 impl Value {
-    pub fn coin_amount(&self) -> Option<Amount> {
+    pub fn coin_value(&self) -> Option<Amount> {
         match self {
             Value::Coin(coin) => Some(coin.amount),
             _ => None,
@@ -394,6 +426,13 @@ impl Value {
     pub fn coin_account_id(&self) -> Option<&AccountId> {
         match self {
             Value::Coin(coin) => Some(&coin.account_id),
+            _ => None,
+        }
+    }
+
+    pub fn coin_seed(&self) -> Option<u128> {
+        match self {
+            Value::Coin(coin) => Some(coin.seed),
             _ => None,
         }
     }
@@ -433,13 +472,6 @@ impl Value {
             _ => None,
         }
     }
-
-    pub fn lock_account_id(&self) -> Option<&AccountId> {
-        match self {
-            Value::Lock(r) => Some(&r.account_id),
-            _ => None,
-        }
-    }
 }
 
 /// Non-testing code should make the pattern matching explicit so that
@@ -471,13 +503,12 @@ impl From<Request> for RequestValue {
 }
 
 impl RequestOrder {
-    pub fn new(value: RequestValue, secret: &KeyPair, assets: Vec<Asset>) -> Self {
+    pub fn new(value: RequestValue, secret: &KeyPair) -> Self {
         let signature = Signature::new(&value, secret);
         Self {
             value,
             owner: secret.public(),
             signature,
-            assets,
         }
     }
 

@@ -5,10 +5,7 @@ use crate::{base_types::*, committee::Committee, downloader::*, error::FastPayEr
 use failure::{bail, ensure};
 use futures::{future, StreamExt};
 use rand::seq::SliceRandom;
-use std::{
-    collections::{btree_map, BTreeMap, BTreeSet, HashMap},
-    convert::TryFrom,
-};
+use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap};
 
 #[cfg(test)]
 #[path = "unit_tests/client_tests.rs"]
@@ -86,24 +83,27 @@ pub trait AccountClient {
     /// Close the account (and lose everything in it!!)
     fn close_account(&mut self) -> AsyncResult<Certificate, failure::Error>;
 
-    /// Spend (i.e. lock) the account in order to create coins later.
+    /// Spend one coin in the account plus some public amount in order to create coins later.
     fn spend_unsafe(
         &mut self,
-        account_balance: Amount,
+        coin_seeds: Vec<u128>,
+        amount: Amount,
         description_hash: HashValue,
     ) -> AsyncResult<Certificate, failure::Error>;
 
-    /// Create new coins using previously spent (i.e. locked) accounts.
+    /// Create new coins using previously spent coins.
     fn create_coins(
         &mut self,
         description: CoinCreationDescription,
         new_opaque_coins: Vec<(OpaqueCoin, coconut::OutputAttribute)>,
-        locked_accounts: Vec<Certificate>,
+        spent_coins: Vec<Certificate>,
     ) -> AsyncResult<Vec<Asset>, failure::Error>;
 
-    /// Spend a single account and create new coins.
+    /// Spend all the coins in a single account and create new coins.
     fn spend_and_create_coins(
         &mut self,
+        public_amount: Amount,
+        coin_seeds: Vec<u128>,
         new_transparent_coins: Vec<TransparentCoin>,
         new_opaque_coins: Vec<OpaqueCoin>,
     ) -> AsyncResult<Vec<Asset>, failure::Error>;
@@ -111,6 +111,7 @@ pub trait AccountClient {
     /// Spend the account and transfer the value to a receiver.
     fn spend_and_transfer(
         &mut self,
+        coin_seed: u128,
         recipient: Address,
         user_data: UserData,
     ) -> AsyncResult<Certificate, failure::Error>;
@@ -138,17 +139,6 @@ pub trait AccountClient {
     fn query_strong_majority_balance(&mut self) -> future::BoxFuture<Balance>;
 }
 
-/// The status of the last request order that we have sent, if any.
-#[derive(Debug, Clone)]
-pub enum PendingRequest {
-    /// No request.
-    None,
-    /// A "regular" request meant to be confirmed.
-    Regular(RequestOrder),
-    /// A "locking" request that cannot be confirmed.
-    Locking(RequestOrder),
-}
-
 /// Reference implementation of the `AccountClient` trait using many instances of
 /// some `AuthorityClient` implementation for communication.
 pub struct AccountClientState<AuthorityClient> {
@@ -164,13 +154,11 @@ pub struct AccountClientState<AuthorityClient> {
     /// This is also the number of request certificates that we have created.
     next_sequence_number: SequenceNumber,
     /// Pending request.
-    pending_request: PendingRequest,
-    /// Proof that this account was locked / spent.
-    lock_certificate: Option<Certificate>,
+    pending_request: Option<RequestOrder>,
     /// Known key pairs (past and future).
     known_key_pairs: BTreeMap<AccountOwner, KeyPair>,
-    /// The coins linked to this account.
-    coins: Vec<Asset>,
+    /// The coins linked to this account, indexed by public seed.
+    coins: BTreeMap<u128, Asset>,
 
     // The remaining fields are used to minimize networking, and may not always be persisted locally.
     /// Confirmed requests that we have created ("sent") and already included in the state
@@ -194,7 +182,7 @@ impl<A> AccountClientState<A> {
         committee: Committee,
         authority_clients: HashMap<AuthorityName, A>,
         next_sequence_number: SequenceNumber,
-        coins: Vec<Asset>,
+        coins: BTreeMap<u128, Asset>,
         sent_certificates: Vec<Certificate>,
         received_certificates: Vec<Certificate>,
         balance: Balance,
@@ -205,10 +193,9 @@ impl<A> AccountClientState<A> {
             committee,
             authority_clients,
             next_sequence_number,
-            pending_request: PendingRequest::None,
+            pending_request: None,
             known_key_pairs: BTreeMap::new(),
             coins,
-            lock_certificate: None,
             sent_certificates,
             received_certificates: received_certificates
                 .into_iter()
@@ -235,7 +222,7 @@ impl<A> AccountClientState<A> {
         self.next_sequence_number
     }
 
-    pub fn coins(&self) -> &Vec<Asset> {
+    pub fn coins(&self) -> &BTreeMap<u128, Asset> {
         &self.coins
     }
 
@@ -243,7 +230,7 @@ impl<A> AccountClientState<A> {
         self.balance
     }
 
-    pub fn pending_request(&self) -> &PendingRequest {
+    pub fn pending_request(&self) -> &Option<RequestOrder> {
         &self.pending_request
     }
 
@@ -317,7 +304,6 @@ where
 #[derive(Clone)]
 enum CommunicateAction {
     ConfirmOrder(RequestOrder),
-    LockOrder(RequestOrder),
     SynchronizeNextSequenceNumber(SequenceNumber),
 }
 
@@ -426,9 +412,7 @@ where
         action: CommunicateAction,
     ) -> Result<Vec<Certificate>, failure::Error> {
         let target_sequence_number = match &action {
-            CommunicateAction::ConfirmOrder(order) | CommunicateAction::LockOrder(order) => {
-                order.value.request.sequence_number
-            }
+            CommunicateAction::ConfirmOrder(order) => order.value.request.sequence_number,
             CommunicateAction::SynchronizeNextSequenceNumber(seq) => *seq,
         };
         let requester = CertificateRequester::new(
@@ -485,9 +469,7 @@ where
                             .await?;
                     }
                     // Send the request order (if any) and return a vote.
-                    if let CommunicateAction::ConfirmOrder(order)
-                    | CommunicateAction::LockOrder(order) = action
-                    {
+                    if let CommunicateAction::ConfirmOrder(order) = action {
                         let result = client.handle_request_order(order).await;
                         match result {
                             Ok(AccountInfoResponse {
@@ -546,13 +528,6 @@ where
                 // Certificate is valid because
                 // * `communicate_with_quorum` ensured a sufficient "weight" of (non-error) answers were returned by authorities.
                 // * each answer is a vote signed by the expected authority.
-                certificates.push(certificate);
-            }
-            CommunicateAction::LockOrder(order) => {
-                let certificate = Certificate {
-                    value: Value::Lock(order.value.request),
-                    signatures,
-                };
                 certificates.push(certificate);
             }
             CommunicateAction::SynchronizeNextSequenceNumber(_) => (),
@@ -669,7 +644,7 @@ where
         };
         let order = self.make_request_order(request)?;
         let certificate = self
-            .execute_regular_request(order, /* with_confirmation */ true)
+            .execute_request(order, /* with_confirmation */ true)
             .await?;
         Ok(certificate)
     }
@@ -718,12 +693,12 @@ where
                     }
                 }
             },
-            Operation::CloseAccount
-            | Operation::Spend { .. }
-            | Operation::SpendAndTransfer { .. } => {
+            Operation::CloseAccount => {
                 self.key_pair = None;
             }
-            Operation::OpenAccount { .. } => (),
+            Operation::Spend { .. }
+            | Operation::SpendAndTransfer { .. }
+            | Operation::OpenAccount { .. } => (),
         }
         // Record certificate.
         self.sent_certificates.push(certificate);
@@ -735,14 +710,14 @@ where
     }
 
     /// Execute (or retry) a regular request order. Update local balance.
-    async fn execute_regular_request(
+    async fn execute_request(
         &mut self,
         order: RequestOrder,
         with_confirmation: bool,
     ) -> Result<Certificate, failure::Error> {
         ensure!(
-            matches!(&self.pending_request, PendingRequest::None)
-                || matches!(&self.pending_request, PendingRequest::Regular(o) if o.value.request == order.value.request),
+            matches!(&self.pending_request, None)
+                || matches!(&self.pending_request, Some(o) if o.value.request == order.value.request),
             "Client state has a different pending request",
         );
         ensure!(
@@ -750,7 +725,7 @@ where
             "Unexpected sequence number"
         );
         self.download_missing_sent_certificates().await?;
-        self.pending_request = PendingRequest::Regular(order.clone());
+        self.pending_request = Some(order.clone());
         let certificates = self
             .communicate_requests(
                 self.account_id.clone(),
@@ -766,7 +741,7 @@ where
                 .value,
             Value::Confirm(order.value.request)
         );
-        self.pending_request = PendingRequest::None;
+        self.pending_request = None;
         // Confirm last request certificate if needed.
         if with_confirmation {
             self.communicate_requests(
@@ -777,52 +752,6 @@ where
             .await?;
         }
         Ok(self.sent_certificates.last().unwrap().clone())
-    }
-
-    /// Execute (or retry) a locking request order. Update local balance.
-    async fn execute_locking_request(
-        &mut self,
-        order: RequestOrder,
-    ) -> Result<Certificate, failure::Error> {
-        match &self.lock_certificate {
-            Some(certificate) => {
-                ensure!(
-                    matches!(&certificate.value, Value::Lock(r) if &order.value.request == r),
-                    "Account has already been locked for a different operation."
-                );
-                return Ok(certificate.clone());
-            }
-            None => (),
-        }
-        ensure!(
-            matches!(&self.pending_request, PendingRequest::None)
-                || matches!(&self.pending_request, PendingRequest::Locking(o) if o.value.request == order.value.request),
-            "Client state has a different pending request",
-        );
-        ensure!(
-            order.value.request.sequence_number == self.next_sequence_number,
-            "Unexpected sequence number"
-        );
-        self.download_missing_sent_certificates().await?;
-        self.pending_request = PendingRequest::Locking(order.clone());
-        let mut certificates = self
-            .communicate_requests(
-                self.account_id.clone(),
-                self.sent_certificates.clone(),
-                CommunicateAction::LockOrder(order.clone()),
-            )
-            .await?;
-        self.lock_certificate = certificates.pop();
-        self.update_sent_certificates(certificates)?;
-        assert_eq!(
-            self.lock_certificate
-                .as_ref()
-                .expect("last order should be locked now")
-                .value,
-            Value::Lock(order.value.request)
-        );
-        self.pending_request = PendingRequest::None;
-        Ok(self.lock_certificate.as_ref().unwrap().clone())
     }
 
     /// Execute (or retry) a coin creation order.
@@ -932,19 +861,11 @@ where
         Ok(coins)
     }
 
-    fn make_request_order_with_assets(
-        &self,
-        request: Request,
-        assets: Vec<Asset>,
-    ) -> Result<RequestOrder, failure::Error> {
+    fn make_request_order(&self, request: Request) -> Result<RequestOrder, failure::Error> {
         let key_pair = self.key_pair.as_ref().ok_or_else(|| {
             failure::format_err!("Cannot make request for an account that we don't own")
         })?;
-        Ok(RequestOrder::new(request.into(), key_pair, assets))
-    }
-
-    fn make_request_order(&self, request: Request) -> Result<RequestOrder, failure::Error> {
-        self.make_request_order_with_assets(request, Vec::new())
+        Ok(RequestOrder::new(request.into(), key_pair))
     }
 }
 
@@ -998,17 +919,10 @@ where
 
     fn synchronize_balance(&mut self) -> AsyncResult<Balance, failure::Error> {
         Box::pin(async move {
-            match self.pending_request.clone() {
-                PendingRequest::Regular(order) => {
-                    // Finish executing the previous request.
-                    self.execute_regular_request(order, /* with_confirmation */ false)
-                        .await?;
-                }
-                PendingRequest::Locking(order) => {
-                    // Finish executing the previous request.
-                    self.execute_locking_request(order).await?;
-                }
-                PendingRequest::None => (),
+            if let Some(order) = self.pending_request.clone() {
+                // Finish executing the previous request.
+                self.execute_request(order, /* with_confirmation */ false)
+                    .await?;
             }
             self.synchronize_received_certificates().await?;
             self.download_missing_sent_certificates().await?;
@@ -1023,7 +937,7 @@ where
                 asset.account_id()? == &self.account_id,
                 "Coin is not linked to this account"
             );
-            self.coins.push(asset);
+            self.coins.insert(asset.public_seed()?, asset);
             Ok(())
         })
     }
@@ -1075,7 +989,7 @@ where
             let order = self.make_request_order(request)?;
 
             let certificate = self
-                .execute_regular_request(order, /* with_confirmation */ true)
+                .execute_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1093,7 +1007,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_regular_request(order, /* with_confirmation */ true)
+                .execute_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1112,7 +1026,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_regular_request(order, /* with_confirmation */ true)
+                .execute_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1127,40 +1041,35 @@ where
             };
             let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_regular_request(order, /* with_confirmation */ true)
+                .execute_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
     }
 
-    /// Spend the account with new coins in mind.
     fn spend_unsafe(
         &mut self,
-        account_balance: Amount,
+        coin_seeds: Vec<u128>,
+        public_amount: Amount,
         description_hash: HashValue,
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
-            let balance = self.synchronize_balance().await?;
-            ensure!(
-                Balance::from(account_balance) <= balance,
-                "Suggested balance ({}) does not match available funds ({})",
-                account_balance,
-                balance
-            );
             let request = Request {
                 account_id: self.account_id.clone(),
                 operation: Operation::Spend {
-                    account_balance,
+                    coin_seeds,
+                    public_amount,
                     description_hash,
                 },
                 sequence_number: self.next_sequence_number,
             };
-            let order = self.make_request_order_with_assets(request, self.coins.clone())?;
-            self.execute_locking_request(order).await
+            let order = self.make_request_order(request)?;
+            self.execute_request(order, /* with_confirmation */ true)
+                .await
         })
     }
 
-    /// Spend the account and create new coins.
+    /// Spend some coins in the account and create new ones.
     fn create_coins(
         &mut self,
         description: CoinCreationDescription,
@@ -1178,22 +1087,38 @@ where
 
     fn spend_and_create_coins(
         &mut self,
-        new_transparent_coins: Vec<TransparentCoin>,
-        new_opaque_coins: Vec<OpaqueCoin>,
+        public_amount: Amount,
+        source_seeds: Vec<u128>,
+        target_transparent_coins: Vec<TransparentCoin>,
+        target_opaque_coins: Vec<OpaqueCoin>,
     ) -> AsyncResult<Vec<Asset>, failure::Error> {
         Box::pin(async move {
-            let account_balance = self.synchronize_balance().await?;
-            let mut amount =
-                Amount::try_from(account_balance.try_add(self.get_coins_value()?.into())?)?;
+            let balance = self.synchronize_balance().await?;
+            ensure!(
+                Balance::from(public_amount) <= balance,
+                "Requested amount ({}) is not backed by sufficient funds ({})",
+                public_amount,
+                balance
+            );
+            let mut amount = public_amount;
+            let mut source_coins = Vec::new();
+            for seed in &source_seeds {
+                let coin = self
+                    .coins
+                    .get(seed)
+                    .ok_or_else(|| failure::format_err!("Unknown coin seed"))?;
+                source_coins.push(coin.clone());
+                amount.try_add_assign(coin.value()?)?;
+            }
+            let mut target_seeds = BTreeSet::new();
             // Check description for new transparent coins.
             {
-                let mut seeds = BTreeSet::new();
-                for coin in &new_transparent_coins {
+                for coin in &target_transparent_coins {
                     ensure!(
-                        !seeds.contains(&coin.seed),
-                        "TransparentCoin seeds must be unique"
+                        !target_seeds.contains(&coin.seed),
+                        "Coin seeds must be unique"
                     );
-                    seeds.insert(coin.seed);
+                    target_seeds.insert(coin.seed);
                     amount.try_sub_assign(coin.amount).map_err(|_| {
                         failure::format_err!("Insufficient balance to create coins")
                     })?;
@@ -1201,29 +1126,25 @@ where
             }
             // Check description for new opaque coins.
             {
-                let mut seeds = BTreeSet::new();
-                for coin in &new_opaque_coins {
+                for coin in &target_opaque_coins {
                     ensure!(
-                        !seeds.contains(&coin.public_seed),
-                        "TransparentCoin seeds must be unique"
+                        !target_seeds.contains(&coin.public_seed),
+                        "Coin seeds must be unique"
                     );
-                    seeds.insert(coin.public_seed);
+                    target_seeds.insert(coin.public_seed);
                     amount.try_sub_assign(coin.amount).map_err(|_| {
                         failure::format_err!("Insufficient balance to create coins")
                     })?;
                 }
             }
-            let account_balance = Amount::try_from(account_balance)?;
-            let old_transparent_coins = self
-                .coins
+            let source_transparent_coins = source_coins
                 .iter()
                 .filter_map(|asset| match asset {
                     Asset::TransparentCoin { certificate } => Some(certificate.clone()),
                     _ => None,
                 })
                 .collect();
-            let old_opaque_coin_public_seeds = self
-                .coins
+            let source_opaque_coin_public_seeds = source_coins
                 .iter()
                 .filter_map(|asset| match asset {
                     Asset::OpaqueCoin {
@@ -1241,8 +1162,7 @@ where
                     _ => None,
                 })
                 .collect();
-            let old_opaque_coins = self
-                .coins
+            let source_coconut_credentials = source_coins
                 .iter()
                 .filter_map(|asset| match asset {
                     Asset::OpaqueCoin { credential, .. } => Some(credential.clone()),
@@ -1251,12 +1171,12 @@ where
                 .collect::<Vec<_>>();
             let source = CoinCreationSource {
                 account_id: self.account_id.clone(),
-                account_balance,
-                transparent_coins: old_transparent_coins,
-                opaque_coin_public_seeds: old_opaque_coin_public_seeds,
+                public_amount,
+                transparent_coins: source_transparent_coins,
+                opaque_coin_public_seeds: source_opaque_coin_public_seeds,
             };
-            let (coconut_request, new_opaque_coins_with_attributes) =
-                if old_opaque_coins.is_empty() && new_opaque_coins.is_empty() {
+            let (coconut_request, target_opaque_coins_with_attributes) =
+                if source_coconut_credentials.is_empty() && target_opaque_coins.is_empty() {
                     (None, Vec::new())
                 } else {
                     let setup = self
@@ -1265,45 +1185,46 @@ where
                         .as_ref()
                         .expect("Coconut must be configured to use opaque coins");
                     ensure!(
-                        new_opaque_coins.len() <= setup.parameters.max_outputs(),
+                        target_opaque_coins.len() <= setup.parameters.max_outputs(),
                         "Cannot create more than {} coins at a time in the current setup",
                         setup.parameters.max_outputs()
                     );
-                    let input_attributes = self
-                        .coins
+                    let input_attributes = source_coins
                         .iter()
                         .filter_map(|asset| match asset {
                             Asset::OpaqueCoin { value, .. } => Some(value.make_input_attribute()),
                             _ => None,
                         })
                         .collect::<Vec<_>>();
-                    let mut new_opaque_coins_with_attributes = Vec::new();
+                    let mut target_opaque_coins_with_attributes = Vec::new();
                     let mut output_attributes = Vec::new();
-                    for coin in new_opaque_coins {
+                    for coin in target_opaque_coins {
                         let attribute = coin.make_output_attribute();
                         output_attributes.push(attribute.clone());
-                        new_opaque_coins_with_attributes.push((coin, attribute));
+                        target_opaque_coins_with_attributes.push((coin, attribute));
                     }
                     let request = coconut::CoinsRequest::new(
                         coconut::rand::thread_rng(),
                         &setup.parameters,
                         &setup.verification_key,
-                        &old_opaque_coins,
+                        &source_coconut_credentials,
                         &input_attributes,
                         &output_attributes,
                     );
-                    (Some(request), new_opaque_coins_with_attributes)
+                    (Some(request), target_opaque_coins_with_attributes)
                 };
             let description = CoinCreationDescription {
                 sources: vec![source],
-                targets: new_transparent_coins,
+                targets: target_transparent_coins,
                 coconut_request,
             };
             let description_hash = HashValue::new(&description);
-            let lock_certificate = self.spend_unsafe(account_balance, description_hash).await?;
+            let lock_certificate = self
+                .spend_unsafe(source_seeds, public_amount, description_hash)
+                .await?;
             self.create_coins(
                 description,
-                new_opaque_coins_with_attributes,
+                target_opaque_coins_with_attributes,
                 vec![lock_certificate],
             )
             .await
@@ -1312,7 +1233,7 @@ where
 
     fn get_coins_value(&self) -> Result<Amount, failure::Error> {
         let mut amount = Amount::from(0);
-        for coin in &self.coins {
+        for coin in self.coins.values() {
             let v = coin
                 .value()
                 .map_err(|_| failure::format_err!("Client state contains invalid coins"))?;
@@ -1323,26 +1244,27 @@ where
 
     fn spend_and_transfer(
         &mut self,
+        coin_seed: u128,
         recipient: Address,
         user_data: UserData,
     ) -> AsyncResult<Certificate, failure::Error> {
         Box::pin(async move {
-            let amount = {
-                let balance = self.synchronize_balance().await?;
-                Amount::try_from(balance.try_add(self.get_coins_value()?.into())?)?
-            };
+            let asset = self
+                .coins
+                .get(&coin_seed)
+                .ok_or_else(|| failure::format_err!("Unknown coin seed"))?;
             let request = Request {
                 account_id: self.account_id.clone(),
                 operation: Operation::SpendAndTransfer {
+                    asset: Box::new(asset.clone()),
                     recipient,
-                    amount,
                     user_data,
                 },
                 sequence_number: self.next_sequence_number,
             };
-            let order = self.make_request_order_with_assets(request, self.coins.clone())?;
+            let order = self.make_request_order(request)?;
             let certificate = self
-                .execute_regular_request(order, /* with_confirmation */ true)
+                .execute_request(order, /* with_confirmation */ true)
                 .await?;
             Ok(certificate)
         })
@@ -1366,7 +1288,7 @@ where
             };
             let order = self.make_request_order(request)?;
             let new_certificate = self
-                .execute_regular_request(order, /* with_confirmation */ false)
+                .execute_request(order, /* with_confirmation */ false)
                 .await?;
             Ok(new_certificate)
         })
