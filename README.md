@@ -16,6 +16,9 @@ cargo build --release
 cd target/release
 rm -f *.json *.txt
 
+# Make sure to clean up child processes on exit.
+trap 'kill $(jobs -p)' EXIT
+
 # Create configuration files for 4 authorities with 4 shards each.
 # * Private server states are stored in `server*.json`.
 # * `committee.json` is the public description of the FastPay committee.
