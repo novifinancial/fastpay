@@ -20,7 +20,7 @@ pub struct FundingTransaction {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct RedeemTransaction {
     pub certificate: Certificate,
 }
@@ -110,12 +110,12 @@ impl FastPaySmartContract for FastPaySmartContractState {
                 recipient: Address::Primary(_),
                 amount,
                 ..
-            }
-            | Operation::SpendAndTransfer {
-                recipient: Address::Primary(_),
-                amount,
-                ..
             } => *amount,
+            Operation::SpendAndTransfer {
+                recipient: Address::Primary(_),
+                asset,
+                ..
+            } => asset.value()?,
             _ => {
                 failure::bail!("Invalid redeem transaction");
             }

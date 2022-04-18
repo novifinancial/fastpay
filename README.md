@@ -12,9 +12,12 @@ FastPay allows a set of distributed authorities, some of which are Byzantine, to
 ## Quickstart with FastPay Prototype
 
 ```bash
-cargo build --release
+cargo build --release -p fastpay
 cd target/release
 rm -f *.json *.txt
+
+# Make sure to clean up child processes on exit.
+trap 'kill $(jobs -p)' EXIT
 
 # Create configuration files for 4 authorities with 4 shards each.
 # * Private server states are stored in `server*.json`.
@@ -67,20 +70,20 @@ ACCOUNT2="`tail -n -1 initial_accounts.txt | awk -F: '{ print $1 }'`"
 # Create derived account
 ACCOUNT3="`./client --committee committee.json --accounts accounts.json open_account --from "$ACCOUNT1"`"
 
-# Create coins (1 transparent and 1 opaque) into the derived account
-./client --committee committee.json --accounts accounts.json spend_and_create_coins --from "$ACCOUNT2" --to-coins "$ACCOUNT3:50" "($ACCOUNT3:60)"
+# Create coins (1 transparent and 1 opaque) into account #3 by withdrawing publicly from account #1
+./client --committee committee.json --accounts accounts.json spend_and_create_coins --from "$ACCOUNT2" --amount 110 --to-coins "$ACCOUNT3:50" "($ACCOUNT3:60)"
 
 # Inspect state of derived account
 fgrep '"account_id"':"$ACCOUNT3" accounts.json
 
-# Spend and transfer all the coins back to the first account
-./client --committee committee.json --accounts accounts.json spend_and_transfer --from "$ACCOUNT3" --to "$ACCOUNT1"
+# List the coins in account #3
+./client --committee committee.json --accounts accounts.json list_coins "$ACCOUNT3" | tee coins.txt
+
+# Spend and transfer one of the coins back to the first account
+./client --committee committee.json --accounts accounts.json spend_and_transfer --from "$ACCOUNT3" --seeds $(awk -F: '{ print $1 }' coins.txt) --to "$ACCOUNT1"
 
 # Query the balance of the first account
 ./client --committee committee.json --accounts accounts.json query_balance "$ACCOUNT1"
-
-# Kill servers
-kill %1 %2 %3 %4 %5 %6 %7 %8 %9 %10 %11 %12 %13 %14 %15 %16
 
 # Additional local benchmark
 ./bench

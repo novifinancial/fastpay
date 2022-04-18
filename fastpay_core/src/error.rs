@@ -1,22 +1,15 @@
 // Copyright (c) Facebook, Inc. and its affiliates.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{base_types::*, messages::Value};
+use crate::base_types::*;
 use failure::Fail;
 use serde::{Deserialize, Serialize};
-
-#[macro_export]
-macro_rules! fp_bail {
-    ($e:expr) => {
-        return Err($e);
-    };
-}
 
 #[macro_export(local_inner_macros)]
 macro_rules! fp_ensure {
     ($cond:expr, $e:expr) => {
         if !($cond) {
-            fp_bail!($e);
+            return Err($e);
         }
     };
 }
@@ -38,10 +31,9 @@ pub enum FastPayError {
     #[fail(display = "Sequence numbers above the maximal value are not usable for requests.")]
     InvalidSequenceNumber,
     #[fail(
-        display = "Cannot initiate a new request while the previous one is still pending confirmation: {:?}",
-        pending
+        display = "Cannot initiate a new request while the previous one is still pending confirmation"
     )]
-    PreviousRequestMustBeConfirmedFirst { pending: Value },
+    PreviousRequestMustBeConfirmedFirst,
     #[fail(
         display = "Cannot confirm a request before its predecessors: {:?}",
         current_sequence_number
@@ -92,6 +84,8 @@ pub enum FastPayError {
     InvalidCoin,
     #[fail(display = "Invalid asset information.")]
     InvalidAsset,
+    #[fail(display = "The coin with seed {} was already spent", coin_seed)]
+    CoinAlreadySpent { coin_seed: u128 },
 
     // Other server-side errors
     #[fail(display = "No certificate for this account and sequence number")]

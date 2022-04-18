@@ -51,7 +51,7 @@ impl DumbRequestMaker {
             },
             sequence_number: SequenceNumber::new(),
         };
-        let order = RequestOrder::new(request.into(), &self.keypair, Vec::new());
+        let order = RequestOrder::new(request.into(), &self.keypair);
         let serialized_order = serialize_request_order(&order);
         (Bytes::from(serialized_order), id)
     }
@@ -124,7 +124,7 @@ pub fn make_coins(
     let source = CoinCreationSource {
         // This field is overwritten upon sending the request to allow transactions tracking.
         account_id: AccountId::default(),
-        account_balance: Amount::from(0),
+        public_amount: Amount::from(0),
         transparent_coins: Vec::default(),
         opaque_coin_public_seeds: vec![1, 2],
     };
@@ -170,12 +170,13 @@ impl DumbCoinRequestMaker {
         let request = Request {
             account_id,
             operation: Operation::Spend {
-                account_balance: Amount::from(0),
+                coin_seeds: Vec::new(),
+                public_amount: Amount::from(0),
                 description_hash: self.description_hash,
             },
             sequence_number: SequenceNumber::new(),
         };
-        let order = RequestOrder::new(request.into(), &self.keypair, Vec::default());
+        let order = RequestOrder::new(request.into(), &self.keypair);
         let serialized_order = serialize_request_order(&order);
         (Bytes::from(serialized_order), id)
     }
@@ -202,7 +203,7 @@ impl DumbLockCertificateMaker {
             .or_insert_with(|| SignatureAggregator::new(vote.value.clone(), &self.committee))
             .append(vote.authority, vote.signature)?
             .map_or(Ok(None), |certificate| {
-                let account_id = certificate.value.lock_account_id().unwrap().clone();
+                let account_id = certificate.value.confirm_account_id().unwrap().clone();
                 let source = self.description.sources[0].clone();
                 let source = CoinCreationSource {
                     account_id,

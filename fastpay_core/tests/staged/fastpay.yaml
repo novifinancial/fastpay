@@ -114,7 +114,7 @@ CoinCreationSource:
   STRUCT:
     - account_id:
         TYPENAME: AccountId
-    - account_balance:
+    - public_amount:
         TYPENAME: Amount
     - transparent_coins:
         SEQ:
@@ -177,10 +177,7 @@ FastPayError:
     3:
       InvalidSequenceNumber: UNIT
     4:
-      PreviousRequestMustBeConfirmedFirst:
-        STRUCT:
-          - pending:
-              TYPENAME: Value
+      PreviousRequestMustBeConfirmedFirst: UNIT
     5:
       MissingEarlierConfirmations:
         STRUCT:
@@ -227,28 +224,32 @@ FastPayError:
     21:
       InvalidAsset: UNIT
     22:
-      CertificateNotFound: UNIT
+      CoinAlreadySpent:
+        STRUCT:
+          - coin_seed: U128
     23:
-      InvalidCrossShardRequest: UNIT
+      CertificateNotFound: UNIT
     24:
-      InvalidRequestOrder: UNIT
+      InvalidCrossShardRequest: UNIT
     25:
-      InvalidConfirmationOrder: UNIT
+      InvalidRequestOrder: UNIT
     26:
-      InvalidCoinCreationOrder: UNIT
+      InvalidConfirmationOrder: UNIT
     27:
-      ClientErrorWhileProcessingRequestOrder: UNIT
+      InvalidCoinCreationOrder: UNIT
     28:
-      ClientErrorWhileProcessingCoinCreationOrder: UNIT
+      ClientErrorWhileProcessingRequestOrder: UNIT
     29:
-      ClientErrorWhileRequestingCertificate: UNIT
+      ClientErrorWhileProcessingCoinCreationOrder: UNIT
     30:
-      WrongShard: UNIT
+      ClientErrorWhileRequestingCertificate: UNIT
     31:
-      InvalidDecoding: UNIT
+      WrongShard: UNIT
     32:
-      UnexpectedMessage: UNIT
+      InvalidDecoding: UNIT
     33:
+      UnexpectedMessage: UNIT
+    34:
       ClientIoError:
         STRUCT:
           - error: STR
@@ -449,17 +450,19 @@ Operation:
     4:
       Spend:
         STRUCT:
-          - account_balance:
+          - coin_seeds:
+              SEQ: U128
+          - public_amount:
               TYPENAME: Amount
           - description_hash:
               TYPENAME: HashValue
     5:
       SpendAndTransfer:
         STRUCT:
+          - asset:
+              TYPENAME: Asset
           - recipient:
               TYPENAME: Address
-          - amount:
-              TYPENAME: Amount
           - user_data:
               TYPENAME: UserData
 OutputAttribute:
@@ -528,9 +531,6 @@ RequestOrder:
         TYPENAME: PublicKeyBytes
     - signature:
         TYPENAME: Signature
-    - assets:
-        SEQ:
-          TYPENAME: Asset
 RequestValue:
   STRUCT:
     - request:
@@ -633,14 +633,10 @@ UserData:
 Value:
   ENUM:
     0:
-      Lock:
-        NEWTYPE:
-          TYPENAME: Request
-    1:
       Confirm:
         NEWTYPE:
           TYPENAME: Request
-    2:
+    1:
       Coin:
         NEWTYPE:
           TYPENAME: TransparentCoin
