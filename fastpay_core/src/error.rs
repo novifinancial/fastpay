@@ -5,18 +5,11 @@ use crate::base_types::*;
 use failure::Fail;
 use serde::{Deserialize, Serialize};
 
-#[macro_export]
-macro_rules! fp_bail {
-    ($e:expr) => {
-        return Err($e);
-    };
-}
-
 #[macro_export(local_inner_macros)]
 macro_rules! fp_ensure {
     ($cond:expr, $e:expr) => {
         if !($cond) {
-            fp_bail!($e);
+            return Err($e);
         }
     };
 }

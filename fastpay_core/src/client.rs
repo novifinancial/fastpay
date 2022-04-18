@@ -301,6 +301,7 @@ where
 }
 
 /// Used for communicate_requests
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum CommunicateAction {
     ConfirmOrder(RequestOrder),

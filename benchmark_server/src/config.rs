@@ -32,17 +32,9 @@ pub trait Export: Serialize {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, Default)]
 pub struct Parameters {
     pub coconut_setup: Option<CoconutSetup>,
-}
-
-impl Default for Parameters {
-    fn default() -> Self {
-        Self {
-            coconut_setup: None,
-        }
-    }
 }
 
 impl Import for Parameters {}
@@ -100,8 +92,7 @@ impl CommitteeConfig {
     pub fn shard(&self, myself: &AuthorityName, id: &ShardId) -> Option<SocketAddr> {
         self.authorities
             .get(myself)
-            .map(|authority| authority.shards.get(id))
-            .flatten()
+            .and_then(|authority| authority.shards.get(id))
             .copied()
     }
 }

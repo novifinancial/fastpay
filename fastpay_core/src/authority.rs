@@ -104,8 +104,8 @@ impl AuthorityState {
             FastPayError::InactiveAccount(sender.clone())
         );
         if account.next_sequence_number < request.sequence_number {
-            fp_bail!(FastPayError::MissingEarlierConfirmations {
-                current_sequence_number: account.next_sequence_number
+            return Err(FastPayError::MissingEarlierConfirmations {
+                current_sequence_number: account.next_sequence_number,
             });
         }
         if account.next_sequence_number > request.sequence_number {
@@ -312,7 +312,7 @@ impl Authority for AuthorityState {
                     source_amount.try_add_assign(*public_amount)?;
                     coin_seeds.iter().cloned().collect::<BTreeSet<u128>>()
                 }
-                _ => fp_bail!(FastPayError::InvalidCoinCreationOrder),
+                _ => return Err(FastPayError::InvalidCoinCreationOrder),
             };
             // Verify seeds for opaque coins.
             for seed in &source.opaque_coin_public_seeds {
@@ -493,7 +493,7 @@ impl Authority for AuthorityState {
             if let Some(cert) = account.confirmed_log.get(usize::from(seq)) {
                 response.queried_certificate = Some(cert.clone());
             } else {
-                fp_bail!(FastPayError::CertificateNotFound)
+                return Err(FastPayError::CertificateNotFound);
             }
         }
         if let Some(idx) = query.query_received_certificates_excluding_first_nth {
